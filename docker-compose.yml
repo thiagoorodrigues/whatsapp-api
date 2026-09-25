@@ -1,0 +1,51 @@
+# docker-compose.yml
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: sweasy
+      POSTGRES_PASSWORD: sweasy
+      POSTGRES_USER: sweasy
+    ports:
+      - 5435:5432
+    restart: on-failure:3
+    volumes:
+      - postgres-data:/var/lib/postgresql
+  pgweb:
+    image: sosedoff/pgweb
+    depends_on:
+      - postgres
+    environment:
+      PGWEB_DATABASE_URL: postgres://sweasy:sweasy@postgres:5432/sweasy?sslmode=disable
+    ports:
+      - 8085:8081
+    restart: on-failure:3
+  redis:
+    image: redis:latest
+    command: redis-server
+    volumes:
+      - redis:/var/lib/redis
+      - redis-config:/usr/local/etc/redis/redis.conf
+    ports:
+      - 6379:6379
+    networks:
+      - redis-network
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+      - HTTP_USER=root
+      - HTTP_PASSWORD=123456
+    ports:
+      - 8081:8081
+    networks:
+      - redis-network
+    depends_on:
+      - redis
+volumes:
+  postgres-data:
+  redis:
+  redis-config:
+networks:
+  redis-network:
+    driver: bridge
