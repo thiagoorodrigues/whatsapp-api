@@ -61,7 +61,8 @@ import {
   getRemotePhoneJid,
   getParticipantPhoneJid,
   resolvePhoneJid,
-  isLidJid
+  isLidJid,
+  getContactJid
 } from "../../helpers/GetPhoneJid";
 import ShowTicketService from "../TicketServices/ShowTicketService";
 
@@ -240,7 +241,7 @@ export const sendMessageImage = async (
   let sentMessage
   try {
     sentMessage = await wbot.sendMessage(
-      `${contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`,
+      getContactJid(contact, ticket.isGroup),
       {
         image: url ? { url } : fs.readFileSync(`public/temp/${caption}-${makeid(10)}`),
         fileName: caption,
@@ -250,7 +251,7 @@ export const sendMessageImage = async (
     );
   } catch (error) {
     sentMessage = await wbot.sendMessage(
-      `${contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`,
+      getContactJid(contact, ticket.isGroup),
       {
         text: formatBody('Não consegui enviar o PDF, tente novamente!', contact)
       }
@@ -270,7 +271,7 @@ export const sendMessageLink = async (
   let sentMessage
   try {
     sentMessage = await wbot.sendMessage(
-      `${contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`, {
+      getContactJid(contact, ticket.isGroup), {
       document: url ? { url } : fs.readFileSync(`public/temp/${caption}-${makeid(10)}`),
       fileName: caption,
       caption: caption,
@@ -279,7 +280,7 @@ export const sendMessageLink = async (
     );
   } catch (error) {
     sentMessage = await wbot.sendMessage(
-      `${contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`, {
+      getContactJid(contact, ticket.isGroup), {
       text: formatBody('Não consegui enviar o PDF, tente novamente!', contact)
     }
     );
@@ -878,7 +879,7 @@ const verifyQueue = async (
     };
 
     const sendMsg = await wbot.sendMessage(
-      `${contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`,
+      getContactJid(contact, ticket.isGroup),
       textMessage
     );
 
@@ -916,7 +917,7 @@ const verifyQueue = async (
         if (now.isBefore(startTime) || now.isAfter(endTime)) {
           const body = formatBody(`\u200e ${queue.outOfHoursMessage}\n\n*[ # ]* - Voltar ao Menu Principal`, ticket.contact);
           const sentMessage = await wbot.sendMessage(
-            `${contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`, {
+            getContactJid(contact, ticket.isGroup), {
             text: body,
           }
           );
@@ -952,7 +953,7 @@ const verifyQueue = async (
       );
       if (choosenQueue.greetingMessage) {
         const sentMessage = await wbot.sendMessage(
-          `${contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`, {
+          getContactJid(contact, ticket.isGroup), {
           text: body,
         }
         );
@@ -1179,7 +1180,7 @@ const handleChartbot = async (ticket: Ticket, msg: WAMessage, wbot: Session, don
     //   };
 
     //   const sendMsg = await wbot.sendMessage(
-    //     `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`,
+    //     getContactJid(ticket.contact, ticket.isGroup),
     //     listMessage
     //   );
 
@@ -1208,7 +1209,7 @@ const handleChartbot = async (ticket: Ticket, msg: WAMessage, wbot: Session, don
       };
 
       const sendMsg = await wbot.sendMessage(
-        `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`,
+        getContactJid(ticket.contact, ticket.isGroup),
         buttonMessage
       );
 
@@ -1229,7 +1230,7 @@ const handleChartbot = async (ticket: Ticket, msg: WAMessage, wbot: Session, don
       };
 
       const sendMsg = await wbot.sendMessage(
-        `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`,
+        getContactJid(ticket.contact, ticket.isGroup),
         textMessage
       );
 
@@ -1297,7 +1298,7 @@ const handleChartbot = async (ticket: Ticket, msg: WAMessage, wbot: Session, don
         };
 
         const sendMsg = await wbot.sendMessage(
-          `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`,
+          getContactJid(ticket.contact, ticket.isGroup),
           listMessage
         );
 
@@ -1326,7 +1327,7 @@ const handleChartbot = async (ticket: Ticket, msg: WAMessage, wbot: Session, don
         };
 
         const sendMsg = await wbot.sendMessage(
-          `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`,
+          getContactJid(ticket.contact, ticket.isGroup),
           buttonMessage
         );
 
@@ -1347,7 +1348,7 @@ const handleChartbot = async (ticket: Ticket, msg: WAMessage, wbot: Session, don
         };
 
         const sendMsg = await wbot.sendMessage(
-          `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`,
+          getContactJid(ticket.contact, ticket.isGroup),
           textMessage
         );
 
@@ -1611,8 +1612,7 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
           const debouncedSentMessage = debounce(
             async () => {
               await wbot.sendMessage(
-                `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"
-                }`,
+                getContactJid(ticket.contact, ticket.isGroup),
                 {
                   text: body
                 }
@@ -1663,8 +1663,7 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
               const debouncedSentMessage = debounce(
                 async () => {
                   await wbot.sendMessage(
-                    `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"
-                    }`,
+                    getContactJid(ticket.contact, ticket.isGroup),
                     {
                       text: body
                     }
@@ -1790,8 +1789,7 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
             const debouncedSentMessage = debounce(
               async () => {
                 await wbot.sendMessage(
-                  `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"
-                  }`,
+                  getContactJid(ticket.contact, ticket.isGroup),
                   {
                     text: body
                   }
@@ -1831,8 +1829,7 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
         const debouncedSentMessage = debounce(
           async () => {
             await wbot.sendMessage(
-              `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"
-              }`,
+              getContactJid(ticket.contact, ticket.isGroup),
               {
                 text: whatsapp.greetingMessage
               }

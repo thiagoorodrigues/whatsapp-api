@@ -26,7 +26,8 @@ const FindOrCreateATicketTrakingService = async ({
       whatsappId,
       userId,
       oldUserId,
-      startedAt
+      startedAt,
+      queuedAt: startedAt || new Date()
     });
   
     return newRecord;
@@ -50,11 +51,15 @@ const FindOrCreateATicketTrakingService = async ({
     return ticketTraking;
   }
 
+  // A new tracking row = a new attendance entering the system now. Reports
+  // filter periods by this date, so it must never be left empty.
   const newRecord = await TicketTraking.create({
     ticketId,
     companyId,
     whatsappId,
-    userId
+    userId,
+    startedAt,
+    queuedAt: startedAt || new Date()
   });
 
   return newRecord;

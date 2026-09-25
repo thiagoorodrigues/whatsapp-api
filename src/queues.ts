@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/node";
+import ResolveSendJid from "./helpers/ResolveSendJid";
 import BullQueue from "bull";
 import { MessageData, SendMessage } from "./helpers/SendMessage";
 import Whatsapp from "./models/Whatsapp";
@@ -723,7 +724,7 @@ async function handleDispatchCampaign(job) {
       }
     );
 
-    const chatId = `${campaignShipping.number}@s.whatsapp.net`;
+    const chatId = await ResolveSendJid(campaignShipping.number, campaign.companyId);
 
     let body = campaignShipping.message;
 

@@ -6,6 +6,7 @@ import ShowContactService from "../ContactServices/ShowContactService";
 import { getIO } from "../../libs/socket";
 import GetDefaultWhatsAppByUser from "../../helpers/GetDefaultWhatsAppByUser";
 import ShowWhatsAppService from "../WhatsappService/ShowWhatsAppService";
+import FindOrCreateATicketTrakingService from "./FindOrCreateATicketTrakingService";
 
 interface Request {
   contactId: number;
@@ -68,6 +69,20 @@ const CreateTicketService = async ({
   if (!ticket) {
     throw new AppError("ERR_CREATING_TICKET", 400);
   }
+
+  // Opened straight to "open" by an attendant: record the attendance as
+  // started by them now (it never waits in the queue).
+  const ticketTraking = await FindOrCreateATicketTrakingService({
+    ticketId: ticket.id,
+    companyId,
+    whatsappId: ticket.whatsappId
+  });
+  await ticketTraking.update({
+    userId,
+    whatsappId: ticket.whatsappId,
+    startedAt: ticketTraking.startedAt || new Date(),
+    queuedAt: ticketTraking.queuedAt || new Date()
+  });
 
   const io = getIO();
 

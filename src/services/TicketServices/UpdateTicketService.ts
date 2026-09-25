@@ -1,4 +1,5 @@
 import moment from "moment";
+import { getContactJid } from "../../helpers/GetPhoneJid";
 import * as Sentry from "@sentry/node";
 import CheckContactOpenTickets from "../../helpers/CheckContactOpenTickets";
 import SetTicketMessagesAsRead from "../../helpers/SetTicketMessagesAsRead";
@@ -10,6 +11,7 @@ import ShowTicketService from "./ShowTicketService";
 import ShowWhatsAppService from "../WhatsappService/ShowWhatsAppService";
 import SendWhatsAppMessage from "../WbotServices/SendWhatsAppMessage";
 import FindOrCreateATicketTrakingService from "./FindOrCreateATicketTrakingService";
+import { closingUserId } from "../ReportService/trackingRules";
 import GetTicketWbot from "../../helpers/GetTicketWbot";
 import { verifyMessage } from "../WbotServices/wbotMessageListener";
 import ListSettingsServiceOne from "../SettingServices/ListSettingsServiceOne"; //NOVO PLW DESIGN//
@@ -124,7 +126,12 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
           await SendWhatsAppMessage({ body: bodyRatingMessage, ticket, ratingMsg: true });
 
           await ticketTraking.update({
-            ratingAt: moment().toDate()
+            ratingAt: moment().toDate(),
+            userId: closingUserId({
+              ticketUserId: ticket.userId,
+              trackingUserId: ticketTraking.userId,
+              closerUserId: userLoggedId
+            })
           });
 
           io.to("open")
@@ -154,7 +161,11 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
 
       ticketTraking.finishedAt = moment().toDate();
       ticketTraking.whatsappId = ticket.whatsappId;
-      ticketTraking.userId = ticket.userId;
+      ticketTraking.userId = closingUserId({
+        ticketUserId: ticket.userId,
+        trackingUserId: ticketTraking.userId,
+        closerUserId: userLoggedId
+      });
 
       /*    queueId = null;
             userId = null; */
@@ -228,7 +239,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
         isTransfer = true
 
         const queueChangedMessage = await wbot.sendMessage(
-          `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`,
+          getContactJid(ticket.contact, ticket.isGroup),
           {
             text: msgtxt
           }
@@ -256,7 +267,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
         isTransfer = true
 
         const queueChangedMessage = await wbot.sendMessage(
-          `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`,
+          getContactJid(ticket.contact, ticket.isGroup),
           {
             text: msgtxt
           }
@@ -286,7 +297,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
         const msgtxt = "*Mensagem automática*:\nVocê foi transferido para o departamento *" + queue?.name + "* e contará com a presença de *" + nome.name + "*\naguarde, já vamos te atender! - _*" + moment().format('DD/MM/YYYY HH:mm:ss') + "*_";
 
         const queueChangedMessage = await wbot.sendMessage(
-          `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`,
+          getContactJid(ticket.contact, ticket.isGroup),
           {
             text: msgtxt
           }
@@ -313,7 +324,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
         isTransfer = true
 
         const queueChangedMessage = await wbot.sendMessage(
-          `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`,
+          getContactJid(ticket.contact, ticket.isGroup),
           {
             text: msgtxt
           }
@@ -341,7 +352,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
         const msgtxt = "*Mensagem automática*:\nVocê foi transferido para o atendente _*" + nome.name + "*_\naguarde, já vamos te atender! - _*" + moment().format('DD/MM/YYYY HH:mm:ss') + "*_";
 
         const queueChangedMessage = await wbot.sendMessage(
-          `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`,
+          getContactJid(ticket.contact, ticket.isGroup),
           { text: msgtxt }
         );
 
@@ -377,11 +388,12 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
     await ticket.reload();
 
     if (status !== undefined && ["pending"].indexOf(status) > -1 && !isTransfer) {
+      // Back in the queue: reset the wait clock but keep who held it, so
+      // "Enviados para fila" and a later close still know the attendant.
       ticketTraking.update({
         whatsappId,
         queuedAt: moment().toDate(),
-        startedAt: null,
-        userId: null,
+        startedAt: null
       });
     }
 

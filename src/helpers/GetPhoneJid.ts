@@ -53,3 +53,20 @@ export const resolvePhoneJid = async (
   const mapped = await lookupLid(direct as string);
   return mapped || direct;
 };
+
+/**
+ * Address to SEND to. Once a contact writes to us through their LID, their
+ * side of the chat is LID-addressed and only decrypts messages encrypted
+ * for the LID session; sending to the phone JID shows up for them as
+ * "Aguardando mensagem" forever. So: group -> @g.us, known LID -> the LID,
+ * otherwise the phone JID.
+ */
+export const getContactJid = (
+  contact: { number: string; lid?: string | null },
+  isGroup = false
+): string => {
+  const number = `${contact.number}`;
+  if (isGroup) return number.includes("@") ? number : `${number}@g.us`;
+  if (isLidJid(contact.lid)) return contact.lid as string;
+  return `${number.replace(/\D/g, "")}@s.whatsapp.net`;
+};

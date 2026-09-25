@@ -1,4 +1,5 @@
 import { WAMessage, AnyMessageContent, WAMediaUpload } from "@whiskeysockets/baileys";
+import { getContactJid } from "../../helpers/GetPhoneJid";
 import * as Sentry from "@sentry/node";
 import fs from "fs";
 import { exec } from "child_process";
@@ -201,7 +202,7 @@ const SendWhatsAppMedia = async ({ media, ticket, body }: Request): Promise<WAMe
     }
 
     const sentMessage = await wbot.sendMessage(
-      `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`,
+      getContactJid(ticket.contact, ticket.isGroup),
       {
         ...options
       }

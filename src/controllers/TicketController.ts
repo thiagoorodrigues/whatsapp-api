@@ -263,7 +263,7 @@ export const relatorio = async (req: Request, res: Response): Promise<Response> 
   } = req.query as RelatorioQuery;
 
   const userId = req.user.id;
-  const { companyId } = req.user;
+  const { companyId, profile } = req.user;
 
   const { tickets, count, hasMore } = await ListTicketsRelatorioService({
     tipoData,
@@ -276,9 +276,9 @@ export const relatorio = async (req: Request, res: Response): Promise<Response> 
     queues,
     status,
     userId,
+    profile,
     companyId,
-    pageNumber,
-    order: [["id", "DESC"]]
+    pageNumber
   });
 
   return res.status(200).json({ tickets, count, hasMore });

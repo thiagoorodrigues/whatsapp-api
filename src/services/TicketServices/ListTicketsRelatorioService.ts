@@ -1,13 +1,14 @@
-import { Op, Filterable, Includeable } from "sequelize";
+import { Op, Includeable, WhereOptions, literal, where as sqlWhere } from "sequelize";
 import { startOfDay, endOfDay, parseISO } from "date-fns";
-import { intersection } from "lodash";
 
+import TicketTraking from "../../models/TicketTraking";
 import Ticket from "../../models/Ticket";
 import Contact from "../../models/Contact";
 import Queue from "../../models/Queue";
 import User from "../../models/User";
 import Tag from "../../models/Tag";
 import Whatsapp from "../../models/Whatsapp";
+import { toTicketReportRow } from "../ReportService/trackingRules";
 
 interface Request {
   tipoData?: string;
@@ -19,21 +20,41 @@ interface Request {
   usuario?: string;
   queues?: string[];
   status?: string;
-  userId: string;
+  userId: string | number;
+  profile?: string;
   companyId: number;
   pageNumber: string;
-  order?: [string, 'ASC' | 'DESC'][];
 }
 
 interface Response {
-  tickets: Ticket[];
+  tickets: ReturnType<typeof toTicketReportRow>[];
   count: number;
   hasMore: boolean;
 }
 
+// Columns of the TicketTraking row as aliased by findAndCountAll.
+const col = (name: string) => `"TicketTraking"."${name}"`;
+const ENTRY_DATE = `coalesce(${col("queuedAt")}, ${col("startedAt")}, ${col("createdAt")})`;
+
+const STATUS_CONDITION: Record<string, string> = {
+  closed: `${col("finishedAt")} is not null`,
+  open: `${col("finishedAt")} is null and ${col("startedAt")} is not null`,
+  pending: `${col("finishedAt")} is null and ${col("startedAt")} is null`
+};
+
+const asList = (value?: string[] | string) =>
+  (Array.isArray(value) ? value : value ? [value] : []).filter(v => `${v}` !== "");
+
+/**
+ * Ticket report with one row per attendance (TicketTraking), so a contact
+ * attended three times by different people shows three rows, each with its
+ * own attendant and dates. Admins see every attendance; other profiles see
+ * their own plus the ones still waiting in the queue.
+ */
 const ListTicketsRelatorioService = async ({
   pageNumber = "1",
   userId,
+  profile,
   companyId,
   ticket,
   tipoData,
@@ -43,164 +64,97 @@ const ListTicketsRelatorioService = async ({
   cliente,
   usuario,
   queues,
-  status,
-  order = [["updatedAt", "DESC"]]
+  status
 }: Request): Promise<Response> => {
+  const and: any[] = [{ companyId }];
 
-  let whereCondition: Filterable["where"] = {
-    [Op.or]: [{ userId }, { status: "pending" }]
-  };
+  if (profile !== "admin") {
+    and.push({
+      [Op.or]: [{ userId }, literal(STATUS_CONDITION.pending)]
+    });
+  }
 
-  let includeCondition: Includeable[];
+  if (ticket) and.push({ ticketId: ticket });
 
-  includeCondition = [
+  const connectionIds = asList(connections);
+  if (connectionIds.length) and.push({ whatsappId: { [Op.in]: connectionIds } });
+
+  if (status && STATUS_CONDITION[status]) {
+    and.push(literal(STATUS_CONDITION[status]));
+  }
+
+  // "Data Fechamento" filters by when the attendance ended; anything else by
+  // when it entered the system.
+  const dateColumn = tipoData === "DataFechamento" ? col("finishedAt") : ENTRY_DATE;
+  if (dataInicial) {
+    and.push(
+      sqlWhere(literal(dateColumn), {
+        [Op.gte]: startOfDay(parseISO(dataInicial))
+      })
+    );
+  }
+  if (dataFinal) {
+    and.push(
+      sqlWhere(literal(dateColumn), {
+        [Op.lte]: endOfDay(parseISO(dataFinal))
+      })
+    );
+  }
+
+  const queueIds = asList(queues);
+  const ticketWhere: WhereOptions = queueIds.length
+    ? { queueId: { [Op.in]: queueIds } }
+    : {};
+
+  const include: Includeable[] = [
     {
-      model: Contact,
-      as: "contact",
-      attributes: ["id", "name", "number", "email", "profilePicUrl"]
-    },
-    {
-      model: Queue,
-      as: "queue",
-      attributes: ["id", "name", "color"]
+      model: Ticket,
+      as: "ticket",
+      required: true,
+      where: ticketWhere,
+      attributes: ["id", "uuid", "queueId", "status"],
+      include: [
+        {
+          model: Contact,
+          as: "contact",
+          attributes: ["id", "name", "number", "email", "profilePicUrl"],
+          ...(cliente
+            ? { where: { name: { [Op.iLike]: `%${cliente}%` } }, required: true }
+            : {})
+        },
+        { model: Queue, as: "queue", attributes: ["id", "name", "color"] },
+        { model: Tag, as: "tags", attributes: ["id", "name", "color"] },
+        { model: Whatsapp, as: "whatsapp", attributes: ["name"] }
+      ]
     },
     {
       model: User,
       as: "user",
-      attributes: ["id", "name"]
+      attributes: ["id", "name"],
+      ...(usuario
+        ? { where: { name: { [Op.iLike]: `%${usuario}%` } }, required: true }
+        : { required: false })
     },
-    {
-      model: Tag,
-      as: "tags",
-      attributes: ["id", "name", "color"]
-    },
-    {
-      model: Whatsapp,
-      as: "whatsapp",
-      attributes: ["name"]
-    },
+    { model: Whatsapp, as: "whatsapp", attributes: ["name"] }
   ];
-
-  //whereCondition = { queueId: { [Op.or]: [queueIds, null] } };
-
-  whereCondition = {
-    ...whereCondition,
-    companyId
-  };
-
-  if(!!ticket){
-    whereCondition = {
-      ...whereCondition, 
-      id: ticket
-    }
-  }
-
-  if (dataInicial || dataFinal) {
-    const campoData = tipoData === 'DataAbertura' ? 'createdAt' : 'updatedAt';
-  
-    if (dataInicial && dataFinal) {
-      whereCondition = {
-        ...whereCondition,
-        [campoData]: {
-          [Op.between]: [+startOfDay(parseISO(dataInicial)), +endOfDay(parseISO(dataFinal))]
-        }
-      };
-    } else if (dataInicial) {
-      whereCondition = {
-        ...whereCondition,
-        [campoData]: {
-          [Op.gte]: +startOfDay(parseISO(dataInicial))
-        }
-      };
-    } else if (dataFinal) {
-      whereCondition = {
-        ...whereCondition,
-        [campoData]: {
-          [Op.lte]: +endOfDay(parseISO(dataFinal))
-        }
-      };
-    }
-  }
-
-  if (Array.isArray(connections) && connections.length > 0) {
-    whereCondition = {
-      ...whereCondition,
-      whatsappId: {
-        [Op.in]: intersection(connections)
-      }
-    };
-  }
-
-  if (Array.isArray(queues) && queues.length > 0) {
-    whereCondition = {
-      ...whereCondition,
-      queueId: {
-        [Op.in]: intersection(queues)
-      }
-    };
-  }
-
-  if(!!status){
-    whereCondition = {
-      ...whereCondition, 
-      status: status
-    }
-  }
-
-  if (!!cliente) {
-    const contacts = await Contact.findAll({
-      where: {
-        name: {
-          [Op.iLike]: `%${cliente}%`
-        }
-      }
-    });
-
-    const contactIds = contacts.map(contact => contact.id);
-    whereCondition = {
-      ...whereCondition,
-      contactId: {
-        [Op.in]: contactIds || []
-      }
-    };
-  }
-
-  if (usuario) {
-    const users = await User.findAll({
-      where: {
-        name: {
-          [Op.iLike]: `%${usuario}%`
-        }
-      }
-    });
-
-    const userIds = users.map(user => user.id);
-    whereCondition = {
-      ...whereCondition,
-      userId: {
-        [Op.in]: userIds || []
-      }
-    };
-  }
 
   const limit = 40;
   const offset = limit * (+pageNumber - 1);
-  const { count, rows: tickets } = await Ticket.findAndCountAll({
-    where: whereCondition,
-    include: includeCondition,
+
+  const { count, rows } = await TicketTraking.findAndCountAll({
+    where: { [Op.and]: and },
+    include,
     distinct: true,
     limit,
     offset,
-    order,
+    order: [["id", "DESC"]],
     subQuery: false
   });
 
-  const hasMore = count > offset + tickets.length;
-
   return {
-    tickets,
+    tickets: rows.map(row => toTicketReportRow(row.get({ plain: true }))),
     count,
-    hasMore
+    hasMore: count > offset + rows.length
   };
 };
 

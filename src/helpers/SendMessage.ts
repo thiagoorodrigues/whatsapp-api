@@ -1,4 +1,5 @@
 import Whatsapp from "../models/Whatsapp";
+import ResolveSendJid from "./ResolveSendJid";
 import GetWhatsappWbot from "./GetWhatsappWbot";
 import fs from "fs";
 
@@ -18,7 +19,7 @@ export const SendMessage = async (
 ): Promise<any> => {
   try {
     const wbot = await GetWhatsappWbot(whatsapp);
-    const chatId = `${messageData.number}@s.whatsapp.net`;
+    const chatId = await ResolveSendJid(messageData.number, whatsapp.companyId);
 
     let message;
 

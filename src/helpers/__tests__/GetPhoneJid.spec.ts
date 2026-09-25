@@ -1,7 +1,8 @@
 import {
   getRemotePhoneJid,
   getParticipantPhoneJid,
-  resolvePhoneJid
+  resolvePhoneJid,
+  getContactJid
 } from "../GetPhoneJid";
 
 describe("getRemotePhoneJid", () => {
@@ -100,5 +101,32 @@ describe("resolvePhoneJid", () => {
       resolvePhoneJid({ remoteJid: "5531@s.whatsapp.net" }, lookup)
     ).resolves.toBe("5531@s.whatsapp.net");
     expect(lookup).not.toHaveBeenCalled();
+  });
+});
+
+describe("getContactJid", () => {
+  it("sends to the LID when the contact already talks through it", () => {
+    expect(
+      getContactJid({ number: "553191147761", lid: "140716097450191@lid" })
+    ).toBe("140716097450191@lid");
+  });
+
+  it("sends to the phone JID when there is no LID yet", () => {
+    expect(getContactJid({ number: "553191147761", lid: null })).toBe(
+      "553191147761@s.whatsapp.net"
+    );
+  });
+
+  it("ignores a malformed LID", () => {
+    expect(getContactJid({ number: "553191147761", lid: "140716097450191" })).toBe(
+      "553191147761@s.whatsapp.net"
+    );
+  });
+
+  it("uses the group JID for groups, whatever the LID", () => {
+    expect(
+      getContactJid({ number: "120363000000@g.us", lid: "1@lid" }, true)
+    ).toBe("120363000000@g.us");
+    expect(getContactJid({ number: "120363000000" }, true)).toBe("120363000000@g.us");
   });
 });

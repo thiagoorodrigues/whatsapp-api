@@ -1,19 +1,19 @@
 /* eslint-disable import/no-extraneous-dependencies */
 /* eslint-disable camelcase */
 import { QueryTypes } from "sequelize";
-import * as _ from "lodash";
 import sequelize from "../../database";
+import {
+  buildDashboardFilter,
+  DashboardFilterParams,
+  minutesBetweenSql
+} from "./trackingRules";
 
 export interface DashboardData {
   counters: any;
   attendants: [];
 }
 
-export interface Params {
-  days?: number;
-  date_from?: string;
-  date_to?: string;
-}
+export type Params = DashboardFilterParams;
 
 export default async function DashboardDataService(
   companyId: string | number,
@@ -31,16 +31,8 @@ export default async function DashboardDataService(
         ct.number "contactNumber",
         (tt."finishedAt" is not null) "finished",
         (tt."userId" is null and tt."finishedAt" is null) "pending",
-        coalesce((
-          (date_part('day', age(coalesce(tt."ratingAt", tt."finishedAt") , tt."startedAt")) * 24 * 60) +
-          (date_part('hour', age(coalesce(tt."ratingAt", tt."finishedAt"), tt."startedAt")) * 60) +
-          (date_part('minutes', age(coalesce(tt."ratingAt", tt."finishedAt"), tt."startedAt")))
-        ), 0) "supportTime",
-        coalesce((
-          (date_part('day', age(tt."startedAt", tt."queuedAt")) * 24 * 60) +
-          (date_part('hour', age(tt."startedAt", tt."queuedAt")) * 60) +
-          (date_part('minutes', age(tt."startedAt", tt."queuedAt")))
-        ), 0) "waitTime",
+        coalesce(${minutesBetweenSql('coalesce(tt."ratingAt", tt."finishedAt")', 'tt."startedAt"')}, 0) "supportTime",
+        coalesce(${minutesBetweenSql('tt."startedAt"', 'tt."queuedAt"')}, 0) "waitTime",
         t.status,
         tt.*,
         ct."id" "contactId"
@@ -102,7 +94,7 @@ export default async function DashboardDataService(
         left join "UserRatings" ur on ur."userId" = t."userId" and ur."createdAt"::date = t."finishedAt"::date
         group by 1, 2
       ) att on att.id = u.id
-      where u."companyId" = ? ${_.has(params, "userId") ? 'and u."id" =' + params.userId : ''}
+      where u."companyId" = ? -- attendantFilter
       order by att.name
     )
     select
@@ -110,34 +102,26 @@ export default async function DashboardDataService(
       (select coalesce(json_agg(a.*), '[]')::jsonb from attedants a) attendants;
   `;
 
-  let where = 'where tt."companyId" = ?';
-  const replacements: any[] = [companyId];
+  // Period, company and attendant filters all run over TicketTraking and use
+  // bound values; see trackingRules.buildDashboardFilter.
+  const { where, replacements } = buildDashboardFilter(companyId, params);
 
-  if (_.has(params, "days")) {
-    where += ` and tt."queuedAt" >= (now() - '? days'::interval)`;
-    replacements.push(parseInt(`${params.days}`.replace(/\D/g, ""), 10));
-  }
-
-  if (_.has(params, "date_from")) {
-    where += ` and tt."queuedAt" >= ?`;
-    replacements.push(`${params.date_from} 00:00:00`);
-  }
-
-  if (_.has(params, "date_to")) {
-    where += ` and tt."finishedAt" <= ?`;
-    replacements.push(`${params.date_to} 23:59:59`);
-  }
-
-  if (_.has(params, "userId")) {
-    where += ` and tt."userId" = ?`;
-    replacements.push(`${params.userId}`);
-  }
-
+  // counters: supportHappening, supportPending
   replacements.push(companyId);
   replacements.push(companyId);
+  // attendants
   replacements.push(companyId);
 
-  const finalQuery = query.replace("-- filterPeriod", where);
+  let attendantFilter = "";
+  const userId = parseInt(`${params.userId ?? ""}`, 10);
+  if (Number.isFinite(userId)) {
+    attendantFilter = 'and u."id" = ?';
+    replacements.push(userId);
+  }
+
+  const finalQuery = query
+    .replace("-- filterPeriod", where)
+    .replace("-- attendantFilter", attendantFilter);
 
   const responseData: DashboardData = await sequelize.query(finalQuery, {
     replacements,

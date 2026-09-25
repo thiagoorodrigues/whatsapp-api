@@ -1,4 +1,5 @@
 import { WAMessage } from "@whiskeysockets/baileys";
+import { getContactJid } from "../../helpers/GetPhoneJid";
 import WALegacySocket from "@whiskeysockets/baileys"
 import * as Sentry from "@sentry/node";
 import AppError from "../../errors/AppError";
@@ -20,7 +21,7 @@ interface Request {
 const SendWhatsAppMessage = async ({ body, ticket, quotedMsg, ratingMsg, closeTicket = true }: Request): Promise<WAMessage> => {
   let options = {};
   const wbot = await GetTicketWbot(ticket);
-  let number = `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`;
+  let number = getContactJid(ticket.contact, ticket.isGroup);
 
   if (quotedMsg) {
     const chatMessages = await Message.findOne({
