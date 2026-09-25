@@ -13,6 +13,7 @@ interface PlanData {
   useExternalApi?: boolean;
   useKanban?: boolean;
   useIntegrations?: boolean;
+  useFlowBuilder?: boolean;
 }
 
 const CreatePlanService = async (planData: PlanData): Promise<Plan> => {

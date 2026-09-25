@@ -12,7 +12,8 @@ import {
   Default,
   BeforeCreate,
   BelongsToMany,
-  AllowNull
+  AllowNull,
+  DataType
 } from "sequelize-typescript";
 import { v4 as uuidv4 } from "uuid";
 
@@ -26,6 +27,7 @@ import QueueOption from "./QueueOption";
 import Tag from "./Tag";
 import TicketTag from "./TicketTag";
 import QueueIntegrations from "./QueueIntegrations";
+import Flow from "./Flow";
 
 @Table
 class Ticket extends Model<Ticket> {
@@ -142,6 +144,21 @@ class Ticket extends Model<Ticket> {
   @Default(0)
   @Column
   amountUsedBotQueues: number;
+
+  // Chatbot flow driving this conversation, the node waiting for the
+  // customer's answer and the answers collected so far.
+  @ForeignKey(() => Flow)
+  @Column
+  flowId: number | null;
+
+  @BelongsTo(() => Flow)
+  flow: Flow;
+
+  @Column
+  flowNodeId: string | null;
+
+  @Column({ type: DataType.JSONB })
+  flowVariables: Record<string, string> | null;
 }
 
 export default Ticket;

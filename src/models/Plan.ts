@@ -56,6 +56,9 @@ class Plan extends Model<Plan> {
 
   @Column
   useIntegrations: boolean;
+
+  @Column
+  useFlowBuilder: boolean;
 }
 
 export default Plan;

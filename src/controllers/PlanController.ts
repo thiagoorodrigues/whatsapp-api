@@ -28,6 +28,7 @@ type StorePlanData = {
   useExternalApi?: boolean;
   useKanban?: boolean;
   useIntegrations?: boolean;
+  useFlowBuilder?: boolean;
 };
 
 type UpdatePlanData = {
@@ -42,6 +43,7 @@ type UpdatePlanData = {
   useExternalApi?: boolean;
   useKanban?: boolean;
   useIntegrations?: boolean;
+  useFlowBuilder?: boolean;
 };
 
 export const index = async (req: Request, res: Response): Promise<Response> => {

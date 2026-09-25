@@ -32,6 +32,7 @@ import QueueIntegrations from "../models/QueueIntegrations";
 import Email from "../models/Email"; //Email
 import Logs from "../models/Logs";
 import MensagensDisparos from "../models/MensagensDisparos";
+import Flow from "../models/Flow";
 
 // eslint-disable-next-line
 const dbConfig = require("../config/database");
@@ -73,6 +74,7 @@ const models = [
   QueueIntegrations,
   Logs,
   MensagensDisparos,
+  Flow,
 ];
 
 sequelize.addModels(models);

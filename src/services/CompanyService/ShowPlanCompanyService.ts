@@ -20,7 +20,8 @@ const ShowPlanCompanyService = async (id: string | number): Promise<Company> => 
                     "useSchedules",
                     "useExternalApi",
                     "useKanban",
-                    "useIntegrations"
+                    "useIntegrations",
+                "useFlowBuilder"
                 ]
             },
         ]

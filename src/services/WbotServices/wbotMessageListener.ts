@@ -31,6 +31,7 @@ import CreateOrUpdateContactService from "../ContactServices/CreateOrUpdateConta
 import FindOrCreateTicketService from "../TicketServices/FindOrCreateTicketService";
 import ShowWhatsAppService from "../WhatsappService/ShowWhatsAppService";
 import UpdateTicketService from "../TicketServices/UpdateTicketService";
+import RunFlowService from "../FlowServices/RunFlowService";
 import formatBody from "../../helpers/Mustache";
 import TicketTraking from "../../models/TicketTraking";
 import UserRating from "../../models/UserRating";
@@ -1699,6 +1700,23 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
       console.log(e);
     }
 
+
+    // Chatbot flow of the connection (replaces the queue menu). While the
+    // ticket belongs to a flow, the legacy queue chatbot stays out of it.
+    if (!msg.key.fromMe && !ticket.isGroup && !ticket.userId && !ticket.useIntegration) {
+      const handledByFlow = await RunFlowService({
+        ticket,
+        contact,
+        whatsapp,
+        body: bodyMessage || "",
+        send: async content => {
+          const sent = await wbot.sendMessage(getContactJid(contact, ticket.isGroup), content);
+          await verifyMessage(sent, ticket, contact);
+          return sent;
+        }
+      });
+      if (handledByFlow || (!ticket.queueId && (ticket.flowId || whatsapp.flowId))) return;
+    }
 
     //integraçao na conexao
     if (

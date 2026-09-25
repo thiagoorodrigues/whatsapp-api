@@ -21,6 +21,7 @@ import WhatsappQueue from "./WhatsappQueue";
 import Company from "./Company";
 import QueueIntegrations from "./QueueIntegrations";
 
+import Flow from "./Flow";
 @Table
 class Whatsapp extends Model<Whatsapp> {
   @PrimaryKey
@@ -151,6 +152,14 @@ class Whatsapp extends Model<Whatsapp> {
 
   @Column
   expiresInactiveMessage: string;
+
+  // Chatbot flow that answers new conversations on this connection.
+  @ForeignKey(() => Flow)
+  @Column
+  flowId: number | null;
+
+  @BelongsTo(() => Flow)
+  flow: Flow;
 }
 
 export default Whatsapp;
