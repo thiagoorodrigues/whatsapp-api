@@ -19,6 +19,7 @@ import Message from "../models/Message";
 import { logger } from "../utils/logger";
 import MAIN_LOGGER from "@whiskeysockets/baileys/lib/Utils/logger";
 import authState from "../helpers/authState";
+import { toPhoneNumber } from "../helpers/GetPhoneJid";
 import { Boom } from "@hapi/boom";
 import AppError from "../errors/AppError";
 import { getIO } from "./socket";
@@ -216,10 +217,13 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
             }
 
             if (connection === "open") {
+              // user.id is "5531...:<device>@s.whatsapp.net"; keep the digits.
+              const connectedNumber = toPhoneNumber(wsocket.user?.id);
               await whatsapp.update({
                 status: "CONNECTED",
                 qrcode: "",
-                retries: 0
+                retries: 0,
+                ...(connectedNumber ? { number: connectedNumber } : {})
               });
 
               io.emit(`company-${whatsapp.companyId}-whatsappSession`, {

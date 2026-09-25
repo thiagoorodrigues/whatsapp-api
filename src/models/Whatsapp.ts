@@ -34,6 +34,10 @@ class Whatsapp extends Model<Whatsapp> {
   @Column(DataType.TEXT)
   name: string;
 
+  // Phone number (digits) of the connected account; set when it connects.
+  @Column
+  number: string;
+
   @Column(DataType.TEXT)
   session: string;
 
