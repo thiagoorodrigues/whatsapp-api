@@ -231,20 +231,6 @@ const CreateCompanyService = async (
     },
   });
 
-  //userRating
-  await Setting.findOrCreate({
-    where: {
-      companyId: company.id,
-      key: "chatBotType"
-    },
-    defaults: {
-      companyId: company.id,
-      key: "chatBotType",
-      value: "text"
-    },
-
-  });
-
   await Setting.findOrCreate({
     where: {
       companyId: company.id,

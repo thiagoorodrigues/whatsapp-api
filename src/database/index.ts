@@ -15,7 +15,6 @@ import TicketNote from "../models/TicketNote";
 import QuickMessage from "../models/QuickMessage";
 import TicketTraking from "../models/TicketTraking";
 import UserRating from "../models/UserRating";
-import QueueOption from "../models/QueueOption";
 import Schedule from "../models/Schedule";
 import Tag from "../models/Tag";
 import TicketTag from "../models/TicketTag";
@@ -57,7 +56,6 @@ const models = [
   QuickMessage,
   TicketTraking,
   UserRating,
-  QueueOption,
   Schedule,
   Tag,
   TicketTag,

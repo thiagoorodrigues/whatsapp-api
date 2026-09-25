@@ -142,12 +142,6 @@ class Whatsapp extends Model<Whatsapp> {
   queueIntegrations: QueueIntegrations;
 
   @Column
-  maxUseBotQueues: number;
-
-  @Column
-  timeUseBotQueues: string;
-
-  @Column
   expiresTicket: number;
 
   @Column

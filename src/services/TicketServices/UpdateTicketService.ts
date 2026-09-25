@@ -25,7 +25,6 @@ interface TicketData {
   userId?: number | null;
   queueId?: number | null;
   chatbot?: boolean;
-  queueOptionId?: number;
   whatsappId?: string;
   useIntegration?: boolean;
   integrationId?: number | null;
@@ -51,7 +50,6 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
     const { status, Transferido } = ticketData;
     let { queueId, userId, whatsappId } = ticketData;
     let chatbot: boolean | null = ticketData.chatbot || false;
-    let queueOptionId: number | null = ticketData.queueOptionId || null;
     let useIntegration: boolean | null = ticketData.useIntegration || false;
     let integrationId: number | null = ticketData.integrationId || null;
 
@@ -108,7 +106,6 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
       // }
       await CheckContactOpenTickets(ticket.contact.id, whatsappId);
       chatbot = null;
-      queueOptionId = null;
     }
 
     if (status !== undefined && ["closed"].indexOf(status) > -1) {
@@ -384,8 +381,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
       queueId,
       userId,
       whatsappId,
-      chatbot,
-      queueOptionId
+      chatbot
     });
 
     await ticket.reload();

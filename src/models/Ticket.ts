@@ -23,7 +23,6 @@ import Queue from "./Queue";
 import User from "./User";
 import Whatsapp from "./Whatsapp";
 import Company from "./Company";
-import QueueOption from "./QueueOption";
 import Tag from "./Tag";
 import TicketTag from "./TicketTag";
 import QueueIntegrations from "./QueueIntegrations";
@@ -86,13 +85,6 @@ class Ticket extends Model<Ticket> {
   @Column
   chatbot: boolean;
 
-  @ForeignKey(() => QueueOption)
-  @Column
-  queueOptionId: number;
-
-  @BelongsTo(() => QueueOption)
-  queueOption: QueueOption;
-
   @HasMany(() => Message)
   messages: Message[];
 
@@ -140,10 +132,6 @@ class Ticket extends Model<Ticket> {
   @Column
   fromMe: boolean;
 
-  @AllowNull(false)
-  @Default(0)
-  @Column
-  amountUsedBotQueues: number;
 
   // Chatbot flow driving this conversation, the node waiting for the
   // customer's answer and the answers collected so far.

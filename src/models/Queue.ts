@@ -11,7 +11,6 @@ import {
   BelongsToMany,
   BelongsTo,
   ForeignKey,
-  HasMany,
   DataType,
   Default
 } from "sequelize-typescript";
@@ -21,7 +20,6 @@ import Company from "./Company";
 
 import Whatsapp from "./Whatsapp";
 import WhatsappQueue from "./WhatsappQueue";
-import QueueOption from "./QueueOption";
 import QueueIntegrations from "./QueueIntegrations";
 
 @Table
@@ -72,13 +70,6 @@ class Queue extends Model<Queue> {
 
   @BelongsToMany(() => User, () => UserQueue)
   users: Array<User & { UserQueue: UserQueue }>;
-
-  @HasMany(() => QueueOption, {
-    onDelete: "DELETE",
-    onUpdate: "DELETE",
-    hooks: true
-  })
-  options: QueueOption[];
 
   @Column
   orderQueue: number;

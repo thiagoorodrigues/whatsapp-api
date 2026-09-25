@@ -38,7 +38,6 @@ import UserRating from "../../models/UserRating";
 import SendWhatsAppMessage from "./SendWhatsAppMessage";
 import moment from "moment";
 import Queue from "../../models/Queue";
-import QueueOption from "../../models/QueueOption";
 import FindOrCreateATicketTrakingService from "../TicketServices/FindOrCreateATicketTrakingService";
 import VerifyCurrentSchedule from "../CompanyService/VerifyCurrentSchedule";
 import Campaign from "../../models/Campaign";
@@ -808,196 +807,53 @@ const Push = (msg: proto.IWebMessageInfo) => {
   return msg.pushName;
 }
 
+// Connection with a single queue: the ticket goes straight into it (with the
+// queue greeting and integration). With several queues the ticket waits
+// without a queue; routing between queues is done by the chatbot flow.
 const verifyQueue = async (
   wbot: Session,
   msg: proto.IWebMessageInfo,
   ticket: Ticket,
-  contact: Contact,
-  mediaSent?: Message | undefined
+  contact: Contact
 ) => {
   const companyId = ticket.companyId;
 
-  const { queues, greetingMessage, maxUseBotQueues, timeUseBotQueues } = await ShowWhatsAppService(
-    wbot.id!,
-    ticket.companyId
-  )
+  const { queues } = await ShowWhatsAppService(wbot.id!, ticket.companyId);
 
+  if (queues.length !== 1) return;
 
+  const firstQueue = head(queues);
 
-  if (queues.length === 1) {
-    const firstQueue = head(queues);
-    let chatbot = false;
-    if (firstQueue?.options) {
-      chatbot = firstQueue.options.length > 0;
-    }
+  //inicia integração dialogflow/n8n
+  if (
+    !msg.key.fromMe &&
+    !ticket.isGroup &&
+    !isNil(queues[0]?.integrationId)
+  ) {
+    const integrations = await ShowQueueIntegrationService(queues[0].integrationId, companyId);
 
-    //inicia integração dialogflow/n8n
-    if (
-      !msg.key.fromMe &&
-      !ticket.isGroup &&
-      !isNil(queues[0]?.integrationId)
-    ) {
-      const integrations = await ShowQueueIntegrationService(queues[0].integrationId, companyId);
+    await handleMessageIntegration(msg, wbot, integrations, ticket)
 
-      await handleMessageIntegration(msg, wbot, integrations, ticket)
-
-      await ticket.update({
-        useIntegration: true,
-        integrationId: integrations.id
-      })
-      // return;
-    }
-
-    await UpdateTicketService({
-      ticketData: { queueId: firstQueue?.id, chatbot },
-      ticketId: ticket.id,
-      companyId: ticket.companyId,
-    });
-
-    return;
+    await ticket.update({
+      useIntegration: true,
+      integrationId: integrations.id
+    })
+    // return;
   }
 
-  const selectedOption = getBodyMessage(msg);
-  const choosenQueue = queues[+selectedOption - 1];
-
-  const buttonActive = await Setting.findOne({
-    where: {
-      key: "chatBotType",
-      companyId
-    }
+  await UpdateTicketService({
+    ticketData: { queueId: firstQueue?.id, chatbot: false },
+    ticketId: ticket.id,
+    companyId: ticket.companyId,
   });
 
-
-
-  const botText = async () => {
-    let options = "";
-
-    queues.forEach((queue, index) => {
-      options += `*[ ${index + 1} ]* - ${queue.name}\n`;
+  // Greets the customer on arrival in the queue.
+  if (firstQueue?.greetingMessage && isNil(firstQueue?.integrationId)) {
+    const sentMessage = await wbot.sendMessage(getContactJid(contact, ticket.isGroup), {
+      text: formatBody(`\u200e${firstQueue.greetingMessage}`, contact),
     });
-
-
-    const textMessage = {
-      text: formatBody(`\u200e${greetingMessage}\n\n${options}`, contact),
-    };
-
-    const sendMsg = await wbot.sendMessage(
-      getContactJid(contact, ticket.isGroup),
-      textMessage
-    );
-
-    await verifyMessage(sendMsg, ticket, ticket.contact);
-  };
-
-  if (choosenQueue) {
-    let chatbot = false;
-    if (choosenQueue?.options) {
-      chatbot = choosenQueue.options.length > 0;
-    }
-
-    await UpdateTicketService({
-      ticketData: { queueId: choosenQueue.id, chatbot },
-      ticketId: ticket.id,
-      companyId: ticket.companyId,
-    });
-
-
-    /* Tratamento para envio de mensagem quando a fila está fora do expediente */
-    if (choosenQueue.options.length === 0) {
-      const queue = await Queue.findByPk(choosenQueue.id);
-      const { schedules }: any = queue;
-      const now = moment();
-      const weekday = now.format("dddd").toLowerCase();
-      let schedule;
-      if (Array.isArray(schedules) && schedules.length > 0) {
-        schedule = schedules.find((s) => s.weekdayEn === weekday && s.startTime !== "" && s.startTime !== null && s.endTime !== "" && s.endTime !== null);
-      }
-
-      if (queue.outOfHoursMessage !== null && queue.outOfHoursMessage !== "" && !isNil(schedule)) {
-        const startTime = moment(schedule.startTime, "HH:mm");
-        const endTime = moment(schedule.endTime, "HH:mm");
-
-        if (now.isBefore(startTime) || now.isAfter(endTime)) {
-          const body = formatBody(`\u200e ${queue.outOfHoursMessage}\n\n*[ # ]* - Voltar ao Menu Principal`, ticket.contact);
-          const sentMessage = await wbot.sendMessage(
-            getContactJid(contact, ticket.isGroup), {
-            text: body,
-          }
-          );
-          await verifyMessage(sentMessage, ticket, contact);
-          await UpdateTicketService({
-            ticketData: { queueId: null, chatbot },
-            ticketId: ticket.id,
-            companyId: ticket.companyId,
-          });
-          return;
-        }
-      }
-
-      //inicia integração dialogflow/n8n
-      if (
-        !msg.key.fromMe &&
-        !ticket.isGroup &&
-        choosenQueue.integrationId
-      ) {
-        const integrations = await ShowQueueIntegrationService(choosenQueue.integrationId, companyId);
-
-        await handleMessageIntegration(msg, wbot, integrations, ticket)
-
-        await ticket.update({
-          useIntegration: true,
-          integrationId: integrations.id
-        })
-        // return;
-      }
-
-
-      const body = formatBody(`\u200e${choosenQueue.greetingMessage}`, ticket.contact
-      );
-      if (choosenQueue.greetingMessage) {
-        const sentMessage = await wbot.sendMessage(
-          getContactJid(contact, ticket.isGroup), {
-          text: body,
-        }
-        );
-        await verifyMessage(sentMessage, ticket, contact);
-      }
-    }
-
-  } else {
-
-    if (maxUseBotQueues && maxUseBotQueues !== 0 && ticket.amountUsedBotQueues >= maxUseBotQueues) {
-      // await UpdateTicketService({
-      //   ticketData: { queueId: queues[0].id },
-      //   ticketId: ticket.id
-      // });
-
-      return;
-    }
-
-    //Regra para desabilitar o chatbot por x minutos/horas após o primeiro envio
-    const ticketTraking = await FindOrCreateATicketTrakingService({ ticketId: ticket.id, companyId });
-    let dataLimite = new Date();
-    let Agora = new Date();
-
-
-    if (ticketTraking.chatbotAt !== null) {
-      dataLimite.setMinutes(ticketTraking.chatbotAt.getMinutes() + (Number(timeUseBotQueues)));
-
-      if (ticketTraking.chatbotAt !== null && Agora < dataLimite && timeUseBotQueues !== "0" && ticket.amountUsedBotQueues !== 0) {
-        return
-      }
-    }
-    await ticketTraking.update({
-      chatbotAt: null
-    })
-
-    if (buttonActive.value === "text") {
-      return botText();
-    }
-
+    await verifyMessage(sentMessage, ticket, contact);
   }
-
 };
 
 export const verifyRating = (ticketTraking: TicketTraking) => {
@@ -1053,7 +909,6 @@ export const handleRating = async (
   await ticket.update({
     queueId: null,
     chatbot: null,
-    queueOptionId: null,
     userId: null,
     status: "closed",
   });
@@ -1072,310 +927,6 @@ export const handleRating = async (
       ticketId: ticket.id,
     });
 };
-
-const handleChartbot = async (ticket: Ticket, msg: WAMessage, wbot: Session, dontReadTheFirstQuestion: boolean = false) => {
-
-
-
-  const queue = await Queue.findByPk(ticket.queueId, {
-    include: [
-      {
-        model: QueueOption,
-        as: "options",
-        where: { parentId: null },
-        order: [
-          ["option", "ASC"],
-          ["createdAt", "ASC"],
-        ],
-      },
-    ],
-  });
-
-
-
-
-  const messageBody = getBodyMessage(msg);
-
-  if (messageBody == "#") {
-    // voltar para o menu inicial
-    await ticket.update({ queueOptionId: null, chatbot: false, queueId: null });
-    await verifyQueue(wbot, msg, ticket, ticket.contact);
-    return;
-  }
-
-  // voltar para o menu anterior
-  if (!isNil(queue) && !isNil(ticket.queueOptionId) && messageBody == "0") {
-    const option = await QueueOption.findByPk(ticket.queueOptionId);
-    await ticket.update({ queueOptionId: option?.parentId });
-
-    // escolheu uma opção
-  } else if (!isNil(queue) && !isNil(ticket.queueOptionId)) {
-    const count = await QueueOption.count({
-      where: { parentId: ticket.queueOptionId },
-    });
-    let option: any = {};
-    if (count == 1) {
-      option = await QueueOption.findOne({
-        where: { parentId: ticket.queueOptionId },
-      });
-    } else {
-      option = await QueueOption.findOne({
-        where: {
-          option: messageBody || "",
-          parentId: ticket.queueOptionId,
-        },
-      });
-    }
-    if (option) {
-      await ticket.update({ queueOptionId: option?.id });
-    }
-
-    // não linha a primeira pergunta
-  } else if (!isNil(queue) && isNil(ticket.queueOptionId) && !dontReadTheFirstQuestion) {
-    const option = queue?.options.find((o) => o.option == messageBody);
-    if (option) {
-      await ticket.update({ queueOptionId: option?.id });
-    }
-  }
-
-  await ticket.reload();
-
-  if (!isNil(queue) && isNil(ticket.queueOptionId)) {
-
-    const queueOptions = await QueueOption.findAll({
-      where: { queueId: ticket.queueId, parentId: null },
-      order: [
-        ["option", "ASC"],
-        ["createdAt", "ASC"],
-      ],
-    });
-
-    const companyId = ticket.companyId;
-
-    const buttonActive = await Setting.findOne({
-      where: {
-        key: "chatBotType",
-        companyId
-      }
-    });
-
-    // const botList = async () => {
-    // const sectionsRows = [];
-
-    // queues.forEach((queue, index) => {
-    //   sectionsRows.push({
-    //     title: queue.name,
-    //     rowId: `${index + 1}`
-    //   });
-    // });
-
-    // const sections = [
-    //   {
-    //     rows: sectionsRows
-    //   }
-    // ];
-
-
-    //   const listMessage = {
-    //     text: formatBody(`\u200e${queue.greetingMessage}`, ticket.contact),
-    //     buttonText: "Escolha uma opção",
-    //     sections
-    //   };
-
-    //   const sendMsg = await wbot.sendMessage(
-    //     getContactJid(ticket.contact, ticket.isGroup),
-    //     listMessage
-    //   );
-
-    //   await verifyMessage(sendMsg, ticket, ticket.contact);
-    // }
-
-    const botButton = async () => {
-      const buttons = [];
-      queueOptions.forEach((option, i) => {
-        buttons.push({
-          buttonId: `${option.option}`,
-          buttonText: { displayText: option.title },
-          type: 4
-        });
-      });
-      buttons.push({
-        buttonId: `#`,
-        buttonText: { displayText: "Menu inicial *[ 0 ]* Menu anterior" },
-        type: 4
-      });
-
-      const buttonMessage = {
-        text: formatBody(`\u200e${queue.greetingMessage}`, ticket.contact),
-        buttons,
-        headerType: 4
-      };
-
-      const sendMsg = await wbot.sendMessage(
-        getContactJid(ticket.contact, ticket.isGroup),
-        buttonMessage
-      );
-
-      await verifyMessage(sendMsg, ticket, ticket.contact);
-    }
-
-    const botText = async () => {
-      let options = "";
-
-      queueOptions.forEach((option, i) => {
-        options += `*[ ${option.option} ]* - ${option.title}\n`;
-      });
-      //options += `\n*[ 0 ]* - Menu anterior`;
-      options += `\n*[ # ]* - Menu inicial`;
-
-      const textMessage = {
-        text: formatBody(`\u200e${queue.greetingMessage}\n\n${options}`, ticket.contact),
-      };
-
-      const sendMsg = await wbot.sendMessage(
-        getContactJid(ticket.contact, ticket.isGroup),
-        textMessage
-      );
-
-      await verifyMessage(sendMsg, ticket, ticket.contact);
-    };
-
-    // if (buttonActive.value === "list") {
-    //   return botList();
-    // };
-
-    if (buttonActive.value === "button" && QueueOption.length <= 4) {
-      return botButton();
-    }
-
-    if (buttonActive.value === "text") {
-      return botText();
-    }
-
-    if (buttonActive.value === "button" && QueueOption.length > 4) {
-      return botText();
-    }
-  } else if (!isNil(queue) && !isNil(ticket.queueOptionId)) {
-    const currentOption = await QueueOption.findByPk(ticket.queueOptionId);
-    const queueOptions = await QueueOption.findAll({
-      where: { parentId: ticket.queueOptionId },
-      order: [
-        ["option", "ASC"],
-        ["createdAt", "ASC"],
-      ],
-    });
-
-    if (queueOptions.length > -1) {
-
-      const companyId = ticket.companyId;
-      const buttonActive = await Setting.findOne({
-        where: {
-          key: "chatBotType",
-          companyId
-        }
-      });
-
-      const botList = async () => {
-        const sectionsRows = [];
-
-        queueOptions.forEach((option, i) => {
-          sectionsRows.push({
-            title: option.title,
-            rowId: `${option.option}`
-          });
-        });
-        sectionsRows.push({
-          title: "Menu inicial *[ 0 ]* Menu anterior",
-          rowId: `#`
-        });
-        const sections = [
-          {
-            rows: sectionsRows
-          }
-        ];
-
-        const listMessage = {
-          text: formatBody(`\u200e${currentOption.message}`, ticket.contact),
-          buttonText: "Escolha uma opção",
-          sections
-        };
-
-        const sendMsg = await wbot.sendMessage(
-          getContactJid(ticket.contact, ticket.isGroup),
-          listMessage
-        );
-
-        await verifyMessage(sendMsg, ticket, ticket.contact);
-      }
-
-      const botButton = async () => {
-        const buttons = [];
-        queueOptions.forEach((option, i) => {
-          buttons.push({
-            buttonId: `${option.option}`,
-            buttonText: { displayText: option.title },
-            type: 4
-          });
-        });
-        buttons.push({
-          buttonId: `#`,
-          buttonText: { displayText: "Menu inicial *[ 0 ]* Menu anterior" },
-          type: 4
-        });
-
-        const buttonMessage = {
-          text: formatBody(`\u200e${currentOption.message}`, ticket.contact),
-          buttons,
-          headerType: 4
-        };
-
-        const sendMsg = await wbot.sendMessage(
-          getContactJid(ticket.contact, ticket.isGroup),
-          buttonMessage
-        );
-
-        await verifyMessage(sendMsg, ticket, ticket.contact);
-      }
-
-      const botText = async () => {
-
-        let options = "";
-
-        queueOptions.forEach((option, i) => {
-          options += `*[ ${option.option} ]* - ${option.title}\n`;
-        });
-        options += `\n*[ 0 ]* - Menu anterior`;
-        options += `\n*[ # ]* - Menu inicial`;
-        const textMessage = {
-          text: formatBody(`\u200e${currentOption.message}\n\n${options}`, ticket.contact),
-        };
-
-        const sendMsg = await wbot.sendMessage(
-          getContactJid(ticket.contact, ticket.isGroup),
-          textMessage
-        );
-
-        await verifyMessage(sendMsg, ticket, ticket.contact);
-      };
-
-      if (buttonActive.value === "list") {
-        return botList();
-      };
-
-      if (buttonActive.value === "button" && QueueOption.length <= 4) {
-        return botButton();
-      }
-
-      if (buttonActive.value === "text") {
-        return botText();
-      }
-
-      if (buttonActive.value === "button" && QueueOption.length > 4) {
-        return botText();
-      }
-    }
-  }
-}
 
 export const handleMessageIntegration = async (
   msg: proto.IWebMessageInfo,
@@ -1519,17 +1070,6 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
     );
 
     await provider(ticket, msg, companyId, contact, wbot as WASocket);
-
-    // voltar para o menu inicial
-    if (bodyMessage == "#") {
-      await ticket.update({
-        queueOptionId: null,
-        chatbot: false,
-        queueId: null,
-      });
-      await verifyQueue(wbot, msg, ticket, ticket.contact);
-      return;
-    }
 
 
     const ticketTraking = await FindOrCreateATicketTrakingService({
@@ -1754,20 +1294,12 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
       !ticket.isGroup &&
       !msg.key.fromMe &&
       !ticket.userId &&
-      whatsapp.queues.length >= 1 &&
+      whatsapp.queues.length === 1 &&
       !ticket.useIntegration
     ) {
 
       await verifyQueue(wbot, msg, ticket, contact);
-
-      if (ticketTraking.chatbotAt === null) {
-        await ticketTraking.update({
-          chatbotAt: moment().toDate(),
-        })
-      }
     }
-
-    const dontReadTheFirstQuestion = ticket.queue === null;
 
     await ticket.reload();
 
@@ -1864,17 +1396,6 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
 
     }
 
-
-    if (whatsapp.queues.length == 1 && ticket.queue) {
-      if (ticket.chatbot && !msg.key.fromMe) {
-        await handleChartbot(ticket, msg as WAMessage, wbot);
-      }
-    }
-    if (whatsapp.queues.length > 1 && ticket.queue) {
-      if (ticket.chatbot && !msg.key.fromMe) {
-        await handleChartbot(ticket, msg as WAMessage, wbot, dontReadTheFirstQuestion);
-      }
-    }
 
   } catch (err) {
     console.log(err)
