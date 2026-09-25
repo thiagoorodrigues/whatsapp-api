@@ -37,7 +37,6 @@ type StoreData = {
   companyId: number;
   contactListId: number;
   tagListId: number | string;
-  fileListId: number;
 };
 
 type FindParams = {

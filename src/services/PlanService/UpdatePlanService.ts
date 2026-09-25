@@ -10,10 +10,8 @@ interface PlanData {
   value?: number;
   useCampaigns?: boolean;
   useSchedules?: boolean;
-  useInternalChat?: boolean;
   useExternalApi?: boolean;
   useKanban?: boolean;
-  useOpenAi?: boolean;
   useIntegrations?: boolean;
 }
 

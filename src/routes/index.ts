@@ -13,7 +13,6 @@ import companyRoutes from "./companyRoutes";
 import planRoutes from "./planRoutes";
 import ticketNoteRoutes from "./ticketNoteRoutes";
 import quickMessageRoutes from "./quickMessageRoutes";
-import helpRoutes from "./helpRoutes";
 import dashboardRoutes from "./dashboardRoutes";
 import queueOptionRoutes from "./queueOptionRoutes";
 import scheduleRoutes from "./scheduleRoutes";
@@ -22,13 +21,9 @@ import contactListRoutes from "./contactListRoutes";
 import contactListItemRoutes from "./contactListItemRoutes";
 import campaignRoutes from "./campaignRoutes";
 import campaignSettingRoutes from "./campaignSettingRoutes";
-import announcementRoutes from "./announcementRoutes";
-import chatRoutes from "./chatRoutes";
 import invoiceRoutes from "./invoicesRoutes";
 import subscriptionRoutes from "./subScriptionRoutes";
 import ticketTagRoutes from "./ticketTagRoutes";
-import filesRoutes from "./filesRoutes";
-import promptRoutes from "./promptRouter";
 import queueIntegrationRoutes from "./queueIntegrationRoutes";
 import emailRoute from "./emailRoute"; //Email
 import forgotsRoutes from "./forgotPasswordRoutes"; // Reset Passwd
@@ -48,7 +43,6 @@ routes.use(companyRoutes);
 routes.use(planRoutes);
 routes.use(ticketNoteRoutes);
 routes.use(quickMessageRoutes);
-routes.use(helpRoutes);
 routes.use(dashboardRoutes);
 routes.use(queueOptionRoutes);
 routes.use(scheduleRoutes);
@@ -57,13 +51,9 @@ routes.use(contactListRoutes);
 routes.use(contactListItemRoutes);
 routes.use(campaignRoutes);
 routes.use(campaignSettingRoutes);
-routes.use(announcementRoutes);
-routes.use(chatRoutes);
 routes.use(subscriptionRoutes);
 routes.use(invoiceRoutes);
 routes.use(ticketTagRoutes);
-routes.use(filesRoutes);
-routes.use(promptRoutes);
 routes.use(queueIntegrationRoutes);
 routes.use(emailRoute); //Email
 routes.use(forgotsRoutes);// Reset Passwd

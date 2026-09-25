@@ -26,7 +26,6 @@ import QueueOption from "./QueueOption";
 import Tag from "./Tag";
 import TicketTag from "./TicketTag";
 import QueueIntegrations from "./QueueIntegrations";
-import Prompt from "./Prompt";
 
 @Table
 class Ticket extends Model<Ticket> {
@@ -135,12 +134,6 @@ class Ticket extends Model<Ticket> {
   @Column
   typebotStatus: boolean
 
-  @ForeignKey(() => Prompt)
-  @Column
-  promptId: number;
-
-  @BelongsTo(() => Prompt)
-  prompt: Prompt;
 
   @Column
   fromMe: boolean;

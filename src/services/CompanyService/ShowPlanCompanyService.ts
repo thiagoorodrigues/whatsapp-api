@@ -18,10 +18,8 @@ const ShowPlanCompanyService = async (id: string | number): Promise<Company> => 
                     "value",
                     "useCampaigns",
                     "useSchedules",
-                    "useInternalChat",
                     "useExternalApi",
                     "useKanban",
-                    "useOpenAi",
                     "useIntegrations"
                 ]
             },

@@ -13,7 +13,6 @@ import Company from "../models/Company";
 import Plan from "../models/Plan";
 import TicketNote from "../models/TicketNote";
 import QuickMessage from "../models/QuickMessage";
-import Help from "../models/Help";
 import TicketTraking from "../models/TicketTraking";
 import UserRating from "../models/UserRating";
 import QueueOption from "../models/QueueOption";
@@ -26,16 +25,9 @@ import Campaign from "../models/Campaign";
 import CampaignSetting from "../models/CampaignSetting";
 import Baileys from "../models/Baileys";
 import CampaignShipping from "../models/CampaignShipping";
-import Announcement from "../models/Announcement";
-import Chat from "../models/Chat";
-import ChatUser from "../models/ChatUser";
-import ChatMessage from "../models/ChatMessage";
 import Invoices from "../models/Invoices";
 import Subscriptions from "../models/Subscriptions";
 import BaileysChats from "../models/BaileysChats";
-import Files from "../models/Files";
-import FilesOptions from "../models/FilesOptions";
-import Prompt from "../models/Prompt";
 import QueueIntegrations from "../models/QueueIntegrations";
 import Email from "../models/Email"; //Email
 import Logs from "../models/Logs";
@@ -62,7 +54,6 @@ const models = [
   Plan,
   TicketNote,
   QuickMessage,
-  Help,
   TicketTraking,
   UserRating,
   QueueOption,
@@ -75,16 +66,9 @@ const models = [
   CampaignSetting,
   Baileys,
   CampaignShipping,
-  Announcement,
-  Chat,
-  ChatUser,
-  ChatMessage,
   Invoices,
   Subscriptions,
   BaileysChats,
-  Files,
-  FilesOptions,
-  Prompt,
   Email,
   QueueIntegrations,
   Logs,

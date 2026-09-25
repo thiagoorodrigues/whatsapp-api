@@ -19,7 +19,6 @@ import Queue from "./Queue";
 import Ticket from "./Ticket";
 import WhatsappQueue from "./WhatsappQueue";
 import Company from "./Company";
-import Prompt from "./Prompt";
 import QueueIntegrations from "./QueueIntegrations";
 
 @Table
@@ -133,12 +132,6 @@ class Whatsapp extends Model<Whatsapp> {
   @Column
   timeToTransfer: number;  
 
-  @ForeignKey(() => Prompt)
-  @Column
-  promptId: number;
-
-  @BelongsTo(() => Prompt)
-  prompt: Prompt;
 
   @ForeignKey(() => QueueIntegrations)
   @Column

@@ -26,6 +26,7 @@ type IndexQuery = {
   users: string;
   onlyFromMe: string;
   situacao: string;
+  isGroup?: string;
 };
 
 type RelatorioQuery = {
@@ -48,7 +49,6 @@ interface TicketData {
   userId: number;
   whatsappId: string;
   useIntegration: boolean;
-  promptId: number;
   integrationId: number;
   Transferido?: boolean
 }
@@ -66,7 +66,8 @@ export const index = async (req: Request, res: Response): Promise<Response> => {
     users: userIdsStringified,
     withUnreadMessages,
     onlyFromMe,
-    situacao
+    situacao,
+    isGroup
   } = req.query as IndexQuery;
 
   const userId = req.user.id;
@@ -102,7 +103,8 @@ export const index = async (req: Request, res: Response): Promise<Response> => {
     withUnreadMessages,
     companyId,
     onlyFromMe,
-    situacao
+    situacao,
+    isGroup
   });
 
   return res.status(200).json({ tickets, count, hasMore });

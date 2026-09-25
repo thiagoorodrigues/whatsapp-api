@@ -47,6 +47,11 @@ class Contact extends Model<Contact> {
   @Column
   isGroup: boolean;
 
+  // WhatsApp anonymous id (`123@lid`) for this contact, used to match
+  // messages that arrive without the phone number.
+  @Column
+  lid: string;
+
   @CreatedAt
   createdAt: Date;
 

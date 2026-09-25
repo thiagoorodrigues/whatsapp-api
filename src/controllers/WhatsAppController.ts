@@ -25,7 +25,6 @@ interface WhatsappData {
   //timeSendQueue?: number;
   transferQueueId?: number;
   timeToTransfer?: number;
-  promptId?: number;
   maxUseBotQueues?: number;
   timeUseBotQueues?: number;
   expiresTicket?: number;
@@ -64,7 +63,6 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     //sendIdQueue,
     transferQueueId,
     timeToTransfer,
-    promptId,
     maxUseBotQueues,
     timeUseBotQueues,
     expiresTicket,
@@ -90,7 +88,6 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     //sendIdQueue,
     transferQueueId,
     timeToTransfer,
-    promptId,
     maxUseBotQueues,
     timeUseBotQueues,
     expiresTicket,

@@ -10,6 +10,7 @@ import "./database";
 import uploadConfig from "./config/upload";
 import AppError from "./errors/AppError";
 import routes from "./routes";
+import docsRoutes from "./routes/docsRoutes";
 import { logger } from "./utils/logger";
 import { messageQueue, sendScheduledMessages } from "./queues";
 
@@ -33,6 +34,7 @@ app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(Sentry.Handlers.requestHandler());
 app.use("/public", express.static(uploadConfig.directory));
+app.use(docsRoutes);
 app.use(routes);
 
 app.use(Sentry.Handlers.errorHandler());

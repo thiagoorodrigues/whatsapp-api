@@ -1,4 +1,5 @@
 import { Op, fn, where, col, Filterable, Includeable } from "sequelize";
+import buildTicketFilters from "./buildTicketFilters";
 import { startOfDay, endOfDay, parseISO } from "date-fns";
 
 import Ticket from "../../models/Ticket";
@@ -27,6 +28,7 @@ interface Request {
   companyId: number;
   onlyFromMe: string;
   situacao: string;
+  isGroup?: string;
 }
 
 interface Response {
@@ -49,7 +51,8 @@ const ListTicketsService = async ({
   withUnreadMessages,
   companyId,
   onlyFromMe,
-  situacao
+  situacao,
+  isGroup
 }: Request): Promise<Response> => {
 
   let whereCondition: Filterable["where"] = {
@@ -94,7 +97,7 @@ const ListTicketsService = async ({
   if (status) {
     whereCondition = {
       ...whereCondition,
-      status
+      ...buildTicketFilters({ status })
     };
   }
 
@@ -225,11 +228,12 @@ const ListTicketsService = async ({
 
   whereCondition = {
     ...whereCondition,
+    ...buildTicketFilters({ isGroup }),
     companyId
   };
 
-  if(!!situacao){
-    whereCondition = {...whereCondition, status: situacao}
+  if (situacao) {
+    whereCondition = { ...whereCondition, ...buildTicketFilters({ status: situacao }) };
   }
 
   const { count, rows: tickets } = await Ticket.findAndCountAll({

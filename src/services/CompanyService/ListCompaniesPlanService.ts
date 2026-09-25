@@ -17,10 +17,8 @@ const ListCompaniesPlanService = async (): Promise<Company[]> => {
           "value",
           "useCampaigns",
           "useSchedules",
-          "useInternalChat",
           "useExternalApi",
           "useKanban",
-          "useOpenAi",
           "useIntegrations"
         ]
       },

@@ -12,7 +12,6 @@ interface QueueData {
   schedules?: any[];
   orderQueue?: number;
   integrationId?: number;
-  promptId?: number;
 }
 
 const UpdateQueueService = async (

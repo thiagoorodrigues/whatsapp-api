@@ -26,10 +26,9 @@ export const index = async (req: Request, res: Response): Promise<Response> => {
 };
 
 export const store = async (req: Request, res: Response): Promise<Response> => {
-  const { name, color, greetingMessage, outOfHoursMessage, schedules, orderQueue, integrationId, promptId } =
+  const { name, color, greetingMessage, outOfHoursMessage, schedules, orderQueue, integrationId } =
     req.body;
   const { companyId } = req.user;
-  console.log("queue", integrationId, promptId)
   const queue = await CreateQueueService({
     name,
     color,
@@ -38,8 +37,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     outOfHoursMessage,
     schedules,
     orderQueue: orderQueue === "" ? null : orderQueue,
-    integrationId: integrationId === "" ? null : integrationId,
-    promptId: promptId === "" ? null : promptId
+    integrationId: integrationId === "" ? null : integrationId
   });
 
   const io = getIO();
@@ -66,7 +64,7 @@ export const update = async (
 ): Promise<Response> => {
   const { queueId } = req.params;
   const { companyId } = req.user;
-  const { name, color, greetingMessage, outOfHoursMessage, schedules, orderQueue, integrationId, promptId } =
+  const { name, color, greetingMessage, outOfHoursMessage, schedules, orderQueue, integrationId } =
     req.body;
   const queue = await UpdateQueueService(queueId, {
     name,
@@ -75,8 +73,7 @@ export const update = async (
     outOfHoursMessage,
     schedules,
     orderQueue: orderQueue === "" ? null : orderQueue,
-    integrationId: integrationId === "" ? null : integrationId,
-    promptId: promptId === "" ? null : promptId
+    integrationId: integrationId === "" ? null : integrationId
   }, companyId);
 
   const io = getIO();

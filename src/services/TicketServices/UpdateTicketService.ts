@@ -27,7 +27,6 @@ interface TicketData {
   whatsappId?: string;
   useIntegration?: boolean;
   integrationId?: number | null;
-  promptId?: number | null;
   Transferido?: boolean
 }
 
@@ -51,7 +50,6 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
     let { queueId, userId, whatsappId } = ticketData;
     let chatbot: boolean | null = ticketData.chatbot || false;
     let queueOptionId: number | null = ticketData.queueOptionId || null;
-    let promptId: number | null = ticketData.promptId || null;
     let useIntegration: boolean | null = ticketData.useIntegration || false;
     let integrationId: number | null = ticketData.integrationId || null;
 
@@ -148,7 +146,6 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
       }
 
       await ticket.update({
-        promptId: null,
         integrationId: null,
         useIntegration: false,
         typebotStatus: false,

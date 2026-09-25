@@ -17,9 +17,6 @@ messageRoutes.post("/messages/:ticketId", isAuth, uploadMulterAWS.array("medias"
 messageRoutes.delete("/messages/:messageId", isAuth, MessageController.remove);
 messageRoutes.post("/api/messages/send", tokenAuth, upload.array("medias"), MessageController.sendFila);
 messageRoutes.post("/api/messages/send-fila", tokenAuth, MessageController.sendFila);
-messageRoutes.post("/api/messages/send-file-fila", tokenAuth, MessageController.sendFileFila);
-messageRoutes.post("/api/messages/send-file", tokenAuth, MessageController.sendFileFila);
 
-messageRoutes.post("/api/messages/send-teste", tokenAuth, MessageController.sendTeste);
 
 export default messageRoutes;

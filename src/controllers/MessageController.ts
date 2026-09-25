@@ -4,6 +4,7 @@ import { logger } from "../utils/logger";
 
 import AppError from "../errors/AppError";
 import SetTicketMessagesAsRead from "../helpers/SetTicketMessagesAsRead";
+import shouldMarkAsRead from "../helpers/shouldMarkAsRead";
 import Message from "../models/Message";
 import Queue from "../models/Queue";
 import User from "../models/User";
@@ -20,8 +21,6 @@ import CheckContactNumber from "../services/WbotServices/CheckNumber";
 import CheckIsValidContact from "../services/WbotServices/CheckIsValidContact";
 import GetProfilePicUrl from "../services/WbotServices/GetProfilePicUrl";
 import CreateOrUpdateContactService from "../services/ContactServices/CreateOrUpdateContactService";
-import Files from "../models/Files";
-import FilesOptions from "../models/FilesOptions";
 import path from "path";
 import fs from "fs";
 import Ticket from "../models/Ticket";
@@ -30,6 +29,7 @@ import CreateMensagemDisparoService from "../services/MessageServices/MensagensD
 
 type IndexQuery = {
   pageNumber: string;
+  markAsRead?: string;
 };
 
 type MessageData = {
@@ -39,7 +39,6 @@ type MessageData = {
   quotedMsg?: Message;
   number?: string;
   closeTicket?: true;
-  codeFile?: string;
   isGroup?: boolean;
   isAddUser?: boolean;
 };
@@ -66,7 +65,9 @@ export const index = async (req: Request, res: Response): Promise<Response> => {
     queues
   });
 
-  SetTicketMessagesAsRead(ticket);
+  if (shouldMarkAsRead(req.query as IndexQuery)) {
+    SetTicketMessagesAsRead(ticket);
+  }
 
   return res.json({ count, messages, ticket, hasMore });
 };
@@ -172,99 +173,6 @@ export const sendFila = async (req: Request, res: Response): Promise<Response> =
     } else {
       throw new AppError(`Não foi possível enviar a mensagem, tente novamente em alguns instantes - service: send - message: ${err.message || ""}`);
     }
-  }
-};
-
-export const sendFileFila = async (req: Request, res: Response): Promise<Response> => {
-  const { whatsappId } = req.params as unknown as { whatsappId: number };
-  const messageData: MessageData = req.body;
-
-  const whatsapp = await Whatsapp.findOne({ where: { id: whatsappId, status: 'CONNECTED' } });
-
-  try {
-    if (!whatsapp) {
-      throw new Error("Não foi possível realizar a operação");
-    }
-
-    if (messageData.number === undefined) {
-      throw new Error("Numero e obrigatorio!");
-    }
-
-    const numberToTest = messageData.number;
-    const body = messageData.body;
-    const companyId = whatsapp.companyId;
-
-    let number = numberToTest.replace(/\D/g, "");
-
-    // if (!messageData.isGroup) {
-    //   const CheckValidNumber = await CheckContactNumber(numberToTest, companyId);
-    //   number = CheckValidNumber.jid.replace(/\D/g, "");
-    // }
-
-
-    const contactData = {
-      name: `${number}`,
-      number,
-      profilePicUrl: undefined,
-      isGroup: messageData.isGroup ? true : false,
-      companyId,
-      extraInfo: [],
-      whatsappId
-    };
-
-    const contact = await CreateOrUpdateContactService(contactData);
-
-
-    if (messageData.codeFile) {
-      const file = await Files.findOne({ where: { code: messageData.codeFile } })
-
-      if (file && file.id) {
-        const files = await FilesOptions.findAll({ where: { fileId: file.id } });
-        const filesList = files.filter(item => item.path && fs.existsSync(path.resolve(`./public/fileList/${item.fileId}/`, item.path)));
-
-        if (filesList.length > 0) {
-          await Promise.all(
-            filesList.map(async (media, i) => {
-              if (media.path) {
-                await req.app.get("queues").messageQueue.add("SendMessage",
-                  {
-                    whatsappId,
-                    data: {
-                      number,
-                      body: filesList.length == (i + 1) ? formatBody(body, contact) : "",
-                      caption: filesList.length == (i + 1) ? formatBody(body, contact) : "",
-                      mediaPath: path.resolve(`./public/fileList/${media.fileId}/`, media.path),
-                      fileName: media.name
-                    }
-                  },
-                  { removeOnComplete: true, attempts: 3 }
-                );
-              }
-            })
-          );
-        } else {
-          await SendMessage(whatsapp, { number: messageData.number, body: formatBody(messageData.body, contact), mediaPath: undefined });
-        }
-      } else {
-        await SendMessage(whatsapp, { number: messageData.number, body: formatBody(messageData.body, contact), mediaPath: undefined });
-      }
-
-    } else {
-      await SendMessage(whatsapp, { number: messageData.number, body: formatBody(messageData.body, contact), mediaPath: undefined });
-    }
-    //GRAVAR   NA TABELA NOVA
-
-    await CreateMensagemDisparoService({ messageData: { numero: messageData.number, message: messageData.body } })
-
-    return res.send({ mensagem: "Mensagem enviada" });
-
-  } catch (err: any) {
-    if (Object.keys(err).length === 0) {
-      throw new AppError(`Não foi possível enviar a mensagem, tente novamente em alguns instantes - service: send-file - message: ${err.message || ""}`);
-    } else {
-      throw new AppError(err.message);
-    }
-
   }
 };
 
@@ -403,49 +311,7 @@ export const sendFile = async (req: Request, res: Response): Promise<Response> =
       ticket = await FindOrCreateTicketService(contact, whatsapp.id, 0, companyId);
     }
 
-    if (messageData.codeFile) {
-      const file = await Files.findOne({ where: { code: messageData.codeFile } })
-
-      if (file && file.id) {
-        const files = await FilesOptions.findAll({ where: { fileId: file.id } });
-        const filesList = files.filter(item => item.path && fs.existsSync(path.resolve(`./public/fileList/${item.fileId}/`, item.path)));
-
-        if (filesList.length > 0) {
-          await Promise.all(
-            filesList.map(async (media, i) => {
-              if (media.path) {
-                await req.app.get("queues").messageQueue.add("SendMessage",
-                  {
-                    whatsappId,
-                    data: {
-                      number,
-                      body: filesList.length == (i + 1) ? formatBody(body, contact) : "",
-                      caption: filesList.length == (i + 1) ? formatBody(body, contact) : "",
-                      mediaPath: path.resolve(`./public/fileList/${media.fileId}/`, media.path),
-                      fileName: media.name
-                    }
-                  },
-                  { removeOnComplete: true, attempts: 3 }
-                );
-              }
-            })
-          );
-        } else {
-
-          await SendWhatsAppMessage({ body: formatBody(body, contact), ticket });
-          //await ticket.update({ lastMessage: body });
-
-        }
-
-      } else {
-        await SendWhatsAppMessage({ body: formatBody(body, contact), ticket });
-        //await ticket.update({ lastMessage: body });
-      }
-
-    } else {
-      await SendWhatsAppMessage({ body: formatBody(body, contact), ticket });
-      //await ticket.update({ lastMessage: body });
-    }
+    await SendWhatsAppMessage({ body: formatBody(body, contact), ticket });
 
     // await UpdateTicketService({
     //   ticketId: ticket.id,
@@ -466,146 +332,4 @@ export const sendFile = async (req: Request, res: Response): Promise<Response> =
 
   }
 
-  /*
-  try {
-   
-
-    
-
-    if (messageData.codeFile) {
-      const file = await Files.findOne({ where: { code: messageData.codeFile } })
-
-      if (file && file.id) {
-
-        const files = await FilesOptions.findAll({ where: { fileId: file.id } });
-        const filesList = files.filter(item => item.path && fs.existsSync(path.resolve(`./public/fileList/${item.fileId}/`, item.path)));
-
-        if (filesList.length > 0) {
-          await Promise.all(
-            filesList.map(async (media, i) => {
-              if (media.path) {
-                await req.app.get("queues").messageQueue.add("SendMessage",
-                  {
-                    whatsappId,
-                    data: {
-                      number,
-                      body: filesList.length == (i + 1) ? formatBody(body, contact) : "",
-                      caption: filesList.length == (i + 1) ? formatBody(body, contact) : "",
-                      mediaPath: path.resolve(`./public/fileList/${media.fileId}/`, media.path),
-                      fileName: media.name
-                    }
-                  },
-                  { removeOnComplete: true, attempts: 3 }
-                );
-              }
-            })
-          );
-        } else {
-
-          await SendWhatsAppMessage({ body: formatBody(body, contact), ticket });
-          await ticket.update({
-            lastMessage: body,
-          });
-
-        }
-
-      } else {
-
-        await SendWhatsAppMessage({ body: formatBody(body, contact), ticket });
-        await ticket.update({
-          lastMessage: body,
-        });
-
-      }
-
-    } else {
-
-      await SendWhatsAppMessage({ body: formatBody(body, contact), ticket });
-      await ticket.update({
-        lastMessage: body,
-      });
-
-    }
-
-    await UpdateTicketService({
-      ticketId: ticket.id,
-      ticketData: { status: "closed" },
-      companyId
-    });
-
-    //SetTicketMessagesAsRead(ticket);
-
-    return res.send({ mensagem: "Mensagem enviada" });
-
-  } catch (err: any) {
-
-    if (Object.keys(err).length === 0) {
-      throw new AppError(`Não foi possível enviar a mensagem, tente novamente em alguns instantes - service: send - message: ${err.message || ""}`);
-    } else {
-      throw new AppError(err.message);
-    }
-
-  }
-  */
 };
-
-export const sendTeste = async (req: Request, res: Response): Promise<Response> => {
-  const { whatsappId } = req.params as unknown as { whatsappId: number };
-  const messageData: MessageData = req.body;
-  const medias = req.files as Express.Multer.File[];
-
-  try {
-    const whatsapp = await Whatsapp.findByPk(whatsappId);
-
-    if (!whatsapp) {
-      throw new Error("Não foi possível realizar a operação");
-    }
-
-    if (messageData.number === undefined) {
-      throw new Error("O número é obrigatório");
-    }
-
-    const numberToTest = messageData.number;
-    const body = messageData.body;
-
-    const companyId = whatsapp.companyId;
-
-    const CheckValidNumber = await CheckContactNumber(numberToTest, companyId);
-
-    const number = CheckValidNumber.jid.replace(/\D/g, "");
-
-    const profilePicUrl = await GetProfilePicUrl(
-      number,
-      companyId
-    );
-
-    const contactData = {
-      name: `${number}`,
-      number,
-      profilePicUrl,
-      isGroup: false,
-      companyId,
-      whatsappId
-    };
-
-    const contact = await CreateOrUpdateContactService(contactData);
-    const ticket = await FindOrCreateTicketService(contact, whatsapp.id!, 0, companyId);
-
-    await SendWhatsAppMessage({ body: formatBody(body, contact), ticket });
-
-    await ticket.update({
-      lastMessage: body,
-    });
-
-    await UpdateTicketService({
-      ticketId: ticket.id,
-      ticketData: { status: "closed" },
-      companyId
-    });
-
-    return res.send({ mensagem: "Mensagem enviada" });
-
-  } catch (err: any) {
-    throw new AppError(err.message);
-  }
-}

@@ -22,7 +22,6 @@ interface Request {
   //timeSendQueue?: number;
   transferQueueId?: number;
   timeToTransfer?: number;
-  promptId?: number;
   maxUseBotQueues?: number;
   timeUseBotQueues?: number;
   expiresTicket?: number;
@@ -56,7 +55,6 @@ const CreateWhatsAppService = async ({
   //sendIdQueue,
   transferQueueId,
   timeToTransfer,
-  promptId,
   maxUseBotQueues = 3,
   timeUseBotQueues = 0,
   expiresTicket = 0,
@@ -170,7 +168,6 @@ const CreateWhatsAppService = async ({
       //sendIdQueue,
       transferQueueId,
       timeToTransfer,
-      promptId,
       maxUseBotQueues,
       timeUseBotQueues,
       expiresTicket,

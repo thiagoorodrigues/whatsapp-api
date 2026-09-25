@@ -46,8 +46,6 @@ class Plan extends Model<Plan> {
   @Column
   useCampaigns: boolean; 
   
-  @Column
-  useInternalChat: boolean;   
   
   @Column
   useExternalApi: boolean;   
@@ -55,8 +53,6 @@ class Plan extends Model<Plan> {
   @Column
   useKanban: boolean;
 
-  @Column
-  useOpenAi: boolean;
 
   @Column
   useIntegrations: boolean;

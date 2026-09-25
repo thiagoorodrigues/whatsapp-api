@@ -22,7 +22,6 @@ interface WhatsappData {
   //timeSendQueue?: number;
   transferQueueId?: number;
   timeToTransfer?: number;
-  promptId?: number;
   maxUseBotQueues?: number;
   timeUseBotQueues?: number;
   expiresTicket?: number;
@@ -71,7 +70,6 @@ const UpdateWhatsAppService = async ({ whatsappData, whatsappId, companyId }: Re
     //sendIdQueue = null,
     transferQueueId,
     timeToTransfer,
-    promptId,
     maxUseBotQueues,
     timeUseBotQueues,
     expiresTicket,
@@ -123,7 +121,6 @@ const UpdateWhatsAppService = async ({ whatsappData, whatsappId, companyId }: Re
   //   //sendIdQueue,
   //   transferQueueId,
   //   timeToTransfer,
-  //   promptId,
   //   maxUseBotQueues,
   //   timeUseBotQueues,
   //   expiresTicket,
@@ -148,7 +145,6 @@ const UpdateWhatsAppService = async ({ whatsappData, whatsappId, companyId }: Re
     //sendIdQueue,
     transferQueueId,
     timeToTransfer,
-    promptId,
     maxUseBotQueues,
     timeUseBotQueues,
     expiresTicket,
