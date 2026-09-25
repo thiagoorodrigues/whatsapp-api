@@ -134,7 +134,7 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
             logger.warn(`getMessage lookup failed for ${key.id}: ${err}`);
           }
 
-          return proto.Message.fromObject({});
+          return proto.Message.create({});
         }
 
         // wsocket = makeWASocket({

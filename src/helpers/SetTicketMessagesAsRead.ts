@@ -1,4 +1,4 @@
-import { proto, WASocket } from "@whiskeysockets/baileys";
+import { proto, WASocket, WAMessage } from "@whiskeysockets/baileys";
 import { getContactJid } from "./GetPhoneJid";
 // import cacheLayer from "../libs/cache";
 import { getIO } from "../libs/socket";
@@ -30,7 +30,7 @@ const SetTicketMessagesAsRead = async (ticket: Ticket): Promise<void> => {
 
       if (lastMessages.key && lastMessages.key.fromMe === false) {
         await (wbot as WASocket).chatModify(
-          { markRead: true, lastMessages: [lastMessages] },
+          { markRead: true, lastMessages: [lastMessages as WAMessage] },
           getContactJid(ticket.contact, ticket.isGroup)
         );
       }

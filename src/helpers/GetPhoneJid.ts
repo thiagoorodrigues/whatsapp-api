@@ -70,3 +70,19 @@ export const getContactJid = (
   if (isLidJid(contact.lid)) return contact.lid as string;
   return `${number.replace(/\D/g, "")}@s.whatsapp.net`;
 };
+
+const userPart = (jid: string): string => jid.split("@")[0].split(":")[0];
+
+/** "123:12@lid" | "123@lid" | "123" -> "123@lid" (device part dropped). */
+export const toUserLid = (lid?: string | null): string | undefined => {
+  if (!lid) return undefined;
+  const user = userPart(lid);
+  return user ? `${user}@lid` : undefined;
+};
+
+/** "5531...:3@s.whatsapp.net" | "5531..." -> "5531..." (digits only). */
+export const toPhoneNumber = (pn?: string | null): string | undefined => {
+  if (!pn) return undefined;
+  const digits = userPart(pn).replace(/\D/g, "");
+  return digits || undefined;
+};

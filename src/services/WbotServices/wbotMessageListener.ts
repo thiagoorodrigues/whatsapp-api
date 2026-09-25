@@ -62,7 +62,9 @@ import {
   getParticipantPhoneJid,
   resolvePhoneJid,
   isLidJid,
-  getContactJid
+  getContactJid,
+  toUserLid,
+  toPhoneNumber
 } from "../../helpers/GetPhoneJid";
 import ShowTicketService from "../TicketServices/ShowTicketService";
 
@@ -524,7 +526,7 @@ const downloadMedia = async (msg: proto.IWebMessageInfo) => {
   let buffer
 
   try {
-    buffer = await downloadMediaMessage(msg, 'buffer', {})
+    buffer = await downloadMediaMessage(msg as WAMessage, 'buffer', {})
   } catch (err) {
     console.error('Erro ao baixar mídia:', err);
     // Trate o erro de acordo com as suas necessidades
@@ -1480,7 +1482,7 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
     if (msg.key.fromMe) {
       await cacheLayer.set(`contacts:${contact.id}:unreads`, "0");
       (wbot as WASocket)!.readMessages([msg.key])
-      handleMsgAck(msg, 2);
+      handleMsgAck(msg as WAMessage, 2);
     } else {
       const unreads = await cacheLayer.get(`contacts:${contact.id}:unreads`);
       unreadMessages = +unreads + 1;
@@ -1847,12 +1849,12 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
 
     if (whatsapp.queues.length == 1 && ticket.queue) {
       if (ticket.chatbot && !msg.key.fromMe) {
-        await handleChartbot(ticket, msg, wbot);
+        await handleChartbot(ticket, msg as WAMessage, wbot);
       }
     }
     if (whatsapp.queues.length > 1 && ticket.queue) {
       if (ticket.chatbot && !msg.key.fromMe) {
-        await handleChartbot(ticket, msg, wbot, dontReadTheFirstQuestion);
+        await handleChartbot(ticket, msg as WAMessage, wbot, dontReadTheFirstQuestion);
       }
     }
 
@@ -2017,15 +2019,17 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
       });
     });
 
-    // WhatsApp announces which phone number sits behind a LID; remember it so
-    // later messages that only carry the LID land on the same contact.
-    wbot.ev.on("chats.phoneNumberShare", async ({ lid, jid }) => {
+    // Baileys 7 reports every phone <-> LID pair it discovers; remember it on
+    // the contact so sends go to the LID and LID-only messages (e.g. sent
+    // from another linked device) land on the same contact.
+    wbot.ev.on("lid-mapping.update", async ({ pn, lid }) => {
       try {
-        const number = jid?.split("@")[0]?.replace(/\D/g, "");
-        if (!lid || !number) return;
-        await Contact.update({ lid }, { where: { number, companyId } });
+        const number = toPhoneNumber(pn);
+        const userLid = toUserLid(lid);
+        if (!userLid || !number) return;
+        await Contact.update({ lid: userLid }, { where: { number, companyId } });
       } catch (err) {
-        logger.warn(`phoneNumberShare failed for ${lid}: ${err}`);
+        logger.warn(`lid-mapping.update failed for ${lid}: ${err}`);
       }
     });
 

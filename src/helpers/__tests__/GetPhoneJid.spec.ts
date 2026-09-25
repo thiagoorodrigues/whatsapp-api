@@ -2,7 +2,9 @@ import {
   getRemotePhoneJid,
   getParticipantPhoneJid,
   resolvePhoneJid,
-  getContactJid
+  getContactJid,
+  toUserLid,
+  toPhoneNumber
 } from "../GetPhoneJid";
 
 describe("getRemotePhoneJid", () => {
@@ -128,5 +130,22 @@ describe("getContactJid", () => {
       getContactJid({ number: "120363000000@g.us", lid: "1@lid" }, true)
     ).toBe("120363000000@g.us");
     expect(getContactJid({ number: "120363000000" }, true)).toBe("120363000000@g.us");
+  });
+});
+
+describe("normalizers for lid-mapping.update", () => {
+  it("normalizes LIDs to user@lid, dropping the device part", () => {
+    expect(toUserLid("140716097450191@lid")).toBe("140716097450191@lid");
+    expect(toUserLid("140716097450191:12@lid")).toBe("140716097450191@lid");
+    expect(toUserLid("140716097450191")).toBe("140716097450191@lid");
+    expect(toUserLid("")).toBeUndefined();
+    expect(toUserLid(undefined)).toBeUndefined();
+  });
+
+  it("extracts the phone digits from a PN jid", () => {
+    expect(toPhoneNumber("553191147761@s.whatsapp.net")).toBe("553191147761");
+    expect(toPhoneNumber("553191147761:3@s.whatsapp.net")).toBe("553191147761");
+    expect(toPhoneNumber("553191147761")).toBe("553191147761");
+    expect(toPhoneNumber(undefined)).toBeUndefined();
   });
 });
