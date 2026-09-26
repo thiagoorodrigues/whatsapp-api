@@ -11,7 +11,6 @@ interface CompanyData {
   password?: string;
   status?: boolean;
   planId?: number;
-  campaignsEnabled?: boolean;
   dueDate?: string;
   recurrence?: string;
 }
@@ -26,7 +25,6 @@ const CreateCompanyService = async (
     status,
     planId,
     password,
-    campaignsEnabled,
     dueDate,
     recurrence
   } = companyData;
@@ -266,24 +264,6 @@ const CreateCompanyService = async (
       value: ""
     },
   });
-
-  if (companyData.campaignsEnabled !== undefined) {
-    const [setting, created] = await Setting.findOrCreate({
-      where: {
-        companyId: company.id,
-        key: "campaignsEnabled"
-      },
-      defaults: {
-        companyId: company.id,
-        key: "campaignsEnabled",
-        value: `${campaignsEnabled}`
-      },
-
-    });
-    if (!created) {
-      await setting.update({ value: `${campaignsEnabled}` });
-    }
-  }
 
   return company;
 };

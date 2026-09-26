@@ -38,7 +38,6 @@ type CompanyData = {
   email?: string;
   status?: boolean;
   planId?: number;
-  campaignsEnabled?: boolean;
   dueDate?: string;
   recurrence?: string;
 };

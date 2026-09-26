@@ -1,13 +1,8 @@
 import AppError from "../../errors/AppError";
-import Company from "../../models/Company";
-import Plan from "../../models/Plan";
+import { hasPlanFeature } from "../../helpers/planFeature";
 
-export const isFlowBuilderEnabled = async (companyId: number): Promise<boolean> => {
-  const company = await Company.findByPk(companyId, {
-    include: [{ model: Plan, as: "plan", attributes: ["useFlowBuilder"] }]
-  });
-  return !!(company as any)?.plan?.useFlowBuilder;
-};
+export const isFlowBuilderEnabled = (companyId: number): Promise<boolean> =>
+  hasPlanFeature(companyId, "useFlowBuilder");
 
 // The chatbot is sold per plan: every flow endpoint checks it server side.
 const assertFlowBuilderEnabled = async (companyId: number): Promise<void> => {
