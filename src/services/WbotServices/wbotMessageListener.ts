@@ -32,6 +32,7 @@ import FindOrCreateTicketService from "../TicketServices/FindOrCreateTicketServi
 import ShowWhatsAppService from "../WhatsappService/ShowWhatsAppService";
 import UpdateTicketService from "../TicketServices/UpdateTicketService";
 import RunFlowService from "../FlowServices/RunFlowService";
+import { handleAiAgentMessage } from "../AiAgentServices/RunAiAgentService";
 import formatBody from "../../helpers/Mustache";
 import TicketTraking from "../../models/TicketTraking";
 import UserRating from "../../models/UserRating";
@@ -1240,6 +1241,21 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
       console.log(e);
     }
 
+
+    // AI agent of the connection: owns new conversations until it hands
+    // them to people (then the flow and queues below do not run).
+    if (!msg.key.fromMe && !ticket.isGroup) {
+      const handledByAgent = await handleAiAgentMessage({
+        ticket,
+        whatsapp,
+        send: async content => {
+          const sent = await wbot.sendMessage(getContactJid(contact, ticket.isGroup), content);
+          await verifyMessage(sent, ticket, contact);
+          return sent;
+        }
+      });
+      if (handledByAgent) return;
+    }
 
     // Chatbot flow of the connection (replaces the queue menu). While the
     // ticket belongs to a flow, the legacy queue chatbot stays out of it.

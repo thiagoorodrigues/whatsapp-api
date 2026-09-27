@@ -59,6 +59,9 @@ class Plan extends Model<Plan> {
 
   @Column
   useFlowBuilder: boolean;
+
+  @Column
+  useAiAgents: boolean;
 }
 
 export default Plan;

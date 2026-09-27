@@ -25,6 +25,7 @@ import subscriptionRoutes from "./subScriptionRoutes";
 import ticketTagRoutes from "./ticketTagRoutes";
 import queueIntegrationRoutes from "./queueIntegrationRoutes";
 import flowRoutes from "./flowRoutes";
+import aiAgentRoutes from "./aiAgentRoutes";
 import emailRoute from "./emailRoute"; //Email
 import forgotsRoutes from "./forgotPasswordRoutes"; // Reset Passwd
 const routes = Router();
@@ -55,6 +56,7 @@ routes.use(invoiceRoutes);
 routes.use(ticketTagRoutes);
 routes.use(queueIntegrationRoutes);
 routes.use(flowRoutes);
+routes.use(aiAgentRoutes);
 routes.use(emailRoute); //Email
 routes.use(forgotsRoutes);// Reset Passwd
 

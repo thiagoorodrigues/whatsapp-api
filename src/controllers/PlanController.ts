@@ -29,6 +29,7 @@ type StorePlanData = {
   useKanban?: boolean;
   useIntegrations?: boolean;
   useFlowBuilder?: boolean;
+  useAiAgents?: boolean;
 };
 
 type UpdatePlanData = {
@@ -44,6 +45,7 @@ type UpdatePlanData = {
   useKanban?: boolean;
   useIntegrations?: boolean;
   useFlowBuilder?: boolean;
+  useAiAgents?: boolean;
 };
 
 export const index = async (req: Request, res: Response): Promise<Response> => {

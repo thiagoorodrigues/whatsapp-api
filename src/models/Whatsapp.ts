@@ -22,6 +22,7 @@ import Company from "./Company";
 import QueueIntegrations from "./QueueIntegrations";
 
 import Flow from "./Flow";
+import AiAgent from "./AiAgent";
 @Table
 class Whatsapp extends Model<Whatsapp> {
   @PrimaryKey
@@ -158,6 +159,14 @@ class Whatsapp extends Model<Whatsapp> {
 
   @BelongsTo(() => Flow)
   flow: Flow;
+
+  // AI agent that answers new conversations on this connection.
+  @ForeignKey(() => AiAgent)
+  @Column
+  aiAgentId: number | null;
+
+  @BelongsTo(() => AiAgent)
+  aiAgent: AiAgent;
 }
 
 export default Whatsapp;

@@ -147,6 +147,10 @@ class Ticket extends Model<Ticket> {
 
   @Column({ type: DataType.JSONB })
   flowVariables: Record<string, string> | null;
+
+  // The AI agent handed this conversation to people (until it is closed).
+  @Column
+  aiStoppedAt: Date | null;
 }
 
 export default Ticket;

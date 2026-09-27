@@ -18,7 +18,9 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@google/genai": "^2.24.0",
     "@hapi/boom": "^9.1.4",
     "@sentry/node": "^6.18.1",
     "@whiskeysockets/baileys": "7.0.0-rc14",
@@ -44,6 +46,7 @@
     "node-cron": "^3.0.2",
     "node-fetch": "^3.3.2",
     "nodemailer": "^6.8.0",
+    "openai": "^7.23.0",
     "path": "^0.12.7",
     "pg": "^8.7.3",
     "pino": "^7.8.0",

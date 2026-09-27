@@ -22,6 +22,7 @@ export const listFlows = async (companyId: number): Promise<Flow[]> =>
   });
 
 export const showFlow = async (id: number | string, companyId: number): Promise<Flow> => {
+  if (!/^\d+$/.test(String(id))) throw new AppError("ERR_FLOW_NOT_FOUND", 404);
   const flow = await Flow.findOne({
     where: { id, companyId },
     include: [{ model: Whatsapp, attributes: connectionAttributes }]

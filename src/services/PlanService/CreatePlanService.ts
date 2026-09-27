@@ -14,6 +14,7 @@ interface PlanData {
   useKanban?: boolean;
   useIntegrations?: boolean;
   useFlowBuilder?: boolean;
+  useAiAgents?: boolean;
 }
 
 const CreatePlanService = async (planData: PlanData): Promise<Plan> => {

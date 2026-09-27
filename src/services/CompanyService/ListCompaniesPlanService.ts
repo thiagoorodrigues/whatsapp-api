@@ -20,7 +20,8 @@ const ListCompaniesPlanService = async (): Promise<Company[]> => {
           "useExternalApi",
           "useKanban",
           "useIntegrations",
-        "useFlowBuilder"
+        "useFlowBuilder",
+        "useAiAgents"
         ]
       },
     ]

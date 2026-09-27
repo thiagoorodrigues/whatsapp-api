@@ -32,6 +32,10 @@ import Email from "../models/Email"; //Email
 import Logs from "../models/Logs";
 import MensagensDisparos from "../models/MensagensDisparos";
 import Flow from "../models/Flow";
+import AiAgent from "../models/AiAgent";
+import AiAgentRun from "../models/AiAgentRun";
+import AiMcpConnection from "../models/AiMcpConnection";
+import AiOAuthClient from "../models/AiOAuthClient";
 
 // eslint-disable-next-line
 const dbConfig = require("../config/database");
@@ -73,6 +77,10 @@ const models = [
   Logs,
   MensagensDisparos,
   Flow,
+  AiAgent,
+  AiAgentRun,
+  AiMcpConnection,
+  AiOAuthClient,
 ];
 
 sequelize.addModels(models);

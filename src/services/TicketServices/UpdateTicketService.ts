@@ -156,7 +156,8 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
         typebotSessionId: null,
         flowId: null,
         flowNodeId: null,
-        flowVariables: null
+        flowVariables: null,
+        aiStoppedAt: null
       })
 
       ticketTraking.finishedAt = moment().toDate();
