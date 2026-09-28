@@ -1,0 +1,154 @@
+let socket: any;
+jest.mock("../../libs/wbot", () => ({
+  getWbot: (id: number) => {
+    if (!socket || id !== 7) throw new Error("ERR_WAPP_NOT_INITIALIZED");
+    return socket;
+  }
+}));
+
+// eslint-disable-next-line import/first
+import BaileysChannel, { jidOf, toBaileysContent } from "../baileys/BaileysChannel";
+// eslint-disable-next-line import/first
+import { contentFromFile, contentFromUpload } from "../media";
+
+const sent = { key: { id: "WA_SENT", fromMe: true, remoteJid: "5511999999999@s.whatsapp.net" } };
+
+beforeEach(() => {
+  socket = {
+    user: { id: "5511888888888:3@s.whatsapp.net" },
+    sendMessage: jest.fn().mockResolvedValue(sent),
+    chatModify: jest.fn(),
+    sendPresenceUpdate: jest.fn(),
+    onWhatsApp: jest.fn(),
+    profilePictureUrl: jest.fn(),
+    groupFetchAllParticipating: jest.fn().mockResolvedValue({ "120363-111@g.us": {}, "120363222@g.us": {} })
+  };
+});
+
+describe("addresses", () => {
+  it("prefers the LID, then the phone, and keeps groups", () => {
+    expect(jidOf({ number: "5511999999999" })).toBe("5511999999999@s.whatsapp.net");
+    expect(jidOf({ number: "5511999999999", lid: "123@lid" })).toBe("123@lid");
+    expect(jidOf({ number: "120363222", isGroup: true })).toBe("120363222@g.us");
+    expect(jidOf({ jid: "x@s.whatsapp.net", number: "1" })).toBe("x@s.whatsapp.net");
+  });
+});
+
+describe("toBaileysContent", () => {
+  it("maps each content type", () => {
+    const buffer = Buffer.from("x");
+    expect(toBaileysContent({ type: "text", text: "oi" })).toEqual({ text: "oi" });
+    expect(toBaileysContent({ type: "image", buffer, caption: "c" })).toEqual({ image: buffer, caption: "c" });
+    expect(toBaileysContent({ type: "audio", url: "https://a/b.mp3" })).toEqual({
+      audio: { url: "https://a/b.mp3" },
+      mimetype: "audio/mp4",
+      ptt: true
+    });
+    expect(toBaileysContent({ type: "document", buffer, fileName: "a.pdf", mimetype: "application/pdf" })).toEqual({
+      document: buffer,
+      caption: undefined,
+      fileName: "a.pdf",
+      mimetype: "application/pdf"
+    });
+  });
+});
+
+describe("BaileysChannel", () => {
+  it("fails like getWbot when the connection has no session", () => {
+    expect(() => new BaileysChannel(99)).toThrow("ERR_WAPP_NOT_INITIALIZED");
+  });
+
+  it("reports readiness", () => {
+    const channel = new BaileysChannel(7);
+    expect(channel.isReady()).toBe(true);
+    socket.user = undefined;
+    expect(channel.isReady()).toBe(false);
+  });
+
+  it("uses the current socket after a reconnect", async () => {
+    const channel = new BaileysChannel(7);
+    const replaced = { ...socket, sendMessage: jest.fn().mockResolvedValue(sent) };
+    socket = replaced;
+    await channel.send({ number: "5511999999999" }, { type: "text", text: "oi" });
+    expect(replaced.sendMessage).toHaveBeenCalled();
+  });
+
+  it("sends text quoting the stored message", async () => {
+    const quotedRaw = { key: { id: "WA_Q", fromMe: false, remoteJid: "5511999999999@s.whatsapp.net" }, message: { conversation: "antes" } };
+    const result = await new BaileysChannel(7).send(
+      { number: "5511999999999" },
+      { type: "text", text: "oi" },
+      { quoted: { externalId: "WA_Q", raw: JSON.stringify(quotedRaw) } }
+    );
+    expect(socket.sendMessage).toHaveBeenCalledWith("5511999999999@s.whatsapp.net", { text: "oi" }, { quoted: quotedRaw });
+    expect(result).toEqual({ externalId: "WA_SENT", raw: sent });
+  });
+
+  it("resolves group ids stored without the dash", async () => {
+    await new BaileysChannel(7).send({ number: "120363111", isGroup: true }, { type: "text", text: "oi" });
+    expect(socket.sendMessage.mock.calls[0][0]).toBe("120363-111@g.us");
+    await expect(
+      new BaileysChannel(7).send({ number: "999", isGroup: true }, { type: "text", text: "oi" })
+    ).rejects.toThrow("Group not found");
+  });
+
+  it("deletes a message in its original chat", async () => {
+    await new BaileysChannel(7).deleteMessage(
+      { number: "5511999999999" },
+      { externalId: "WA1", chatJid: "123@lid", fromMe: true, participant: null }
+    );
+    expect(socket.sendMessage).toHaveBeenCalledWith("123@lid", {
+      delete: { id: "WA1", remoteJid: "123@lid", participant: undefined, fromMe: true }
+    });
+  });
+
+  it("marks read only with a received message", async () => {
+    const channel = new BaileysChannel(7);
+    const own = { key: { id: "1", fromMe: true } };
+    await channel.markRead({ number: "5511999999999" }, { externalId: "1", raw: JSON.stringify(own) });
+    expect(socket.chatModify).not.toHaveBeenCalled();
+  });
+
+  it("checks numbers and presence with the account's own id", async () => {
+    const channel = new BaileysChannel(7);
+    socket.onWhatsApp.mockResolvedValue([{ exists: true, jid: "5511999999999@s.whatsapp.net" }]);
+    expect(await channel.checkNumber("(11) 99999-9999")).toEqual({ exists: true, jid: "5511999999999@s.whatsapp.net" });
+    expect(socket.onWhatsApp).toHaveBeenCalledWith("11999999999@s.whatsapp.net");
+    socket.onWhatsApp.mockResolvedValue([]);
+    expect(await channel.checkNumber("1")).toEqual({ exists: false });
+    await channel.setPresence("available");
+    expect(socket.sendPresenceUpdate).toHaveBeenCalledWith("available", "5511888888888:3@s.whatsapp.net");
+  });
+
+  it("returns null when there is no profile picture", async () => {
+    socket.profilePictureUrl.mockRejectedValue(new Error("item-not-found"));
+    expect(await new BaileysChannel(7).profilePictureUrl({ number: "1" })).toBeNull();
+  });
+});
+
+describe("media content", () => {
+  it("builds content from files like the old getMessageOptions", () => {
+    expect(contentFromFile("v.mp4", "/tmp/v.mp4", "oi")).toEqual({ type: "video", path: "/tmp/v.mp4", caption: "oi", fileName: "v.mp4" });
+    expect(contentFromFile("a.ogg", "/tmp/a.ogg")).toEqual({ type: "audio", path: "/tmp/a.ogg", mimetype: "audio/mp4", voice: true });
+    expect(contentFromFile("d.pdf", "/tmp/d.pdf", "")).toEqual({
+      type: "document",
+      path: "/tmp/d.pdf",
+      caption: undefined,
+      fileName: "d.pdf",
+      mimetype: "application/pdf"
+    });
+    expect(contentFromFile("i.png", "/tmp/i.png", "c")).toEqual({ type: "image", path: "/tmp/i.png", caption: "c" });
+    expect(() => contentFromFile("x", "/tmp/sem-extensao")).toThrow("Invalid mimetype");
+  });
+
+  it("builds content from uploads", () => {
+    const buffer = Buffer.from("x");
+    expect(contentFromUpload({ buffer, mimetype: "text/plain", originalname: "a.txt" }, "c")).toEqual({
+      type: "document",
+      buffer,
+      caption: "c",
+      fileName: "a.txt",
+      mimetype: "text/plain"
+    });
+  });
+});

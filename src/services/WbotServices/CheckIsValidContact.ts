@@ -1,24 +1,18 @@
 import AppError from "../../errors/AppError";
-import GetDefaultWhatsApp from "../../helpers/GetDefaultWhatsApp";
-import { getWbot } from "../../libs/wbot";
+import { getDefaultChannel } from "../../channels";
 
+// Only fails when the number cannot be checked (no connected session or a
+// WhatsApp error): the lookup result never blocked contacts and still
+// doesn't.
 const CheckIsValidContact = async (
   number: string,
   companyId: number
 ): Promise<void> => {
-  const defaultWhatsapp = await GetDefaultWhatsApp(companyId);
-
-  const wbot = getWbot(defaultWhatsapp.id);
+  const channel = await getDefaultChannel(companyId);
 
   try {
-    const isValidNumber = await wbot.onWhatsApp(`${number}`);
-    if (!isValidNumber) {
-      throw new AppError("invalidNumber");
-    }
+    await channel.checkNumber(number);
   } catch (err: any) {
-    if (err.message === "invalidNumber") {
-      throw new AppError("ERR_WAPP_INVALID_CONTACT");
-    }
     throw new AppError("ERR_WAPP_CHECK_CONTACT");
   }
 };

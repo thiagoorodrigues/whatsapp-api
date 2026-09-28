@@ -1,14 +1,13 @@
-import { WAMessage, AnyMessageContent, WAMediaUpload } from "@whiskeysockets/baileys";
-import { getContactJid } from "../../helpers/GetPhoneJid";
+import { WAMessage } from "@whiskeysockets/baileys";
 import * as Sentry from "@sentry/node";
 import fs from "fs";
 import { exec } from "child_process";
 import path from "path";
 import ffmpegPath from "@ffmpeg-installer/ffmpeg";
 import AppError from "../../errors/AppError";
-import GetTicketWbot from "../../helpers/GetTicketWbot";
+import { getTicketChannel, ticketAddress } from "../../channels";
+import { contentFromUpload } from "../../channels/media";
 import Ticket from "../../models/Ticket";
-import mime from "mime-types";
 import formatBody from "../../helpers/Mustache";
 import { logger } from "../../utils/logger";
 
@@ -87,129 +86,20 @@ const processAudioFile = async (audio: string): Promise<string> => {
   });
 };
 
-export const getMessageOptions = async (
-  fileName: string,
-  pathMedia: string,
-  body?: string
-): Promise<any> => {
-  const mimeType = mime.lookup(pathMedia);
-  const typeMessage = mimeType.split("/")[0];
-
-  try {
-    if (!mimeType) {
-      throw new Error("Invalid mimetype");
-    }
-    let options: AnyMessageContent;
-
-    if (typeMessage === "video") {
-      options = {
-        video: fs.readFileSync(pathMedia),
-        caption: body ? body : '',
-        fileName: fileName
-        // gifPlayback: true
-      };
-    } else if (typeMessage === "audio") {
-      const typeAudio = true; //fileName.includes("audio-record-site");
-      //const convert = await processAudio(pathMedia);
-
-      if (typeAudio) {
-        options = {
-          audio: fs.readFileSync(pathMedia),
-          mimetype: typeAudio ? "audio/mp4" : mimeType,
-          caption: body ? body : null,
-          ptt: true
-        };
-      } else {
-        options = {
-          audio: fs.readFileSync(pathMedia),
-          mimetype: typeAudio ? "audio/mp4" : mimeType,
-          caption: body ? body : null,
-          ptt: true
-        };
-      }
-    } else if (typeMessage === "document") {
-      options = {
-        document: fs.readFileSync(pathMedia),
-        caption: body ? body : null,
-        fileName: fileName,
-        mimetype: mimeType
-      };
-    } else if (typeMessage === "application") {
-      options = {
-        document: fs.readFileSync(pathMedia),
-        caption: body ? body : null,
-        fileName: fileName,
-        mimetype: mimeType
-      };
-    } else {
-      options = {
-        image: fs.readFileSync(pathMedia),
-        caption: body ? body : null
-      };
-    }
-
-    return options;
-  } catch (e) {
-    Sentry.captureException(e);
-    console.log(e);
-    return null;
-  }
-};
-
 const SendWhatsAppMedia = async ({ media, ticket, body }: Request): Promise<WAMessage> => {
   try {
-    const wbot = await GetTicketWbot(ticket);
-    const typeMessage = media.mimetype.split("/")[0];
-    let options: AnyMessageContent;
-    const bodyMessage = formatBody(body, ticket.contact)
-    if (typeMessage === "video") {
-      options = {
-        video: media.buffer,
-        caption: bodyMessage,
-        fileName: media.originalname
-        // gifPlayback: true
-      };
-    } else if (typeMessage === "audio") {
-      const typeAudio = media.originalname.includes("audio-record-site");
-      logger.info(typeAudio);
+    const channel = await getTicketChannel(ticket);
+    const bodyMessage = formatBody(body, ticket.contact);
+    const isAudio = media.mimetype.split("/")[0] === "audio";
+    // Voice notes go out as mp4 audio.
+    const file = isAudio
+      ? { ...media, buffer: await processeFileAudio(media, media.mimetype, false) }
+      : media;
 
-      const convert = await processeFileAudio(media, media.mimetype, false)
-      options = {
-        audio: convert,
-        mimetype: "audio/mp4",
-        ptt: true
-      };
-
-    } else if (typeMessage === "document" || typeMessage === "text") {
-      options = {
-        document: media.buffer,
-        caption: bodyMessage,
-        fileName: media.originalname,
-        mimetype: media.mimetype
-      };
-    } else if (typeMessage === "application") {
-      options = {
-        document: media.buffer,
-        caption: bodyMessage,
-        fileName: media.originalname,
-        mimetype: media.mimetype
-      };
-    } else {
-      options = {
-        image: media.buffer,
-        caption: bodyMessage,
-      };
-    }
-
-    const sentMessage = await wbot.sendMessage(
-      getContactJid(ticket.contact, ticket.isGroup),
-      {
-        ...options
-      }
-    );
+    const sent = await channel.send(ticketAddress(ticket), contentFromUpload(file, isAudio ? undefined : bodyMessage));
 
     await ticket.update({ lastMessage: bodyMessage });
-    return sentMessage;
+    return sent.raw;
 
   } catch (err) {
     Sentry.captureException(err);

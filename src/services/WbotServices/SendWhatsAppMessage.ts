@@ -1,14 +1,11 @@
 import { WAMessage } from "@whiskeysockets/baileys";
-import { getContactJid } from "../../helpers/GetPhoneJid";
-import WALegacySocket from "@whiskeysockets/baileys"
 import * as Sentry from "@sentry/node";
 import AppError from "../../errors/AppError";
-import GetTicketWbot from "../../helpers/GetTicketWbot";
 import Message from "../../models/Message";
 import Ticket from "../../models/Ticket";
+import { getTicketChannel, messageRef, ticketAddress } from "../../channels";
 
 import formatBody from "../../helpers/Mustache";
-import { logger } from "../../utils/logger";
 
 interface Request {
   body: string;
@@ -19,63 +16,31 @@ interface Request {
 }
 
 const SendWhatsAppMessage = async ({ body, ticket, quotedMsg, ratingMsg, closeTicket = true }: Request): Promise<WAMessage> => {
-  let options = {};
-  const wbot = await GetTicketWbot(ticket);
-  let number = getContactJid(ticket.contact, ticket.isGroup);
+  const channel = await getTicketChannel(ticket);
 
+  let quoted;
   if (quotedMsg) {
-    const chatMessages = await Message.findOne({
-      where: {
-        id: quotedMsg.id
-      }
-    });
-
-    if (chatMessages) {
-      const msgFound = JSON.parse(chatMessages.dataJson);
-      options = {
-        quoted: {
-          key: msgFound.key,
-          message: {
-            extendedTextMessage: msgFound.message.extendedTextMessage
-          }
-        }
-      };
-    }
+    const stored = await Message.findOne({ where: { id: quotedMsg.id } });
+    if (stored?.messagesWhatsappsId) quoted = messageRef(stored);
   }
 
   try {
-
-    if (ticket.isGroup) {
-      let metadata = Object.keys(await wbot.groupFetchAllParticipating());
-      metadata.forEach(item => {
-        const position = item.indexOf("-");
-        if (position > 0) {
-          if (item.replace('-', '') === number) {
-            number = `${number.substr(0, position)}-${number.substr(position)}`
-          }
-        }
-      })
-
-      if (!metadata.includes(number)) throw 'Group not found';
-    }
-
-    const sentMessage = await wbot.sendMessage(number, { text: formatBody(body, ticket.contact) }, { ...options });
+    const text = formatBody(body, ticket.contact);
+    const sent = await channel.send(ticketAddress(ticket), { type: "text", text }, { quoted });
 
     if (!closeTicket)
-      return sentMessage;
+      return sent.raw;
 
     if (!!ratingMsg)
-      await ticket.update({ lastMessage: formatBody(body, ticket.contact), status: 'closed' });
+      await ticket.update({ lastMessage: text, status: 'closed' });
     else
-      await ticket.update({ lastMessage: formatBody(body, ticket.contact) });
+      await ticket.update({ lastMessage: text });
 
-    return sentMessage;
+    return sent.raw;
   } catch (err) {
     Sentry.captureException(err);
     throw new AppError("ERR_SENDING_WAPP_MSG");
   }
 };
-
-
 
 export default SendWhatsAppMessage;

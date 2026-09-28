@@ -1,6 +1,5 @@
 import AppError from "../../errors/AppError";
 import GetDefaultWhatsApp from "../../helpers/GetDefaultWhatsApp";
-import GetWhatsappWbot from "../../helpers/GetWhatsappWbot";
 import ChangePresenceOnline from "../../helpers/changePresenceOnline";
 import Setting from "../../models/Setting";
 import { logger } from "../../utils/logger";

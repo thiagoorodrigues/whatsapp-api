@@ -1,7 +1,7 @@
 const chatModify = jest.fn();
 const findAll = jest.fn();
 
-jest.mock("../GetTicketWbot", () => ({ __esModule: true, default: async () => ({ chatModify }) }));
+jest.mock("../../libs/wbot", () => ({ getWbot: () => ({ chatModify, user: { id: "5511888888888:1@s.whatsapp.net" } }) }));
 jest.mock("../../libs/socket", () => ({ getIO: () => ({ to: () => ({ to: () => ({ emit: jest.fn() }) }) }) }));
 jest.mock("../../models/Ticket", () => ({}));
 jest.mock("../../models/Message", () => ({
@@ -14,6 +14,7 @@ import SetTicketMessagesAsRead from "../SetTicketMessagesAsRead";
 
 const ticket: any = {
   id: 1,
+  whatsappId: 3,
   companyId: 1,
   status: "open",
   isGroup: false,
@@ -30,7 +31,7 @@ beforeEach(() => {
 
 describe("SetTicketMessagesAsRead", () => {
   it("marks the chat read with the last received message", async () => {
-    findAll.mockResolvedValue([{ dataJson: null }, { dataJson: JSON.stringify(raw) }]);
+    findAll.mockResolvedValue([{ dataJson: null }, { dataJson: JSON.stringify(raw), messagesWhatsappsId: "WA1" }]);
     await SetTicketMessagesAsRead(ticket);
     expect(chatModify).toHaveBeenCalledWith(
       { markRead: true, lastMessages: [raw] },

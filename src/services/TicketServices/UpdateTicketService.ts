@@ -1,5 +1,4 @@
 import moment from "moment";
-import { getContactJid } from "../../helpers/GetPhoneJid";
 import * as Sentry from "@sentry/node";
 import CheckContactOpenTickets from "../../helpers/CheckContactOpenTickets";
 import SetTicketMessagesAsRead from "../../helpers/SetTicketMessagesAsRead";
@@ -12,7 +11,7 @@ import ShowWhatsAppService from "../WhatsappService/ShowWhatsAppService";
 import SendWhatsAppMessage from "../WbotServices/SendWhatsAppMessage";
 import FindOrCreateATicketTrakingService from "./FindOrCreateATicketTrakingService";
 import { closingUserId } from "../ReportService/trackingRules";
-import GetTicketWbot from "../../helpers/GetTicketWbot";
+import { getTicketChannel, ticketAddress } from "../../channels";
 import { verifyMessage } from "../WbotServices/wbotMessageListener";
 import ListSettingsServiceOne from "../SettingServices/ListSettingsServiceOne"; //NOVO PLW DESIGN//
 import ShowUserService from "../UserServices/ShowUserService"; //NOVO PLW DESIGN//
@@ -235,17 +234,12 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
 
       if (oldQueueId !== queueId && oldUserId === userId && !isNil(oldQueueId) && !isNil(queueId)) {
         const queue = await Queue.findByPk(queueId);
-        const wbot = await GetTicketWbot(ticket);
+        const channel = await getTicketChannel(ticket);
         const msgtxt = "*Mensagem automática*:\nVocê foi transferido para o departamento *" + queue?.name + "*\naguarde, já vamos te atender! - _*" + moment().format('DD/MM/YYYY HH:mm:ss') + "*_";
         isTransfer = true
 
-        const queueChangedMessage = await wbot.sendMessage(
-          getContactJid(ticket.contact, ticket.isGroup),
-          {
-            text: msgtxt
-          }
-        );
-        await verifyMessage(queueChangedMessage, ticket, ticket.contact);
+        const queueChangedMessage = await channel.send(ticketAddress(ticket), { type: "text", text: msgtxt });
+        await verifyMessage(queueChangedMessage.raw, ticket, ticket.contact);
 
         if (userLoggedId) {
           //Log de transferência
@@ -262,18 +256,13 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
         }
       } else if (oldUserId !== userId && oldQueueId === queueId && !isNil(oldUserId) && !isNil(userId)) {
         // Mensagem de transferencia do ATENDENTE
-        const wbot = await GetTicketWbot(ticket);
+        const channel = await getTicketChannel(ticket);
         const nome = await ShowUserService(ticketData.userId);
         const msgtxt = "*Mensagem automática*:\nVocê foi transferido para o atendente *" + nome.name + "*\naguarde, já vamos te atender! - _*" + moment().format('DD/MM/YYYY HH:mm:ss') + "*_";
         isTransfer = true
 
-        const queueChangedMessage = await wbot.sendMessage(
-          getContactJid(ticket.contact, ticket.isGroup),
-          {
-            text: msgtxt
-          }
-        );
-        await verifyMessage(queueChangedMessage, ticket, ticket.contact);
+        const queueChangedMessage = await channel.send(ticketAddress(ticket), { type: "text", text: msgtxt });
+        await verifyMessage(queueChangedMessage.raw, ticket, ticket.contact);
 
         if (userLoggedId) {
           //Log de transferência
@@ -292,18 +281,13 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
         // Mensagem de transferencia do ATENDENTE e da FILA
         isTransfer = true
 
-        const wbot = await GetTicketWbot(ticket);
+        const channel = await getTicketChannel(ticket);
         const queue = await Queue.findByPk(queueId);
         const nome = await ShowUserService(ticketData.userId);
         const msgtxt = "*Mensagem automática*:\nVocê foi transferido para o departamento *" + queue?.name + "* e contará com a presença de *" + nome.name + "*\naguarde, já vamos te atender! - _*" + moment().format('DD/MM/YYYY HH:mm:ss') + "*_";
 
-        const queueChangedMessage = await wbot.sendMessage(
-          getContactJid(ticket.contact, ticket.isGroup),
-          {
-            text: msgtxt
-          }
-        );
-        await verifyMessage(queueChangedMessage, ticket, ticket.contact);
+        const queueChangedMessage = await channel.send(ticketAddress(ticket), { type: "text", text: msgtxt });
+        await verifyMessage(queueChangedMessage.raw, ticket, ticket.contact);
 
         if (userLoggedId) {
           //Log de transferência
@@ -320,17 +304,12 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
         }
       } else if (oldUserId !== undefined && isNil(userId) && oldQueueId !== queueId && !isNil(queueId)) {
         const queue = await Queue.findByPk(queueId);
-        const wbot = await GetTicketWbot(ticket);
+        const channel = await getTicketChannel(ticket);
         const msgtxt = "*Mensagem automática*:\nVocê foi transferido para o departamento *" + queue?.name + "*\naguarde, já vamos te atender! - _*" + moment().format('DD/MM/YYYY HH:mm:ss') + "*_";
         isTransfer = true
 
-        const queueChangedMessage = await wbot.sendMessage(
-          getContactJid(ticket.contact, ticket.isGroup),
-          {
-            text: msgtxt
-          }
-        );
-        await verifyMessage(queueChangedMessage, ticket, ticket.contact);
+        const queueChangedMessage = await channel.send(ticketAddress(ticket), { type: "text", text: msgtxt });
+        await verifyMessage(queueChangedMessage.raw, ticket, ticket.contact);
 
         if (userLoggedId) {
           //Log de transferência
@@ -348,16 +327,12 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
 
       } else if (!isNil(oldUserId) && !isNil(userId) && oldUserId !== userId && (isNil(oldQueueId) || isNil(queueId))) {
         // Mensagem de transferencia do ATENDENTE SEM FILA
-        const wbot = await GetTicketWbot(ticket);
+        const channel = await getTicketChannel(ticket);
         const nome = await ShowUserService(ticketData.userId);
         const msgtxt = "*Mensagem automática*:\nVocê foi transferido para o atendente _*" + nome.name + "*_\naguarde, já vamos te atender! - _*" + moment().format('DD/MM/YYYY HH:mm:ss') + "*_";
 
-        const queueChangedMessage = await wbot.sendMessage(
-          getContactJid(ticket.contact, ticket.isGroup),
-          { text: msgtxt }
-        );
-
-        await verifyMessage(queueChangedMessage, ticket, ticket.contact);
+        const queueChangedMessage = await channel.send(ticketAddress(ticket), { type: "text", text: msgtxt });
+        await verifyMessage(queueChangedMessage.raw, ticket, ticket.contact);
 
         isTransfer = true
         if (userLoggedId) {

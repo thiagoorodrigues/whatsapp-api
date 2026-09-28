@@ -1,27 +1,18 @@
-import GetDefaultWhatsApp from "../../helpers/GetDefaultWhatsApp";
-import { getWbot } from "../../libs/wbot";
-import { logger } from "../../utils/logger";
+import { getDefaultChannel } from "../../channels";
 
 interface IOnWhatsapp {
   jid: string;
   exists: boolean;
 }
 
-const checker = async (number: string, wbot: any) => {
-  const [validNumber] = await wbot.onWhatsApp(`${number}@s.whatsapp.net`);
-  return validNumber;
-};
-
 const CheckContactNumber = async (number: string, companyId: number): Promise<IOnWhatsapp> => {
-  const defaultWhatsapp = await GetDefaultWhatsApp(companyId);
+  const channel = await getDefaultChannel(companyId);
+  const result = await channel.checkNumber(number);
 
-  const wbot = getWbot(defaultWhatsapp.id);
-  const isNumberExit = await checker(number, wbot);
-
-  if (!isNumberExit || !isNumberExit.exists) {
+  if (!result.exists) {
     throw new Error("ERR_CHECK_NUMBER");
   }
-  return isNumberExit;
+  return { jid: result.jid, exists: true };
 };
 
 export default CheckContactNumber;

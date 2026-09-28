@@ -1,5 +1,4 @@
 import * as Sentry from "@sentry/node";
-import ResolveSendJid from "./helpers/ResolveSendJid";
 import BullQueue from "bull";
 import { MessageData, SendMessage } from "./helpers/SendMessage";
 import Whatsapp from "./models/Whatsapp";
@@ -15,9 +14,9 @@ import ContactListItem from "./models/ContactListItem";
 import { isEmpty, isNil, isArray } from "lodash";
 import CampaignSetting from "./models/CampaignSetting";
 import CampaignShipping from "./models/CampaignShipping";
-import GetWhatsappWbot from "./helpers/GetWhatsappWbot";
+import { getChannel, numberAddress } from "./channels";
+import { contentFromFile } from "./channels/media";
 import sequelize from "./database";
-import { getMessageOptions } from "./services/WbotServices/SendWhatsAppMedia";
 import { getIO } from "./libs/socket";
 import path from "path";
 import User from "./models/User";
@@ -696,20 +695,16 @@ async function handleDispatchCampaign(job) {
     const { data } = job;
     const { campaignShippingId, campaignId }: DispatchCampaignData = data;
     const campaign = await getCampaign(campaignId);
-    const wbot = await GetWhatsappWbot(campaign.whatsapp);
-
-    if (!wbot) {
-      logger.error(`campaignQueue -> DispatchCampaign -> error: wbot not found`);
-      return;
-    }
 
     if (!campaign.whatsapp) {
       logger.error(`campaignQueue -> DispatchCampaign -> error: whatsapp not found`);
       return;
     }
 
-    if (!wbot?.user?.id) {
-      logger.error(`campaignQueue -> DispatchCampaign -> error: wbot user not found`);
+    const channel = getChannel(campaign.whatsapp.id);
+
+    if (!channel.isReady()) {
+      logger.error(`campaignQueue -> DispatchCampaign -> error: connection not ready`);
       return;
     }
 
@@ -724,7 +719,7 @@ async function handleDispatchCampaign(job) {
       }
     );
 
-    const chatId = await ResolveSendJid(campaignShipping.number, campaign.companyId);
+    const to = await numberAddress(campaignShipping.number, campaign.companyId);
 
     let body = campaignShipping.message;
 
@@ -736,22 +731,14 @@ async function handleDispatchCampaign(job) {
       const publicFolder = path.resolve(__dirname, "..", "public");
       const filePath = path.join(publicFolder, campaign.mediaPath);
 
-      const options = await getMessageOptions(campaign.mediaName, filePath, body);
-      if (Object.keys(options).length) {
-        await wbot.sendMessage(chatId, { ...options });
-      }
+      await channel.send(to, contentFromFile(campaign.mediaName, filePath, body));
     }
     else {
       if (campaign.confirmation && campaignShipping.confirmation === null) {
-        await wbot.sendMessage(chatId, {
-          text: body
-        });
+        await channel.send(to, { type: "text", text: body });
         await campaignShipping.update({ confirmationRequestedAt: moment() });
       } else {
-
-        await wbot.sendMessage(chatId, {
-          text: body
-        });
+        await channel.send(to, { type: "text", text: body });
       }
     }
     await campaignShipping.update({ deliveredAt: moment() });

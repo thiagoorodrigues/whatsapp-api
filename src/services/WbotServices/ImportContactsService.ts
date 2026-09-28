@@ -1,6 +1,5 @@
 import * as Sentry from "@sentry/node";
-import GetDefaultWhatsApp from "../../helpers/GetDefaultWhatsApp";
-import { getWbot } from "../../libs/wbot";
+import { getDefaultChannel } from "../../channels";
 import Contact from "../../models/Contact";
 import { logger } from "../../utils/logger";
 import ShowBaileysService from "../BaileysServices/ShowBaileysService";
@@ -10,13 +9,13 @@ import path from "path";
 import fs from 'fs';
 
 const ImportContactsService = async (companyId: number): Promise<void> => {
-  const defaultWhatsapp = await GetDefaultWhatsApp(companyId);
-  const wbot = getWbot(defaultWhatsapp.id);
+  // Contacts synced by the connected session (Baileys table).
+  const channel = await getDefaultChannel(companyId);
 
   let phoneContacts;
 
   try {
-    const contactsString = await ShowBaileysService(wbot.id);
+    const contactsString = await ShowBaileysService(channel.connectionId);
     phoneContacts = JSON.parse(JSON.stringify(contactsString.contacts));
 
     const publicFolder = path.resolve(__dirname, "..", "..", "..", "public");

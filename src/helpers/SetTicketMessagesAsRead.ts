@@ -1,40 +1,29 @@
-import { proto, WASocket, WAMessage } from "@whiskeysockets/baileys";
-import { getContactJid } from "./GetPhoneJid";
 // import cacheLayer from "../libs/cache";
 import { getIO } from "../libs/socket";
 import Message from "../models/Message";
 import Ticket from "../models/Ticket";
 import { logger } from "../utils/logger";
-import GetTicketWbot from "./GetTicketWbot";
+import { getTicketChannel, messageRef, ticketAddress } from "../channels";
 
 const SetTicketMessagesAsRead = async (ticket: Ticket): Promise<void> => {
   await ticket.update({ unreadMessages: 0 });
   // await cacheLayer.set(`contacts:${ticket.contactId}:unreads`, "0");
 
   try {
-    const wbot = await GetTicketWbot(ticket);
+    const channel = await getTicketChannel(ticket);
 
-    const getJsonMessage = await Message.findAll({
+    const unread = await Message.findAll({
       where: {
         ticketId: ticket.id,
         fromMe: false,
         read: false
       },
       order: [["createdAt", "DESC"]]
-    });    
+    });
 
-    // dataJson is the raw message saved as a JSON string (call logs have none).
-    const rawMessage = getJsonMessage.find(m => m.dataJson)?.dataJson;
-    if (rawMessage) {
-      const lastMessages: proto.IWebMessageInfo = JSON.parse(rawMessage);
-
-      if (lastMessages?.key && lastMessages.key.fromMe === false) {
-        await (wbot as WASocket).chatModify(
-          { markRead: true, lastMessages: [lastMessages as WAMessage] },
-          getContactJid(ticket.contact, ticket.isGroup)
-        );
-      }
-    }
+    // The last received message with its raw payload (call logs have none).
+    const last = unread.find(m => m.dataJson && m.messagesWhatsappsId);
+    if (last) await channel.markRead(ticketAddress(ticket), messageRef(last));
 
     await Message.update(
       { read: true },
