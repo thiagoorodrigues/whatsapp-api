@@ -46,6 +46,12 @@ const CreateOrUpdateContactService = async ({
   if (contact) {
     contact.update({ profilePicUrl });
 
+    // Contacts created without a name got the number as name; take the
+    // WhatsApp name when it arrives. Names typed in the platform stay.
+    if (!isGroup && name && name !== number && (!contact.name || contact.name === contact.number)) {
+      contact.update({ name });
+    }
+
     if (lid && contact.lid !== lid) {
       contact.update({ lid });
     }
