@@ -1,5 +1,5 @@
-import { AnyMessageContent, proto } from "@whiskeysockets/baileys";
 import * as Sentry from "@sentry/node";
+import { OutgoingContent } from "../../channels/types";
 
 import AiAgent from "../../models/AiAgent";
 import AiAgentRun from "../../models/AiAgentRun";
@@ -17,7 +17,8 @@ import generateReply from "./generateReply";
 import { ChatMessage } from "./types";
 import { DeferredAction } from "./tools";
 
-type Sender = (content: AnyMessageContent) => Promise<proto.IWebMessageInfo | undefined>;
+// Sends to the ticket and saves the message (see SendTicketMessageService).
+type Sender = (content: OutgoingContent) => Promise<unknown>;
 
 // Customers often send several short messages in a row: wait for a pause
 // and answer them together.
@@ -150,7 +151,7 @@ const turn = async (ticketId: number, agentId: number, send: Sender) => {
       }
     });
 
-    if (result.reply) await send({ text: result.reply });
+    if (result.reply) await send({ type: "text", text: result.reply });
     await applyActions(ticket, result.actions);
 
     await AiAgentRun.create({

@@ -69,6 +69,8 @@ export interface MessagingChannel {
   /** Sends read receipts for received messages (the sender sees them read). */
   markRead(chat: ChatAddress, messages: MessageRef[]): Promise<void>;
   setPresence(presence: Presence): Promise<void>;
+  /** "Digitando..." shown to the contact while a bot prepares a reply. */
+  sendTyping(chat: ChatAddress, typing: boolean): Promise<void>;
   checkNumber(number: string): Promise<NumberCheck>;
   profilePictureUrl(chat: ChatAddress): Promise<string | null>;
 }

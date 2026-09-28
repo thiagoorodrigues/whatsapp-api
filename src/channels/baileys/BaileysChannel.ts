@@ -173,6 +173,13 @@ class BaileysChannel implements MessagingChannel {
     await socket.sendPresenceUpdate(presence, socket.user.id);
   }
 
+  async sendTyping(chat: ChatAddress, typing: boolean): Promise<void> {
+    const socket = this.socket();
+    const jid = jidOf(chat);
+    if (typing) await socket.presenceSubscribe(jid);
+    await socket.sendPresenceUpdate(typing ? "composing" : "paused", jid);
+  }
+
   async checkNumber(number: string): Promise<NumberCheck> {
     const digits = `${number}`.replace(/\D/g, "");
     const [result] = (await this.socket().onWhatsApp(`${digits}@s.whatsapp.net`)) || [];

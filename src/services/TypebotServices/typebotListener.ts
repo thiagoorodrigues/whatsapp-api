@@ -6,6 +6,8 @@ import { getBodyMessage } from "../WbotServices/wbotMessageListener";
 import { logger } from "../../utils/logger";
 import { isNil } from "lodash";
 import UpdateTicketService from "../TicketServices/UpdateTicketService";
+import SendTicketMessageService from "../MessageServices/SendTicketMessageService";
+import { getTicketChannel, OutgoingContent, ticketAddress } from "../../channels";
 
 
 type Session = WASocket & {
@@ -28,6 +30,19 @@ const typebotListener = async ({
 }: Request): Promise<void> => {
 
     if (msg.key.remoteJid === 'status@broadcast') return;
+
+    // Replies go through the ticket's channel and are saved in the ticket.
+    const reply = (content: OutgoingContent) => SendTicketMessageService(ticket, content);
+    const typing = async () => {
+        try {
+            const channel = await getTicketChannel(ticket);
+            await channel.sendTyping(ticketAddress(ticket), true);
+            await delay(typebotDelayMessage);
+            await channel.sendTyping(ticketAddress(ticket), false);
+        } catch (err) {
+            logger.warn(`Typebot typing indicator failed: ${err}`);
+        }
+    };
 
     const { urlN8N: url,
         typebotExpires,
@@ -144,7 +159,7 @@ const typebotListener = async ({
             }
 
             if (messages?.length === 0) {
-                await wbot.sendMessage(`${number}@c.us`, { text: typebotUnknownMessage });
+                await reply({ type: "text", text: typebotUnknownMessage });
             } else {
                 for (const message of messages) {
                     if (message.type === 'text') {
@@ -283,30 +298,15 @@ const typebotListener = async ({
                             }
                         }
 
-                        await wbot.presenceSubscribe(msg.key.remoteJid)
-                        //await delay(2000)
-                        await wbot.sendPresenceUpdate('composing', msg.key.remoteJid)
-                        await delay(typebotDelayMessage)
-                        await wbot.sendPresenceUpdate('paused', msg.key.remoteJid)
+                        await typing();
 
 
-                        await wbot.sendMessage(msg.key.remoteJid, { text: formattedText });
+                        await reply({ type: "text", text: formattedText });
                     }
 
                     if (message.type === 'audio') {
-                        await wbot.presenceSubscribe(msg.key.remoteJid)
-                        //await delay(2000)
-                        await wbot.sendPresenceUpdate('composing', msg.key.remoteJid)
-                        await delay(typebotDelayMessage)
-                        await wbot.sendPresenceUpdate('paused', msg.key.remoteJid)
-                        const media = {
-                            audio: {
-                                url: message.content.url,
-                                mimetype: 'audio/mp4',
-                                ptt: true
-                            },
-                        }
-                        await wbot.sendMessage(msg.key.remoteJid, media);
+                        await typing();
+                        await reply({ type: "audio", url: message.content.url, mimetype: "audio/mp4", voice: true });
 
                     }
 
@@ -327,18 +327,8 @@ const typebotListener = async ({
                     // }
 
                     if (message.type === 'image') {
-                        await wbot.presenceSubscribe(msg.key.remoteJid)
-                        //await delay(2000)
-                        await wbot.sendPresenceUpdate('composing', msg.key.remoteJid)
-                        await delay(typebotDelayMessage)
-                        await wbot.sendPresenceUpdate('paused', msg.key.remoteJid)
-                        const media = {
-                            image: {
-                                url: message.content.url,
-                            },
-
-                        }
-                        await wbot.sendMessage(msg.key.remoteJid, media);
+                        await typing();
+                        await reply({ type: "image", url: message.content.url });
                     }
 
                     // if (message.type === 'video' ) {
@@ -390,17 +380,14 @@ const typebotListener = async ({
                             formattedText += `▶️ ${item.content}\n`;
                         }
                         formattedText = formattedText.replace(/\n$/, '');
-                        await wbot.presenceSubscribe(msg.key.remoteJid)
-                        //await delay(2000)
-                        await wbot.sendPresenceUpdate('composing', msg.key.remoteJid)
-                        await delay(typebotDelayMessage)
-                        await wbot.sendPresenceUpdate('paused', msg.key.remoteJid)
+                        await typing();
 
-                        if (options) {
-                            await wbot.sendMessage(msg.key.remoteJid, { text: "Selecione uma das opções abaixo:", ...dataButtons });
-                        } else {
-                            await wbot.sendMessage(msg.key.remoteJid, { text: formattedText });
-                        }
+                        // List messages (sections) are no longer delivered by
+                        // WhatsApp; the options go as text.
+                        await reply({
+                            type: "text",
+                            text: options ? `Selecione uma das opções abaixo:\n${formattedText}` : formattedText
+                        });
 
                     }
                 }
@@ -415,7 +402,7 @@ const typebotListener = async ({
 
             await ticket.reload();
 
-            await wbot.sendMessage(`${number}@c.us`, { text: typebotRestartMessage })
+            await reply({ type: "text", text: typebotRestartMessage })
 
         }
         if (body === typebotKeywordFinish) {

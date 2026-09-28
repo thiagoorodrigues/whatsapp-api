@@ -1,4 +1,3 @@
-import { AnyMessageContent, proto } from "@whiskeysockets/baileys";
 import * as Sentry from "@sentry/node";
 
 import Contact from "../../models/Contact";
@@ -10,8 +9,10 @@ import UpdateTicketService from "../TicketServices/UpdateTicketService";
 import { logger } from "../../utils/logger";
 import { continueFlow, FlowAction, FlowGraph, FlowResult, startFlow } from "./FlowEngine";
 import { isFlowBuilderEnabled } from "./assertFlowBuilderEnabled";
+import { OutgoingContent } from "../../channels/types";
 
-type Sender = (content: AnyMessageContent) => Promise<proto.IWebMessageInfo | undefined>;
+// Sends to the ticket and saves the message (see SendTicketMessageService).
+type Sender = (content: OutgoingContent) => Promise<unknown>;
 
 interface Request {
   ticket: Ticket;
@@ -50,23 +51,24 @@ const mimeOf = (url: string, fallback: string) =>
 const mediaContent = (
   action: Extract<FlowAction, { type: "media" }>,
   contact: Contact
-): AnyMessageContent => {
+): OutgoingContent => {
   const caption = action.caption ? formatBody(action.caption, contact) : undefined;
   switch (action.mediaType) {
     case "video":
-      return { video: { url: action.url }, caption };
+      return { type: "video", url: action.url, caption, fileName: fileNameOf(action.url) };
     case "audio":
-      return { audio: { url: action.url }, mimetype: mimeOf(action.url, "audio/mpeg") };
+      return { type: "audio", url: action.url, mimetype: mimeOf(action.url, "audio/mpeg"), voice: false };
     case "document":
       return {
-        document: { url: action.url },
+        type: "document",
+        url: action.url,
         fileName: fileNameOf(action.url),
         mimetype: mimeOf(action.url, "application/octet-stream"),
         caption
       };
     case "image":
     default:
-      return { image: { url: action.url }, caption };
+      return { type: "image", url: action.url, caption };
   }
 };
 
@@ -74,7 +76,7 @@ const execute = async (actions: FlowAction[], { ticket, contact, send }: Request
   for (const action of actions) {
     switch (action.type) {
       case "text":
-        await send({ text: formatBody(`‎${action.text}`, contact) });
+        await send({ type: "text", text: formatBody(action.text, contact) });
         break;
       case "media":
         await send(mediaContent(action, contact));

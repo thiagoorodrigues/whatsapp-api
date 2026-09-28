@@ -1,4 +1,6 @@
 import { wasSentByPlatform } from "../../channels/baileys/sentByPlatform";
+import SendTicketMessageService from "../MessageServices/SendTicketMessageService";
+import { OutgoingContent } from "../../channels/types";
 import path, { join } from "path";
 // import { promisify } from "util";
 // import { readFile, writeFile } from "fs";
@@ -235,63 +237,41 @@ function timeout(ms) {
 export async function sleep(time) {
   await timeout(time);
 }
-export const sendMessageImage = async (
-  wbot: Session,
-  contact,
-  ticket: Ticket,
-  url: string,
-  caption: string
-) => {
-
-  let sentMessage
+// Image and PDF by URL for the ISP bots (providers.ts); a failure tells
+// the customer instead.
+const sendMediaOrApology = async (ticket: Ticket, contact: Contact, content: OutgoingContent) => {
   try {
-    sentMessage = await wbot.sendMessage(
-      getContactJid(contact, ticket.isGroup),
-      {
-        image: url ? { url } : fs.readFileSync(`public/temp/${caption}-${makeid(10)}`),
-        fileName: caption,
-        caption: caption,
-        mimetype: 'image/jpeg'
-      }
-    );
+    await SendTicketMessageService(ticket, content);
   } catch (error) {
-    sentMessage = await wbot.sendMessage(
-      getContactJid(contact, ticket.isGroup),
-      {
-        text: formatBody('Não consegui enviar o PDF, tente novamente!', contact)
-      }
-    );
+    await SendTicketMessageService(ticket, {
+      type: "text",
+      text: formatBody("Não consegui enviar o PDF, tente novamente!", contact)
+    });
   }
-  verifyMessage(sentMessage, ticket, contact);
 };
 
-export const sendMessageLink = async (
-  wbot: Session,
+export const sendMessageImage = async (
+  _wbot: Session,
   contact: Contact,
   ticket: Ticket,
   url: string,
   caption: string
-) => {
+) => sendMediaOrApology(ticket, contact, { type: "image", url, caption });
 
-  let sentMessage
-  try {
-    sentMessage = await wbot.sendMessage(
-      getContactJid(contact, ticket.isGroup), {
-      document: url ? { url } : fs.readFileSync(`public/temp/${caption}-${makeid(10)}`),
-      fileName: caption,
-      caption: caption,
-      mimetype: 'application/pdf'
-    }
-    );
-  } catch (error) {
-    sentMessage = await wbot.sendMessage(
-      getContactJid(contact, ticket.isGroup), {
-      text: formatBody('Não consegui enviar o PDF, tente novamente!', contact)
-    }
-    );
-  }
-  verifyMessage(sentMessage, ticket, contact);
-};
+export const sendMessageLink = async (
+  _wbot: Session,
+  contact: Contact,
+  ticket: Ticket,
+  url: string,
+  caption: string
+) =>
+  sendMediaOrApology(ticket, contact, {
+    type: "document",
+    url,
+    caption,
+    fileName: caption,
+    mimetype: "application/pdf"
+  });
 
 export function makeid(length) {
   var result = '';
@@ -848,10 +828,7 @@ const verifyQueue = async (
 
   // Greets the customer on arrival in the queue.
   if (firstQueue?.greetingMessage && isNil(firstQueue?.integrationId)) {
-    const sentMessage = await wbot.sendMessage(getContactJid(contact, ticket.isGroup), {
-      text: formatBody(`\u200e${firstQueue.greetingMessage}`, contact),
-    });
-    await verifyMessage(sentMessage, ticket, contact);
+    await SendTicketMessageService(ticket, { type: "text", text: formatBody(firstQueue.greetingMessage, contact) });
   }
 };
 
@@ -1004,7 +981,6 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
       msg.message.stickerMessage;
 
     if (msg.key.fromMe) {
-      if (/\u200e/.test(bodyMessage)) return;
       if (!hasMedia && msgType !== "conversation" && msgType !== "extendedTextMessage" && msgType !== "vcard") return;
       msgContact = await getContactMessage(msg, wbot, companyId);
     } else {
@@ -1150,16 +1126,11 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
           !isNil(currentSchedule) &&
           (!currentSchedule || currentSchedule.inActivity === false)
         ) {
-          const body = `\u200e ${whatsapp.outOfHoursMessage}`;
+          const body = formatBody(whatsapp.outOfHoursMessage, ticket.contact);
 
           const debouncedSentMessage = debounce(
             async () => {
-              await wbot.sendMessage(
-                getContactJid(ticket.contact, ticket.isGroup),
-                {
-                  text: body
-                }
-              );
+              await SendTicketMessageService(ticket, { type: "text", text: body });
             },
             3000,
             ticket.id
@@ -1205,12 +1176,7 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
               const body = `${queue.outOfHoursMessage}`;
               const debouncedSentMessage = debounce(
                 async () => {
-                  await wbot.sendMessage(
-                    getContactJid(ticket.contact, ticket.isGroup),
-                    {
-                      text: body
-                    }
-                  );
+                  await SendTicketMessageService(ticket, { type: "text", text: body });
                 },
                 3000,
                 ticket.id
@@ -1247,11 +1213,7 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
       const handledByAgent = await handleAiAgentMessage({
         ticket,
         whatsapp,
-        send: async content => {
-          const sent = await wbot.sendMessage(getContactJid(contact, ticket.isGroup), content);
-          await verifyMessage(sent, ticket, contact);
-          return sent;
-        }
+        send: content => SendTicketMessageService(ticket, content)
       });
       if (handledByAgent) return;
     }
@@ -1264,11 +1226,7 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
         contact,
         whatsapp,
         body: bodyMessage || "",
-        send: async content => {
-          const sent = await wbot.sendMessage(getContactJid(contact, ticket.isGroup), content);
-          await verifyMessage(sent, ticket, contact);
-          return sent;
-        }
+        send: content => SendTicketMessageService(ticket, content)
       });
       if (handledByFlow || (!ticket.queueId && (ticket.flowId || whatsapp.flowId))) return;
     }
@@ -1355,12 +1313,7 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
             const body = queue.outOfHoursMessage;
             const debouncedSentMessage = debounce(
               async () => {
-                await wbot.sendMessage(
-                  getContactJid(ticket.contact, ticket.isGroup),
-                  {
-                    text: body
-                  }
-                );
+                await SendTicketMessageService(ticket, { type: "text", text: body });
               },
               3000,
               ticket.id
@@ -1395,12 +1348,7 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
 
         const debouncedSentMessage = debounce(
           async () => {
-            await wbot.sendMessage(
-              getContactJid(ticket.contact, ticket.isGroup),
-              {
-                text: whatsapp.greetingMessage
-              }
-            );
+            await SendTicketMessageService(ticket, { type: "text", text: whatsapp.greetingMessage });
           },
           1000,
           ticket.id

@@ -14,6 +14,9 @@ import Whatsapp from "../../models/Whatsapp";
 import { logger } from "../../utils/logger";
 import createOrUpdateBaileysService from "../BaileysServices/CreateOrUpdateBaileysService";
 import CreateMessageService from "../MessageServices/CreateMessageService";
+import SendTicketMessageService from "../MessageServices/SendTicketMessageService";
+import { getChannel } from "../../channels";
+import { isLidJid, toUserLid } from "../../helpers/GetPhoneJid";
 
 type Session = WASocket & {
   id?: number;
@@ -42,26 +45,34 @@ const wbotMonitor = async (
           where: { key: "call", companyId },
         });
 
-        if (sendMsgCall.value === "disabled") {
-          await wbot.sendMessage(node.attrs.from, {
-            text:
-              "*Mensagem Automática:*\n\nAs chamadas de voz e vídeo estão desabilitas para esse WhatsApp, favor enviar uma mensagem de texto. Obrigado",
-          });
+        if (sendMsgCall?.value === "disabled") {
+          const { from } = node.attrs;
+          const callWarning =
+            "*Mensagem Automática:*\n\nAs chamadas de voz e vídeo estão desabilitas para esse WhatsApp, favor enviar uma mensagem de texto. Obrigado";
 
-          const number = node.attrs.from.replace(/\D/g, "");
-
+          // Calls come from a LID or a phone JID.
+          const userLid = isLidJid(from) ? toUserLid(from) : undefined;
           const contact = await Contact.findOne({
-            where: { companyId, number },
+            where: userLid ? { companyId, lid: userLid } : { companyId, number: from.replace(/\D/g, "") }
           });
 
-          const ticket = await Ticket.findOne({
-            where: {
-              contactId: contact.id,
-              whatsappId: wbot.id,
-              //status: { [Op.or]: ["close"] },
-              companyId
-            },
-          });
+          const ticket = contact
+            ? await Ticket.findOne({
+              where: {
+                contactId: contact.id,
+                whatsappId: wbot.id,
+                companyId
+              },
+              include: ["contact"]
+            })
+            : null;
+
+          if (ticket) {
+            await SendTicketMessageService(ticket, { type: "text", text: callWarning });
+          } else {
+            await getChannel(wbot.id).send({ jid: from }, { type: "text", text: callWarning });
+          }
+
           // se não existir o ticket não faz nada.
           if (!ticket) return;
 
