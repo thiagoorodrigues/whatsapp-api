@@ -14,6 +14,7 @@ interface UserData {
   queueIds?: number[];
   whatsappId?: number;
   status?: boolean;
+  signMessage?: boolean;
 }
 
 interface Request {
@@ -69,7 +70,7 @@ const UpdateUserService = async ({
     password: Yup.string()
   });
 
-  const { email, password, profile, name, queueIds = [], whatsappId, status } = userData;
+  const { email, password, profile, name, queueIds = [], whatsappId, status, signMessage } = userData;
 
   try {
     await schema.validate({ email, password, profile, name });
@@ -83,7 +84,8 @@ const UpdateUserService = async ({
     profile,
     name,
     whatsappId: whatsappId || null,
-    status
+    status,
+    ...(typeof signMessage === "boolean" ? { signMessage } : {})
   });
 
   await user.$set("queues", queueIds);
@@ -100,7 +102,9 @@ const UpdateUserService = async ({
     companyId: user.companyId,
     company,
     queues: user.queues,
-    status
+    status,
+    super: user.super,
+    signMessage: user.signMessage
   };
 
   return serializedUser;

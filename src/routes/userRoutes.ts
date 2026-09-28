@@ -13,6 +13,8 @@ userRoutes.get("/users/relatorios/list", isAuth, UserController.listRelatorio);
 
 userRoutes.post("/users", isAuth, UserController.store);
 
+userRoutes.put("/users/me/preferences", isAuth, UserController.updatePreferences);
+
 userRoutes.put("/users/:userId", isAuth, UserController.update);
 
 userRoutes.get("/users/:userId", isAuth, UserController.show);

@@ -15,6 +15,7 @@ interface Request {
   profile?: string;
   whatsappId?: number;
   status?: boolean
+  signMessage?: boolean
 }
 
 interface Response {
@@ -32,7 +33,8 @@ const CreateUserService = async ({
   companyId,
   profile = "admin",
   whatsappId,
-  status = true
+  status = true,
+  signMessage = true
 }: Request): Promise<Response> => {
   if (companyId !== undefined) {
     const company = await Company.findOne({
@@ -90,7 +92,8 @@ const CreateUserService = async ({
       companyId,
       profile,
       whatsappId: whatsappId || null,
-      status
+      status,
+      signMessage
     },
     { include: ["queues", "company"] }
   );

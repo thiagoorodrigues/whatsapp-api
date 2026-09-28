@@ -9,6 +9,7 @@ import ListUsersService from "../services/UserServices/ListUsersService";
 import UpdateUserService from "../services/UserServices/UpdateUserService";
 import ShowUserService from "../services/UserServices/ShowUserService";
 import DeleteUserService from "../services/UserServices/DeleteUserService";
+import UpdateUserPreferencesService from "../services/UserServices/UpdateUserPreferencesService";
 import SimpleListService, { ListServiceRelatorio } from "../services/UserServices/SimpleListService";
 import { logger } from "../utils/logger";
 
@@ -109,6 +110,26 @@ export const update = async (
     userId,
     companyId,
     requestUserId: +requestUserId
+  });
+
+  const io = getIO();
+  io.emit(`company-${companyId}-user`, {
+    action: "update",
+    user
+  });
+
+  return res.status(200).json(user);
+};
+
+export const updatePreferences = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  const { id, companyId } = req.user;
+
+  const user = await UpdateUserPreferencesService({
+    userId: id,
+    signMessage: req.body.signMessage
   });
 
   const io = getIO();
