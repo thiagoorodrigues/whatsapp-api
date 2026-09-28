@@ -5,6 +5,7 @@ import Message from "../../models/Message";
 import Ticket from "../../models/Ticket";
 import ShowTicketService from "../TicketServices/ShowTicketService";
 import Queue from "../../models/Queue";
+import ResolveMentionsService from "./ResolveMentionsService";
 
 interface Request {
   ticketId: string;
@@ -72,6 +73,8 @@ const ListMessagesService = async ({
   });
 
   const hasMore = count > offset + messages.length;
+
+  await ResolveMentionsService(messages, companyId);
 
   return {
     messages: messages.reverse(),

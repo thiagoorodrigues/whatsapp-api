@@ -2,6 +2,7 @@ import { getIO } from "../../libs/socket";
 import Message from "../../models/Message";
 import Ticket from "../../models/Ticket";
 import Whatsapp from "../../models/Whatsapp";
+import ResolveMentionsService from "./ResolveMentionsService";
 
 interface MessageData {
   id: string;
@@ -72,6 +73,8 @@ const CreateMessageService = async ({ messageData: data, companyId }: Request): 
   if (!message) {
     throw new Error("ERR_CREATING_MESSAGE");
   }
+
+  await ResolveMentionsService([message], companyId);
 
   const io = getIO();
   io.to(message.ticketId.toString())

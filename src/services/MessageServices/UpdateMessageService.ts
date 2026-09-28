@@ -2,6 +2,7 @@ import { getIO } from "../../libs/socket";
 import Message from "../../models/Message";
 import Ticket from "../../models/Ticket";
 import Whatsapp from "../../models/Whatsapp";
+import ResolveMentionsService from "./ResolveMentionsService";
 
 interface MessageData {
     id: string;
@@ -52,6 +53,8 @@ const UpdateMessageService = async ({ messageData, companyId }: Request): Promis
     if (messages.length === 0) {
         throw new Error("ERR_CREATING_MESSAGE");
     }
+
+    await ResolveMentionsService(messages, companyId);
 
     for (let message of messages) {
         await message.update({ body: messageData.body, isEdited: true });
