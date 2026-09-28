@@ -6,6 +6,7 @@ import { getTicketChannel, messageRef, ticketAddress } from "../../channels";
 import SaveSentMessageService from "../MessageServices/SaveSentMessageService";
 
 import formatBody from "../../helpers/Mustache";
+import { logger } from "../../utils/logger";
 
 interface Request {
   body: string;
@@ -31,8 +32,13 @@ const SendWhatsAppMessage = async ({ body, ticket, quotedMsg, ratingMsg, closeTi
     // Only members of the group can be mentioned.
     let mentioned: string[] = [];
     if (ticket.isGroup && mentions?.length) {
-      const members = new Set((await channel.groupParticipants(ticketAddress(ticket))).map(p => p.jid));
-      mentioned = mentions.filter(jid => members.has(jid));
+      // The lookup only filters mentions: if it fails, the text still goes.
+      try {
+        const members = new Set((await channel.groupParticipants(ticketAddress(ticket))).map(p => p.jid));
+        mentioned = mentions.filter(jid => members.has(jid));
+      } catch (err) {
+        logger.warn(`Sending without mentions, group members unavailable for ticket ${ticket.id}: ${err}`);
+      }
     }
     const content = mentioned.length ? { type: "text" as const, text, mentions: mentioned } : { type: "text" as const, text };
     const sent = await channel.send(ticketAddress(ticket), content, { quoted });

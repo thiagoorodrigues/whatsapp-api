@@ -39,4 +39,10 @@ describe("SendWhatsAppMessage mentions", () => {
     expect(groupParticipants).not.toHaveBeenCalled();
     expect(send).toHaveBeenCalledWith(expect.anything(), { type: "text", text: "oi" }, expect.anything());
   });
+
+  it("still sends the text when the member lookup fails", async () => {
+    groupParticipants.mockRejectedValue(new Error("rate-overlimit"));
+    await SendWhatsAppMessage({ body: "oi @1", ticket: group, mentions: ["1@lid"] });
+    expect(send).toHaveBeenCalledWith(expect.anything(), { type: "text", text: "oi @1" }, expect.anything());
+  });
 });
