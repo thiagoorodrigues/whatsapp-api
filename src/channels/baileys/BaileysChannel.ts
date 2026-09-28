@@ -125,10 +125,21 @@ class BaileysChannel implements MessagingChannel {
     });
   }
 
-  async markRead(chat: ChatAddress, lastMessage: MessageRef): Promise<void> {
-    const stored = quotedOf(lastMessage);
-    if (!stored || stored.key.fromMe !== false) return;
-    await this.socket().chatModify({ markRead: true, lastMessages: [stored] }, jidOf(chat));
+  // Read receipts (readMessages) reach the sender and the account's other
+  // devices; chatModify markRead needs app state keys sessions often lack.
+  async markRead(chat: ChatAddress, messages: MessageRef[]): Promise<void> {
+    const keys = messages
+      .filter(m => m.externalId && m.fromMe !== true)
+      .map(m => {
+        const stored = quotedOf(m);
+        return {
+          remoteJid: stored?.key?.remoteJid || m.chatJid || jidOf(chat),
+          id: m.externalId,
+          participant: stored?.key?.participant || m.participant || undefined,
+          fromMe: false
+        };
+      });
+    if (keys.length) await this.socket().readMessages(keys);
   }
 
   async setPresence(presence: Presence): Promise<void> {

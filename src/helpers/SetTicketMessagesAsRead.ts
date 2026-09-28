@@ -9,35 +9,38 @@ const SetTicketMessagesAsRead = async (ticket: Ticket): Promise<void> => {
   await ticket.update({ unreadMessages: 0 });
   // await cacheLayer.set(`contacts:${ticket.contactId}:unreads`, "0");
 
-  try {
-    const channel = await getTicketChannel(ticket);
+  const unread = await Message.findAll({
+    where: {
+      ticketId: ticket.id,
+      fromMe: false,
+      read: false
+    },
+    attributes: ["id", "messagesWhatsappsId", "remoteJid", "participant", "fromMe", "dataJson"],
+    order: [["createdAt", "DESC"]],
+    limit: 100
+  });
 
-    const unread = await Message.findAll({
+  // Read in the system even when WhatsApp can't be told.
+  await Message.update(
+    { read: true },
+    {
       where: {
         ticketId: ticket.id,
-        fromMe: false,
         read: false
-      },
-      order: [["createdAt", "DESC"]]
-    });
-
-    // The last received message with its raw payload (call logs have none).
-    const last = unread.find(m => m.dataJson && m.messagesWhatsappsId);
-    if (last) await channel.markRead(ticketAddress(ticket), messageRef(last));
-
-    await Message.update(
-      { read: true },
-      {
-        where: {
-          ticketId: ticket.id,
-          read: false
-        }
       }
-    );
-  } catch (err) {
-    logger.warn(
-      `Could not mark messages as read. Maybe whatsapp session disconnected? Err: ${err}`
-    );
+    }
+  );
+
+  const received = unread.filter(m => m.messagesWhatsappsId);
+  if (received.length) {
+    try {
+      const channel = await getTicketChannel(ticket);
+      await channel.markRead(ticketAddress(ticket), received.map(messageRef));
+    } catch (err) {
+      logger.warn(
+        `Could not send read receipts for ticket ${ticket.id}. Maybe whatsapp session disconnected? Err: ${err}`
+      );
+    }
   }
 
   const io = getIO();

@@ -1,12 +1,15 @@
-const chatModify = jest.fn();
+const readMessages = jest.fn();
 const findAll = jest.fn();
+const update = jest.fn();
 
-jest.mock("../../libs/wbot", () => ({ getWbot: () => ({ chatModify, user: { id: "5511888888888:1@s.whatsapp.net" } }) }));
+jest.mock("../../libs/wbot", () => ({
+  getWbot: () => ({ readMessages, user: { id: "5511888888888:1@s.whatsapp.net" } })
+}));
 jest.mock("../../libs/socket", () => ({ getIO: () => ({ to: () => ({ to: () => ({ emit: jest.fn() }) }) }) }));
 jest.mock("../../models/Ticket", () => ({}));
 jest.mock("../../models/Message", () => ({
   __esModule: true,
-  default: { findAll: (...args: any[]) => findAll(...args), update: jest.fn() }
+  default: { findAll: (...args: any[]) => findAll(...args), update: (...args: any[]) => update(...args) }
 }));
 
 // eslint-disable-next-line import/first
@@ -18,31 +21,42 @@ const ticket: any = {
   companyId: 1,
   status: "open",
   isGroup: false,
-  contact: { number: "5511999999999", lid: null, isGroup: false },
+  contact: { number: "5511999999999", lid: "140716097450191@lid", isGroup: false },
   update: jest.fn()
 };
 
-const raw = { key: { id: "WA1", fromMe: false, remoteJid: "5511999999999@s.whatsapp.net" }, messageTimestamp: 1700000000 };
+const raw = { key: { id: "WA1", fromMe: false, remoteJid: "140716097450191@lid" }, messageTimestamp: 1700000000 };
 
 beforeEach(() => {
-  chatModify.mockClear();
+  readMessages.mockReset();
   findAll.mockReset();
+  update.mockClear();
 });
 
 describe("SetTicketMessagesAsRead", () => {
-  it("marks the chat read with the last received message", async () => {
-    findAll.mockResolvedValue([{ dataJson: null }, { dataJson: JSON.stringify(raw), messagesWhatsappsId: "WA1" }]);
+  it("sends read receipts for the unread received messages", async () => {
+    findAll.mockResolvedValue([
+      { messagesWhatsappsId: "WA1", fromMe: false, dataJson: JSON.stringify(raw) },
+      { messagesWhatsappsId: null, fromMe: false, dataJson: null }
+    ]);
     await SetTicketMessagesAsRead(ticket);
-    expect(chatModify).toHaveBeenCalledWith(
-      { markRead: true, lastMessages: [raw] },
-      "5511999999999@s.whatsapp.net"
-    );
+    expect(readMessages).toHaveBeenCalledWith([
+      { remoteJid: "140716097450191@lid", id: "WA1", participant: undefined, fromMe: false }
+    ]);
+    expect(update).toHaveBeenCalledWith({ read: true }, { where: { ticketId: 1, read: false } });
   });
 
-  it("does nothing on WhatsApp when there is no raw message", async () => {
-    findAll.mockResolvedValue([{ dataJson: null }]);
+  it("marks messages read in the system even when WhatsApp fails", async () => {
+    findAll.mockResolvedValue([{ messagesWhatsappsId: "WA1", fromMe: false, dataJson: JSON.stringify(raw) }]);
+    readMessages.mockRejectedValue(new Error("App state key not present!"));
     await SetTicketMessagesAsRead(ticket);
-    expect(chatModify).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalled();
     expect(ticket.update).toHaveBeenCalledWith({ unreadMessages: 0 });
+  });
+
+  it("does nothing on WhatsApp when nothing is unread", async () => {
+    findAll.mockResolvedValue([]);
+    await SetTicketMessagesAsRead(ticket);
+    expect(readMessages).not.toHaveBeenCalled();
   });
 });

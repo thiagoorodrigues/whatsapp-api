@@ -66,8 +66,8 @@ export interface MessagingChannel {
   isReady(): boolean;
   send(to: ChatAddress, content: OutgoingContent, options?: SendOptions): Promise<SentMessage>;
   deleteMessage(chat: ChatAddress, message: MessageRef): Promise<void>;
-  /** Marks the chat read up to `lastMessage` (a received message). */
-  markRead(chat: ChatAddress, lastMessage: MessageRef): Promise<void>;
+  /** Sends read receipts for received messages (the sender sees them read). */
+  markRead(chat: ChatAddress, messages: MessageRef[]): Promise<void>;
   setPresence(presence: Presence): Promise<void>;
   checkNumber(number: string): Promise<NumberCheck>;
   profilePictureUrl(chat: ChatAddress): Promise<string | null>;

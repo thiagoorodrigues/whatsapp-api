@@ -20,6 +20,7 @@ beforeEach(() => {
     user: { id: "5511888888888:3@s.whatsapp.net" },
     sendMessage: jest.fn().mockResolvedValue(sent),
     chatModify: jest.fn(),
+    readMessages: jest.fn(),
     sendPresenceUpdate: jest.fn(),
     onWhatsApp: jest.fn(),
     profilePictureUrl: jest.fn(),
@@ -121,11 +122,22 @@ describe("BaileysChannel", () => {
     });
   });
 
-  it("marks read only with a received message", async () => {
+  it("sends read receipts for received messages only", async () => {
     const channel = new BaileysChannel(7);
-    const own = { key: { id: "1", fromMe: true } };
-    await channel.markRead({ number: "5511999999999" }, { externalId: "1", raw: JSON.stringify(own) });
+    const raw = { key: { id: "WA1", fromMe: false, remoteJid: "123@lid" } };
+    await channel.markRead({ number: "5511999999999" }, [
+      { externalId: "WA1", raw: JSON.stringify(raw) },
+      { externalId: "WA2", chatJid: "5511999999999@s.whatsapp.net", fromMe: false },
+      { externalId: "WA3", fromMe: true }
+    ]);
+    expect(socket.readMessages).toHaveBeenCalledWith([
+      { remoteJid: "123@lid", id: "WA1", participant: undefined, fromMe: false },
+      { remoteJid: "5511999999999@s.whatsapp.net", id: "WA2", participant: undefined, fromMe: false }
+    ]);
     expect(socket.chatModify).not.toHaveBeenCalled();
+    socket.readMessages.mockClear();
+    await channel.markRead({ number: "1" }, []);
+    expect(socket.readMessages).not.toHaveBeenCalled();
   });
 
   it("checks numbers and presence with the account's own id", async () => {
