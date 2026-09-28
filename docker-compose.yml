@@ -1,7 +1,10 @@
 # docker-compose.yml
 services:
   postgres:
-    image: postgres:18-alpine
+    # Postgres 18 with the pgvector extension (knowledge base of the AI
+    # agents). Debian-based: its locale sorting differs from the old Alpine
+    # image, so data was moved with pg_dump/pg_restore into a new volume.
+    image: pgvector/pgvector:pg18
     environment:
       POSTGRES_DB: sweasy
       POSTGRES_PASSWORD: sweasy
@@ -10,7 +13,7 @@ services:
       - 5435:5432
     restart: on-failure:3
     volumes:
-      - postgres-data:/var/lib/postgresql
+      - postgres-pgvector-data:/var/lib/postgresql
   pgweb:
     image: sosedoff/pgweb
     depends_on:
@@ -43,7 +46,9 @@ services:
     depends_on:
       - redis
 volumes:
+  # Old Alpine volume, kept for rollback.
   postgres-data:
+  postgres-pgvector-data:
   redis:
   redis-config:
 networks:
