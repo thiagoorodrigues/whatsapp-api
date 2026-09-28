@@ -12,7 +12,6 @@ import Setting from "../../models/Setting";
 import Ticket from "../../models/Ticket";
 import Whatsapp from "../../models/Whatsapp";
 import { logger } from "../../utils/logger";
-import createOrUpdateBaileysService from "../BaileysServices/CreateOrUpdateBaileysService";
 import CreateMessageService from "../MessageServices/CreateMessageService";
 import SendTicketMessageService from "../MessageServices/SendTicketMessageService";
 import { getChannel } from "../../channels";
@@ -109,13 +108,6 @@ const wbotMonitor = async (
       }
     });
 
-    wbot.ev.on("contacts.upsert", async (contacts: BContact[]) => {
-
-      await createOrUpdateBaileysService({
-        whatsappId: whatsapp.id,
-        contacts,
-      });
-    });
 
   } catch (err) {
     Sentry.captureException(err);

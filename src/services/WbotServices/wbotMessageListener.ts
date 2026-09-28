@@ -26,6 +26,7 @@ import {
 import ProcessInboundMessage from "../InboundServices/ProcessInboundMessage";
 import UpdateMessageAckService from "../MessageServices/UpdateMessageAckService";
 import ShowWhatsAppService from "../WhatsappService/ShowWhatsAppService";
+import UpsertWhatsappContactsService, { SyncedContact } from "../WhatsappContactServices/UpsertWhatsappContactsService";
 
 // WhatsApp Web (Baileys) events of a connection. Messages are turned into the
 // channel-neutral InboundMessage (channels/baileys/toInbound) and handled by
@@ -82,6 +83,19 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
       }
     });
 
+    // Contacts WhatsApp sends (address book and profile names): kept per
+    // connection to show names in group mentions and for "Importar contatos".
+    const saveSyncedContacts = async (contacts: SyncedContact[] | undefined) => {
+      if (!contacts?.length) return;
+      try {
+        await UpsertWhatsappContactsService({ whatsappId: wbot.id, companyId, contacts });
+      } catch (err) {
+        logger.warn(`Could not save WhatsApp contacts: ${err}`);
+      }
+    };
+    wbot.ev.on("contacts.upsert", contacts => saveSyncedContacts(contacts as SyncedContact[]));
+    wbot.ev.on("contacts.update", contacts => saveSyncedContacts(contacts.filter(c => c.id) as SyncedContact[]));
+
     // Group name, description or members changed: fetch them again.
     wbot.ev.on("groups.update", updates => updates.forEach(update => update.id && forgetGroup(wbot.id, update.id)));
     wbot.ev.on("group-participants.update", ({ id }) => forgetGroup(wbot.id, id));
@@ -123,6 +137,7 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
     });
 
     wbot.ev.on('messaging-history.set', async ({ chats, contacts, messages, isLatest }) => {
+      await saveSyncedContacts(contacts as SyncedContact[]);
       logger.info("Chamado para serviço de importação de messages;");
 
       const whatsapp = await ShowWhatsAppService(wbot.id!, companyId);
