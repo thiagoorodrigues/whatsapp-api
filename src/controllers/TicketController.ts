@@ -12,6 +12,7 @@ import UpdateTicketService from "../services/TicketServices/UpdateTicketService"
 import ListTicketsServiceKanban from "../services/TicketServices/ListTicketsServiceKanban";
 import ListTicketsRelatorioService from "../services/TicketServices/ListTicketsRelatorioService";
 import { logger } from "../utils/logger";
+import ListGroupParticipantsService from "../services/TicketServices/ListGroupParticipantsService";
 
 type IndexQuery = {
   searchParam: string;
@@ -190,6 +191,14 @@ export const show = async (req: Request, res: Response): Promise<Response> => {
 
   const contact = await ShowTicketService(ticketId, companyId);
   return res.status(200).json(contact);
+};
+
+export const participants = async (req: Request, res: Response): Promise<Response> => {
+  const { ticketId } = req.params;
+  const { companyId } = req.user;
+
+  const ticket = await ShowTicketService(ticketId, companyId);
+  return res.status(200).json(await ListGroupParticipantsService(ticket));
 };
 
 export const showFromUUID = async (
