@@ -49,6 +49,7 @@ import { campaignQueue, parseToMilliseconds, randomValue } from "../../queues";
 import User from "../../models/User";
 import Setting from "../../models/Setting";
 import { cacheLayer } from "../../libs/cache";
+import { forgetGroup, getGroupMetadata, getProfilePictureUrl } from "../../libs/whatsappCache";
 import { provider } from "./providers";
 import { debounce } from "../../helpers/Debounce";
 import ffmpeg from "fluent-ffmpeg";
@@ -512,12 +513,15 @@ const getContactMessage = async (
   );
   const rawNumber = phoneJid.replace(/\D/g, "");
   const lid = isLidJid(msg.key.remoteJid) ? msg.key.remoteJid : undefined;
-  return isGroup
-    ? {
-      id: getSenderMessage(msg, wbot),
-      name: msg.pushName
-    }
-    : {
+  if (isGroup) {
+    // The sender (participant) usually arrives as a LID; use the phone when
+    // WhatsApp sends it or we saw that LID before.
+    let sender = getSenderMessage(msg, wbot);
+    const participantLid = isLidJid(msg.key.participant) ? toUserLid(msg.key.participant) : undefined;
+    if (isLidJid(sender)) sender = (await lookupPhoneJidByLid(toUserLid(sender), companyId)) || sender;
+    return { id: sender, name: msg.pushName, lid: participantLid };
+  }
+  return {
       id: phoneJid,
       name: msg.key.fromMe ? rawNumber : msg.pushName,
       lid
@@ -566,14 +570,7 @@ const downloadMedia = async (msg: proto.IWebMessageInfo) => {
 }
 
 const verifyContact = async (msgContact: IMe, wbot: Session, companyId: number): Promise<Contact> => {
-  let profilePicUrl: string;
-
-  try {
-    profilePicUrl = await wbot.profilePictureUrl(msgContact.id);
-  } catch (e) {
-    Sentry.captureException(e);
-    profilePicUrl = `${process.env.FRONTEND_URL}/nopicture.png`;
-  }
+  const profilePicUrl = await getProfilePictureUrl(wbot, msgContact.id);
 
   const contactData = {
     name: msgContact?.name || msgContact.id.replace(/\D/g, ""),
@@ -582,8 +579,9 @@ const verifyContact = async (msgContact: IMe, wbot: Session, companyId: number):
     isGroup: msgContact.id.includes("g.us"),
     companyId,
     whatsappId: wbot.id,
-    // Only remember the LID once it is tied to a real phone number.
-    lid: msgContact.lid && !isLidJid(msgContact.id) ? msgContact.lid : undefined
+    // A LID is remembered once tied to a phone number; a group member known
+    // only by LID keeps it as its address.
+    lid: isLidJid(msgContact.id) ? toUserLid(msgContact.id) : msgContact.lid || undefined
   };
 
   const contact = CreateOrUpdateContactService(contactData);
@@ -988,14 +986,11 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
 
     const isGroup = msg.key.remoteJid?.endsWith("@g.us");
 
-    if(isGroup) return;
-
-    const msgIsGroupBlock = await Setting.findOne({
-      where: {
-        companyId,
-        key: "CheckMsgIsGroup",
-      },
-    });
+    // "Ignorar mensagens de grupos" (Configurações > Opções).
+    if (isGroup) {
+      const msgIsGroupBlock = await Setting.findOne({ where: { companyId, key: "CheckMsgIsGroup" } });
+      if (msgIsGroupBlock?.value === "enabled") return;
+    }
 
     const bodyMessage = getBodyMessage(msg);
     const msgType = getTypeMessage(msg);
@@ -1016,10 +1011,8 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
       msgContact = await getContactMessage(msg, wbot, companyId);
     }
 
-    if (msgIsGroupBlock?.value === "enabled" && isGroup) return;
-
     if (isGroup) {
-      const grupoMeta = await wbot.groupMetadata(msg.key.remoteJid);
+      const grupoMeta = await getGroupMetadata(wbot, msg.key.remoteJid);
       const msgGroupContact = {
         id: grupoMeta.id,
         name: grupoMeta.subject
@@ -1028,19 +1021,25 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
     }
 
     const whatsapp = await ShowWhatsAppService(wbot.id!, companyId);
-    const contact = await verifyContact(msgContact, wbot, companyId);
+    // Our own messages in a group belong to the group, not to a contact
+    // with our own number.
+    const contact = isGroup && msg.key.fromMe && groupContact
+      ? groupContact
+      : await verifyContact(msgContact, wbot, companyId);
+    // Unread counters are per conversation (the group, for group members).
+    const chatContact = groupContact || contact;
 
     let unreadMessages = 0;
 
     if (msg.key.fromMe) {
-      await cacheLayer.set(`contacts:${contact.id}:unreads`, "0");
+      await cacheLayer.set(`contacts:${chatContact.id}:unreads`, "0");
       (wbot as WASocket)!.readMessages([msg.key])
       handleMsgAck(msg as WAMessage, 2);
     } else {
-      const unreads = await cacheLayer.get(`contacts:${contact.id}:unreads`);
+      const unreads = await cacheLayer.get(`contacts:${chatContact.id}:unreads`);
       unreadMessages = +unreads + 1;
       await cacheLayer.set(
-        `contacts:${contact.id}:unreads`,
+        `contacts:${chatContact.id}:unreads`,
         `${unreadMessages}`
       );
     }
@@ -1070,7 +1069,7 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
       groupContact
     );
 
-    await provider(ticket, msg, companyId, contact, wbot as WASocket);
+    if (!isGroup) await provider(ticket, msg, companyId, contact, wbot as WASocket);
 
 
     const ticketTraking = await FindOrCreateATicketTrakingService({
@@ -1107,7 +1106,7 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
         //  }
         //  // dev Ricardo
 
-        if (ticketTraking !== null && verifyRating(ticketTraking) && !isNaN(parseFloat(bodyMessage))) {
+        if (!isGroup && ticketTraking !== null && verifyRating(ticketTraking) && !isNaN(parseFloat(bodyMessage))) {
 
           handleRating(parseFloat(bodyMessage), ticket, ticketTraking);
           return;
@@ -1142,7 +1141,7 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
 
 
     try {
-      if (!msg.key.fromMe && scheduleType) {
+      if (!msg.key.fromMe && !isGroup && scheduleType) {
         /**
          * Tratamento para envio de mensagem quando a empresa está fora do expediente
          */
@@ -1230,7 +1229,7 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
 
     try {
       if (!msg.key.fromMe) {
-        if (ticketTraking !== null && verifyRating(ticketTraking) && !isNaN(parseFloat(bodyMessage))) {
+        if (!isGroup && ticketTraking !== null && verifyRating(ticketTraking) && !isNaN(parseFloat(bodyMessage))) {
 
           handleRating(parseFloat(bodyMessage), ticket, ticketTraking);
           return;
@@ -1321,7 +1320,7 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
 
     try {
       //Fluxo fora do expediente
-      if (!msg.key.fromMe && scheduleType && ticket.queueId !== null) {
+      if (!msg.key.fromMe && !isGroup && scheduleType && ticket.queueId !== null) {
         /**
          * Tratamento para envio de mensagem quando a fila está fora do expediente
          */
@@ -1590,6 +1589,10 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
       }
     });
 
+    // Group name, description or members changed: fetch them again.
+    wbot.ev.on("groups.update", updates => updates.forEach(update => update.id && forgetGroup(wbot.id, update.id)));
+    wbot.ev.on("group-participants.update", ({ id }) => forgetGroup(wbot.id, id));
+
     wbot.ev.on("messages.update", (messageUpdate: WAMessageUpdate[]) => {
       if (messageUpdate.length === 0) return;
       messageUpdate.forEach(async (message: WAMessageUpdate) => {
@@ -1611,19 +1614,13 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
             const ticket = await Ticket.findOne({ where: { id: msg.ticketId, companyId: companyId } });
 
             if (ticket && ticket.isGroup) {
-              let status = 1;
-
-              if (Number(msg.ack) === 1) {
-                status = 2;
-              } else if (Number(msg.ack) === 2) {
-                status = 3;
-              } else if (Number(msg.ack) === 3) {
-                status = 4;
-              } else if (Number(msg.ack) >= 4) {
-                status = 5;
-              }
-
-              handleMsgAck(message, status);
+              // One receipt per member: delivered (3) once someone got it,
+              // read (4) once someone read it, played (5) for voice notes.
+              // Never goes back.
+              const { receipt } = message;
+              const reached = receipt.playedTimestamp ? 5 : receipt.readTimestamp ? 4 : receipt.receiptTimestamp ? 3 : 2;
+              const status = Math.max(Number(msg.ack) || 0, reached);
+              if (status !== Number(msg.ack)) handleMsgAck(message, status);
             }
           }
         });

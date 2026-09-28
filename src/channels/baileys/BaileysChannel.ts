@@ -84,9 +84,11 @@ class BaileysChannel implements MessagingChannel {
     }
   }
 
-  // Group ids stored without the "-" of older WhatsApp group ids are matched
-  // against the groups the account is in.
+  // Group ids stored without the "-" of older WhatsApp group ids
+  // ("<phone>-<time>@g.us") are matched against the groups the account is
+  // in. Current ids ("120363...@g.us") have no dash and go out as stored.
   private async groupJid(jid: string): Promise<string> {
+    if (jid.includes("-") || /^120363\d+@g\.us$/.test(jid)) return jid;
     const groups = Object.keys(await this.socket().groupFetchAllParticipating());
     let found = jid;
     groups.forEach(item => {

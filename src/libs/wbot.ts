@@ -26,6 +26,7 @@ import { getIO } from "./socket";
 import { StartWhatsAppSession } from "../services/WbotServices/StartWhatsAppSession";
 import DeleteBaileysService from "../services/BaileysServices/DeleteBaileysService";
 import NodeCache from 'node-cache';
+import { cachedGroupMetadata } from "./whatsappCache";
 import CheckSettings from "../helpers/CheckSettings";
 
 const loggerBaileys = MAIN_LOGGER.child({});
@@ -115,6 +116,7 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
           generateHighQualityLinkPreview: true,
           shouldIgnoreJid: jid => isJidBroadcast(jid),
           markOnlineOnConnect: exibeStatusOnline == "1" ? true : false,
+          cachedGroupMetadata: cachedGroupMetadata(id),
           getMessage
         });
 

@@ -24,7 +24,7 @@ beforeEach(() => {
     sendPresenceUpdate: jest.fn(),
     onWhatsApp: jest.fn(),
     profilePictureUrl: jest.fn(),
-    groupFetchAllParticipating: jest.fn().mockResolvedValue({ "120363-111@g.us": {}, "120363222@g.us": {} })
+    groupFetchAllParticipating: jest.fn().mockResolvedValue({ "5511999999999-1611111111@g.us": {}, "120363222@g.us": {} })
   };
 });
 
@@ -104,9 +104,15 @@ describe("BaileysChannel", () => {
     expect(newMessageId()).not.toBe(newMessageId());
   });
 
-  it("resolves group ids stored without the dash", async () => {
-    await new BaileysChannel(7).send({ number: "120363111", isGroup: true }, { type: "text", text: "oi" });
-    expect(socket.sendMessage.mock.calls[0][0]).toBe("120363-111@g.us");
+  it("sends to current group ids as stored", async () => {
+    await new BaileysChannel(7).send({ number: "120363222", isGroup: true }, { type: "text", text: "oi" });
+    expect(socket.sendMessage.mock.calls[0][0]).toBe("120363222@g.us");
+    expect(socket.groupFetchAllParticipating).not.toHaveBeenCalled();
+  });
+
+  it("resolves old group ids stored without the dash", async () => {
+    await new BaileysChannel(7).send({ number: "55119999999991611111111", isGroup: true }, { type: "text", text: "oi" });
+    expect(socket.sendMessage.mock.calls[0][0]).toBe("5511999999999-1611111111@g.us");
     await expect(
       new BaileysChannel(7).send({ number: "999", isGroup: true }, { type: "text", text: "oi" })
     ).rejects.toThrow("Group not found");

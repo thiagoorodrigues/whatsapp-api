@@ -113,7 +113,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
         companyId
       );
 
-      if (setting?.value === "enabled") {
+      if (setting?.value === "enabled" && !ticket.isGroup) {
         
         if (ticketTraking.ratingAt == null) {
           const ratingTxt = ratingMessage || "";
@@ -229,7 +229,8 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
       })
     }
 
-    if (settingsTransfTicket?.value === "enabled") {
+    // Transfer notices are for the customer of a 1:1 chat, not for groups.
+    if (settingsTransfTicket?.value === "enabled" && !ticket.isGroup) {
       // Mensagem de transferencia da FILA
 
       if (oldQueueId !== queueId && oldUserId === userId && !isNil(oldQueueId) && !isNil(queueId)) {
