@@ -78,6 +78,7 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
         const userLid = toUserLid(lid);
         if (!userLid || !number) return;
         await Contact.update({ lid: userLid }, { where: { number, companyId } });
+        await saveSyncedContacts([{ id: `${number}@s.whatsapp.net`, lid: userLid }]);
       } catch (err) {
         logger.warn(`lid-mapping.update failed for ${lid}: ${err}`);
       }
