@@ -8,7 +8,7 @@ jest.mock("../../../models/Whatsapp", () => ({ __esModule: true, default: { find
 jest.mock("../../../models/Message", () => ({}));
 
 // eslint-disable-next-line import/first
-import ResolveMentionsService from "../ResolveMentionsService";
+import ResolveMentionsService, { resolveMentionNames } from "../ResolveMentionsService";
 
 const msg = (mentioned: string[]): any => ({
   dataJson: JSON.stringify({
@@ -109,5 +109,14 @@ describe("ResolveMentionsService", () => {
     const m = msg(["1@lid"]);
     await expect(ResolveMentionsService([m], 1)).resolves.toBeUndefined();
     expect(m.mentions).toEqual([{ token: "1", name: null, phone: null }]);
+  });
+});
+
+describe("resolveMentionNames", () => {
+  it("names a list of jids without messages", async () => {
+    findContacts.mockResolvedValue([{ name: "Maria", number: "5511999999999", lid: null }]);
+    const names = await resolveMentionNames(["5511999999999@s.whatsapp.net", "7@lid"], 1);
+    expect(names.get("5511999999999@s.whatsapp.net")).toEqual({ token: "5511999999999", name: "Maria", phone: "5511999999999" });
+    expect(names.get("7@lid")).toEqual({ token: "7", name: null, phone: null });
   });
 });

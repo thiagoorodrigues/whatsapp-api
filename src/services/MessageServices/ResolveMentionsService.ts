@@ -31,16 +31,9 @@ const jidsOf = (message: WithMentions): string[] => {
 const realName = (name: string | null | undefined, ...numbers: (string | null | undefined)[]): string | null =>
   name && !numbers.includes(name) ? name : null;
 
-/**
- * Fills message.mentions with the name of each person mentioned: platform
- * contact, then the names WhatsApp sent (address book, verified, profile),
- * then the connected account itself. Three queries at most for the page.
- */
-const ResolveMentionsService = async (page: WithMentions[], companyId: number): Promise<void> => {
-  // Quoted messages are shown too (the quote above a reply).
-  const messages = page.flatMap(m => (m.quotedMsg ? [m, m.quotedMsg] : [m]));
-  const perMessage = messages.map(jidsOf);
-  const all = [...new Set(perMessage.flat())];
+/** Name of each jid (platform contact, WhatsApp names, own account, phone). */
+export const resolveMentionNames = async (jids: string[], companyId: number): Promise<Map<string, MentionView>> => {
+  const all = [...new Set(jids)];
 
   const lids = all.filter(isLidJid);
   const phones = all.filter(jid => !isLidJid(jid)).map(mentionToken);
@@ -103,8 +96,20 @@ const ResolveMentionsService = async (page: WithMentions[], companyId: number): 
     return { token, name, phone };
   };
 
+  return new Map(all.map(jid => [jid, resolve(jid)]));
+};
+
+/**
+ * Fills message.mentions with the name of each person mentioned (see
+ * resolveMentionNames). Three queries at most for the page.
+ */
+const ResolveMentionsService = async (page: WithMentions[], companyId: number): Promise<void> => {
+  // Quoted messages are shown too (the quote above a reply).
+  const messages = page.flatMap(m => (m.quotedMsg ? [m, m.quotedMsg] : [m]));
+  const perMessage = messages.map(jidsOf);
+  const names = await resolveMentionNames(perMessage.flat(), companyId);
   messages.forEach((message, i) => {
-    message.mentions = perMessage[i].map(resolve);
+    message.mentions = perMessage[i].map(jid => names.get(jid) as MentionView);
   });
 };
 
