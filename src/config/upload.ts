@@ -4,6 +4,13 @@ import fs from "fs";
 
 const publicFolder = path.resolve(__dirname, "..", "..", "public");
 
+// Files sent by agents: kept in memory, then saved in the company folder
+// when the message goes out (helpers/mediaStorage).
+export const memoryUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 4 * 1024 * 1024 }
+});
+
 export default {
   directory: publicFolder,
   storage: multer.diskStorage({

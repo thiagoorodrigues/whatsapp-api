@@ -12,6 +12,7 @@ import {
 
 import Company from "./Company";
 import User from "./User";
+import { publicFileUrl } from "../helpers/mediaStorage";
 
 @Table
 class QuickMessage extends Model<QuickMessage> {
@@ -50,7 +51,7 @@ class QuickMessage extends Model<QuickMessage> {
   get mediaPath(): string | null {
     if (this.getDataValue("mediaPath")) {
       
-      return `${process.env.BACKEND_URL}${process.env.PROXY_PORT ?`:${process.env.PROXY_PORT}`:""}/public/quickMessage/${this.getDataValue("mediaPath")}`;
+      return publicFileUrl(`quickMessage/${this.getDataValue("mediaPath")}`);
 
     }
     return null;

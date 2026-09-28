@@ -15,6 +15,7 @@ import Ticket from "./Ticket";
 import Company from "./Company";
 import Queue from "./Queue";
 import { generateAccessLink } from "../config/uploadAws";
+import { publicFileUrl } from "../helpers/mediaStorage";
 import Whatsapp from "./Whatsapp";
 
 @Table
@@ -49,10 +50,12 @@ class Message extends Model<Message> {
 
   @Column(DataType.STRING)
   get mediaUrl(): string | null {
+    // Files saved on the server (public/company{id}/); isAws marks older
+    // messages whose media is still in S3.
     if (this.getDataValue("mediaUrl") && this.getDataValue('isAws')) {
       return generateAccessLink(this.getDataValue("mediaUrl"));
     }else if(this.getDataValue("mediaUrl") && !this.getDataValue('isAws')){
-      return `${process.env.BACKEND_URL}${process.env.PROXY_PORT ?`:${process.env.PROXY_PORT}`:""}/public/${this.getDataValue("mediaUrl")}`;
+      return publicFileUrl(this.getDataValue("mediaUrl"));
     }
     return null;
   }

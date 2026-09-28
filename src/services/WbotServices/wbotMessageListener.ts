@@ -55,7 +55,7 @@ import ffmpeg from "fluent-ffmpeg";
 import typebotListener from "../TypebotServices/typebotListener";
 import QueueIntegrations from "../../models/QueueIntegrations";
 import ShowQueueIntegrationService from "../QueueIntegrationServices/ShowQueueIntegrationService";
-import { uploadToS3 } from "../../config/uploadAws";
+import { saveCompanyMedia } from "../../helpers/mediaStorage";
 import Whatsapp from "../../models/Whatsapp";
 import GetMessageService from "../MessageServices/GetMessagesService";
 import { MessageUserReceipt } from "@whiskeysockets/baileys";
@@ -624,8 +624,9 @@ const verifyMediaMessage = async (
     media.filename = `${new Date().getTime()}.${ext}`;
   }
 
+  let mediaPath = media.filename;
   try {
-    await uploadToS3(media.data, media.filename);
+    mediaPath = await saveCompanyMedia(ticket.companyId, media.data, media.filename, media.mimetype);
 
     /*await writeFileAsync(
       join(__dirname, "..", "..", "..", "public", media.filename),
@@ -648,14 +649,14 @@ const verifyMediaMessage = async (
     body: body ? formatBody(body, ticket.contact) : media.filename,
     fromMe: msg.key.fromMe,
     read: msg.key.fromMe,
-    mediaUrl: media.filename,
+    mediaUrl: mediaPath,
     mediaType: media.mimetype.split("/")[0],
     quotedMsgId: quotedMsg?.id,
     ack: msg.status,
     remoteJid: msg.key.remoteJid,
     participant: msg.key.participant,
     dataJson: JSON.stringify(msg),
-    isAws: true,
+    isAws: false,
     createdAt: timeConverter(Number(msg.messageTimestamp))
   };
 

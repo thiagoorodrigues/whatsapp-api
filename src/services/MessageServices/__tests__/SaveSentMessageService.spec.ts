@@ -3,7 +3,7 @@ const upload = jest.fn();
 const cacheSet = jest.fn();
 
 jest.mock("../CreateMessageService", () => ({ __esModule: true, default: (args: any) => create(args) }));
-jest.mock("../../../config/uploadAws", () => ({ uploadToS3: (...args: any[]) => upload(...args) }));
+jest.mock("../../../helpers/mediaStorage", () => ({ saveCompanyMedia: (...args: any[]) => upload(...args) }));
 jest.mock("../../../libs/cache", () => ({ cacheLayer: { set: (...args: any[]) => cacheSet(...args) } }));
 jest.mock("../../../channels", () => ({}));
 jest.mock("../../../models/Message", () => ({}));
@@ -43,26 +43,33 @@ describe("SaveSentMessageService", () => {
     expect(cacheSet).toHaveBeenCalledWith("contacts:9:unreads", "0");
   });
 
-  it("stores sent media in S3", async () => {
+  it("stores sent media in the company folder", async () => {
+    upload.mockResolvedValue("company1/123_ab_boleto_maio.pdf");
     const saved: any = await SaveSentMessageService({
       ticket,
       sent,
       media: { buffer: Buffer.from("x"), mimetype: "application/pdf", fileName: "boleto maio.pdf" }
     });
-    expect(upload).toHaveBeenCalledWith(expect.any(Buffer), saved.mediaUrl);
-    expect(saved.mediaUrl).toMatch(/^\d+_boleto_maio\.pdf$/);
-    expect(saved).toEqual(expect.objectContaining({ mediaType: "application", isAws: true, body: saved.mediaUrl }));
+    expect(upload).toHaveBeenCalledWith(1, expect.any(Buffer), "boleto maio.pdf", "application/pdf");
+    expect(saved).toEqual(
+      expect.objectContaining({
+        mediaUrl: "company1/123_ab_boleto_maio.pdf",
+        mediaType: "application",
+        isAws: false,
+        body: "boleto maio.pdf"
+      })
+    );
   });
 
   it("still saves the message when the upload fails", async () => {
-    upload.mockRejectedValue(new Error("s3 down"));
+    upload.mockRejectedValue(new Error("disk full"));
     const saved: any = await SaveSentMessageService({
       ticket,
       sent,
       body: "foto",
       media: { buffer: Buffer.from("x"), mimetype: "image/jpeg" }
     });
-    expect(saved.mediaUrl).toMatch(/^\d+\.jpeg$/);
+    expect(saved.mediaUrl).toBeUndefined();
     expect(saved.body).toBe("foto");
   });
 });
