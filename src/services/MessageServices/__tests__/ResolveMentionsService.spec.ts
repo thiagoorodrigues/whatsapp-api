@@ -52,6 +52,16 @@ describe("ResolveMentionsService", () => {
     expect(m.mentions).toEqual([{ token: "9", name: "Ana Agenda", phone: "5531900000000" }]);
   });
 
+  it("merges every WhatsApp row of a LID mention (address book row wins over the thin LID row)", async () => {
+    findSynced.mockResolvedValue([
+      { jid: "9@lid", lid: "9@lid", number: null, name: null, verifiedName: null, notify: "Aninha" },
+      { jid: "5531900000000@s.whatsapp.net", lid: "9@lid", number: "5531900000000", name: "Ana Agenda", verifiedName: null, notify: null }
+    ]);
+    const m = msg(["9@lid"]);
+    await ResolveMentionsService([m], 1);
+    expect(m.mentions).toEqual([{ token: "9", name: "Ana Agenda", phone: "5531900000000" }]);
+  });
+
   it("names the connected account itself", async () => {
     findConnections.mockResolvedValue([{ name: "Loja", number: "5511888888888" }]);
     const m = msg(["5511888888888@s.whatsapp.net"]);

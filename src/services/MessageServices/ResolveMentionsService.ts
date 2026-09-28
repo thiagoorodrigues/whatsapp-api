@@ -75,23 +75,26 @@ const ResolveMentionsService = async (messages: WithMentions[], companyId: numbe
     const contact =
       contacts.find(c => lid && c.lid === lid) ||
       contacts.find(c => c.number === token);
-    const wa =
-      synced.find(s => s.jid === jid) ||
-      synced.find(s => lid && s.lid === lid) ||
-      synced.find(s => !lid && s.number === token);
+    // WhatsApp may keep one row per address (LID row with only the profile
+    // name, phone row with the address book name): take each field from
+    // the first row that has it.
+    const rows = synced.filter(
+      s => s.jid === jid || (lid && s.lid === lid) || (!lid && s.number === token)
+    );
+    const field = (key: "name" | "verifiedName" | "notify" | "number"): string | null =>
+      rows.map(row => row[key]).find(Boolean) || null;
 
     const phone =
       (!lid ? token : null) ||
       (contact && contact.number !== token ? contact.number : null) ||
-      wa?.number ||
-      null;
+      field("number");
     const own = phone ? connections.find(w => w.number === phone) : undefined;
 
     const name =
       realName(contact?.name, contact?.number, token) ||
-      wa?.name ||
-      wa?.verifiedName ||
-      wa?.notify ||
+      field("name") ||
+      field("verifiedName") ||
+      field("notify") ||
       own?.name ||
       null;
 
