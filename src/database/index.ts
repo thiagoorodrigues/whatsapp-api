@@ -38,6 +38,7 @@ import AiMcpConnection from "../models/AiMcpConnection";
 import AiOAuthClient from "../models/AiOAuthClient";
 import AiKnowledgeDocument from "../models/AiKnowledgeDocument";
 import AiKnowledgeChunk from "../models/AiKnowledgeChunk";
+import WhatsappContact from "../models/WhatsappContact";
 
 // eslint-disable-next-line
 const dbConfig = require("../config/database");
@@ -85,6 +86,7 @@ const models = [
   AiOAuthClient,
   AiKnowledgeDocument,
   AiKnowledgeChunk,
+  WhatsappContact
 ];
 
 sequelize.addModels(models);
