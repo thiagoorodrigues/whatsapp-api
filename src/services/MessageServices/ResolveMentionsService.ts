@@ -15,7 +15,7 @@ export interface MentionView {
   phone: string | null;
 }
 
-type WithMentions = Pick<Message, "dataJson"> & { mentions?: MentionView[] };
+type WithMentions = Pick<Message, "dataJson"> & { mentions?: MentionView[]; quotedMsg?: WithMentions | null };
 
 const jidsOf = (message: WithMentions): string[] => {
   if (!message.dataJson) return [];
@@ -36,7 +36,9 @@ const realName = (name: string | null | undefined, ...numbers: (string | null | 
  * contact, then the names WhatsApp sent (address book, verified, profile),
  * then the connected account itself. Three queries at most for the page.
  */
-const ResolveMentionsService = async (messages: WithMentions[], companyId: number): Promise<void> => {
+const ResolveMentionsService = async (page: WithMentions[], companyId: number): Promise<void> => {
+  // Quoted messages are shown too (the quote above a reply).
+  const messages = page.flatMap(m => (m.quotedMsg ? [m, m.quotedMsg] : [m]));
   const perMessage = messages.map(jidsOf);
   const all = [...new Set(perMessage.flat())];
 

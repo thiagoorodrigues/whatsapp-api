@@ -62,6 +62,16 @@ describe("ResolveMentionsService", () => {
     expect(m.mentions).toEqual([{ token: "9", name: "Ana Agenda", phone: "5531900000000" }]);
   });
 
+  it("also names the mentions of the quoted message, in the same queries", async () => {
+    findContacts.mockResolvedValue([{ name: "Maria", number: "5511999999999", lid: null }]);
+    const quoted = msg(["5511999999999@s.whatsapp.net"]);
+    const m: any = { ...msg([]), quotedMsg: quoted };
+    await ResolveMentionsService([m], 1);
+    expect(m.mentions).toEqual([]);
+    expect(quoted.mentions).toEqual([{ token: "5511999999999", name: "Maria", phone: "5511999999999" }]);
+    expect(findContacts).toHaveBeenCalledTimes(1);
+  });
+
   it("names the connected account itself", async () => {
     findConnections.mockResolvedValue([{ name: "Loja", number: "5511888888888" }]);
     const m = msg(["5511888888888@s.whatsapp.net"]);

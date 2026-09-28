@@ -3,6 +3,7 @@ import Message from "../../models/Message";
 import Ticket from "../../models/Ticket";
 import Whatsapp from "../../models/Whatsapp";
 import ResolveMentionsService from "./ResolveMentionsService";
+import { previewWithMentions } from "../../helpers/mentions";
 
 interface MessageData {
     id: string;
@@ -61,6 +62,8 @@ const UpdateMessageService = async ({ messageData, companyId }: Request): Promis
         await message.ticket.update({
             lastMessage: messageData.body
         });
+        const preview = previewWithMentions(message.ticket.lastMessage, messageData.body, message.mentions);
+        if (preview) await message.ticket.update({ lastMessage: preview });
 
         const io = getIO();
         io.to(message.ticketId.toString())

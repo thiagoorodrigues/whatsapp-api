@@ -3,6 +3,7 @@ import Message from "../../models/Message";
 import Ticket from "../../models/Ticket";
 import Whatsapp from "../../models/Whatsapp";
 import ResolveMentionsService from "./ResolveMentionsService";
+import { previewWithMentions } from "../../helpers/mentions";
 
 interface MessageData {
   id: string;
@@ -75,6 +76,9 @@ const CreateMessageService = async ({ messageData: data, companyId }: Request): 
   }
 
   await ResolveMentionsService([message], companyId);
+  // The ticket list shows "@Maria", not the digits of the mention.
+  const preview = previewWithMentions(message.ticket.lastMessage, message.body, message.mentions);
+  if (preview) await message.ticket.update({ lastMessage: preview });
 
   const io = getIO();
   io.to(message.ticketId.toString())
