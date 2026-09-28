@@ -1,0 +1,7 @@
+node_modules
+dist
+coverage
+public/*
+.env
+.env.test
+.git
