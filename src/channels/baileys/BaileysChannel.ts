@@ -113,7 +113,11 @@ class BaileysChannel implements MessagingChannel {
     // arrives before sendMessage returns.
     const messageId = newMessageId();
     if (!options.processEcho) markSentByPlatform(messageId);
-    const sent = await this.socket().sendMessage(jid, toBaileysContent(content), {
+    const baileysContent = toBaileysContent(content);
+    if (options.forwarded) {
+      (baileysContent as any).contextInfo = { ...(baileysContent as any).contextInfo, isForwarded: true, forwardingScore: 1 };
+    }
+    const sent = await this.socket().sendMessage(jid, baileysContent, {
       messageId,
       ...(quoted ? { quoted } : {})
     });

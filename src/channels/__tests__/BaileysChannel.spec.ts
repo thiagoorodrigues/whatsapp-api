@@ -97,6 +97,14 @@ describe("BaileysChannel", () => {
     expect(result).toEqual({ externalId: "WA_SENT", chatJid: "5511999999999@s.whatsapp.net", raw: sent });
   });
 
+  it("marks forwarded content so WhatsApp shows it as forwarded", async () => {
+    await new BaileysChannel(7).send({ number: "5511999999999" }, { type: "text", text: "oi" }, { forwarded: true });
+    expect(socket.sendMessage.mock.calls[0][1]).toEqual({
+      text: "oi",
+      contextInfo: { isForwarded: true, forwardingScore: 1 }
+    });
+  });
+
   it("marks what it sends so the echo is skipped, except when asked", async () => {
     socket.sendMessage.mockImplementation(async (jid: string, content: any, options: any) => ({
       key: { id: options.messageId, fromMe: true, remoteJid: jid }

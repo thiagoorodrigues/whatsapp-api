@@ -63,6 +63,7 @@ const SaveInboundMessageService = async (
     fromMe: inbound.fromMe,
     read: inbound.fromMe,
     quotedMsgId: quotedMsg?.id,
+    isForwarded: !!inbound.forwarded,
     // Our own messages typed on the phone reached the server already.
     ack: inbound.fromMe ? 2 : (inbound.raw as any)?.status,
     remoteJid: inbound.chat.jid,

@@ -17,6 +17,7 @@ import {
   editedMessageId,
   getBodyMessage,
   getQuotedMessageId,
+  isForwardedMessage,
   getTypeMessage,
   hasMediaContent,
   isValidMsg,
@@ -146,6 +147,7 @@ const toInbound = async (msg: proto.IWebMessageInfo, wbot: Session, companyId: n
     hasMedia,
     loadMedia: hasMedia ? loadMedia : undefined,
     quotedExternalId,
+    forwarded: isForwardedMessage(msg),
     editOf: editedMessageId(msg),
     mentions: getMentionedJids(msg.message),
     raw: msg

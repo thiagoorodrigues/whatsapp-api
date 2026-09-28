@@ -37,6 +37,8 @@ export interface SendOptions {
    * on the phone (campaigns still rely on it). Default: the sender saves it.
    */
   processEcho?: boolean;
+  /** Shown as "Encaminhada" (forwarded) to the recipient. */
+  forwarded?: boolean;
 }
 
 export interface SentMessage {

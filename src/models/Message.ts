@@ -113,6 +113,10 @@ class Message extends Model<Message> {
   @Column
   isEdited: boolean;
 
+  @Default(false)
+  @Column
+  isForwarded: boolean;
+
   /** Names of the people mentioned; filled by ResolveMentionsService. */
   @Column(DataType.VIRTUAL)
   mentions: { token: string; name: string | null; phone: string | null }[];

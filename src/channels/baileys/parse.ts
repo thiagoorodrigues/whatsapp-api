@@ -140,6 +140,17 @@ export const getQuotedMessageId = (msg: proto.IWebMessageInfo) => {
   return body?.contextInfo?.stanzaId;
 };
 
+export const isForwardedMessage = (msg: proto.IWebMessageInfo): boolean => {
+  try {
+    const body = extractMessageContent(msg.message)[
+      Object.keys(msg?.message).values().next().value
+    ];
+    return !!body?.contextInfo?.isForwarded;
+  } catch (e) {
+    return false;
+  }
+};
+
 export const isValidMsg = (msg: proto.IWebMessageInfo): boolean => {
   if (msg.key.remoteJid === "status@broadcast") return false;
   try {

@@ -158,4 +158,22 @@ describe("toInbound", () => {
     );
     expect(inbound.mentions).toEqual([]);
   });
+
+  it("tells a forwarded message from a typed one", async () => {
+    const forwarded = await toInbound(
+      {
+        key: { id: "F1", fromMe: false, remoteJid: "5531991147761@s.whatsapp.net" },
+        message: { extendedTextMessage: { text: "promo", contextInfo: { isForwarded: true, forwardingScore: 1 } } }
+      },
+      wbot,
+      1
+    );
+    const typed = await toInbound(
+      { key: { id: "F2", fromMe: false, remoteJid: "5531991147761@s.whatsapp.net" }, message: { conversation: "oi" } },
+      wbot,
+      1
+    );
+    expect(forwarded.forwarded).toBe(true);
+    expect(typed.forwarded).toBe(false);
+  });
 });

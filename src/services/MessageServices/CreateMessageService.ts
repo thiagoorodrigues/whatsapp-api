@@ -23,6 +23,7 @@ interface MessageData {
   participant?: string | null;
   dataJson?: string | null;
   isEdited?: boolean;
+  isForwarded?: boolean;
 }
 interface Request {
   messageData: MessageData;

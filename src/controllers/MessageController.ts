@@ -16,6 +16,7 @@ import FindOrCreateTicketService from "../services/TicketServices/FindOrCreateTi
 import UpdateTicketService from "../services/TicketServices/UpdateTicketService";
 import DeleteWhatsAppMessage from "../services/WbotServices/DeleteWhatsAppMessage";
 import SendWhatsAppMedia from "../services/WbotServices/SendWhatsAppMedia";
+import ForwardMessageService from "../services/MessageServices/ForwardMessageService";
 import SendWhatsAppMessage from "../services/WbotServices/SendWhatsAppMessage";
 import CheckContactNumber from "../services/WbotServices/CheckNumber";
 import CheckIsValidContact from "../services/WbotServices/CheckIsValidContact";
@@ -103,6 +104,16 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   }
 
   return res.send();
+};
+
+export const forward = async (req: Request, res: Response): Promise<Response> => {
+  const { messageId } = req.params;
+  const { companyId, id: userId } = req.user;
+  const { contactIds } = req.body as { contactIds: number[] };
+
+  const results = await ForwardMessageService({ messageId, contactIds, companyId, userId: +userId });
+
+  return res.status(200).json(results);
 };
 
 export const remove = async (

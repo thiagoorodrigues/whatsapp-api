@@ -21,6 +21,8 @@ interface Request {
   body?: string;
   media?: SentMedia;
   quotedMsgId?: string;
+  /** Went out marked as forwarded. */
+  forwarded?: boolean;
 }
 
 /**
@@ -29,7 +31,7 @@ interface Request {
  * WhatsApp is ignored (see channels/baileys/sentByPlatform), so this is
  * where it gets into the ticket, like the echo used to do.
  */
-const SaveSentMessageService = async ({ ticket, sent, body, media, quotedMsgId }: Request): Promise<Message> => {
+const SaveSentMessageService = async ({ ticket, sent, body, media, quotedMsgId, forwarded }: Request): Promise<Message> => {
   let mediaUrl: string | undefined;
   if (media) {
     try {
@@ -58,7 +60,8 @@ const SaveSentMessageService = async ({ ticket, sent, body, media, quotedMsgId }
       ack: 1,
       quotedMsgId,
       remoteJid: sent.chatJid,
-      dataJson: sent.raw ? JSON.stringify(sent.raw) : null
+      dataJson: sent.raw ? JSON.stringify(sent.raw) : null,
+      isForwarded: !!forwarded
     }
   });
 };

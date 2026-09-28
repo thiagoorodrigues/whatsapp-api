@@ -62,6 +62,8 @@ export interface InboundMessage {
    */
   loadMedia?: () => Promise<InboundMedia | null>;
   quotedExternalId?: string;
+  /** Marked as forwarded by the sender's app. */
+  forwarded?: boolean;
   /** Set when this is an edit: id of the message edited. */
   editOf?: string;
   /** Channel-native ids of the people mentioned ("@name" in groups). */
