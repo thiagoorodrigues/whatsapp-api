@@ -17,7 +17,8 @@ const sent = { key: { id: "WA_SENT", fromMe: true, remoteJid: "5511999999999@s.w
 
 beforeEach(() => {
   socket = {
-    user: { id: "5511888888888:3@s.whatsapp.net" },
+    user: { id: "5511888888888:3@s.whatsapp.net", lid: "888:3@lid" },
+    groupMetadata: jest.fn(),
     sendMessage: jest.fn().mockResolvedValue(sent),
     chatModify: jest.fn(),
     readMessages: jest.fn(),
@@ -192,5 +193,27 @@ describe("media content", () => {
       fileName: "a.txt",
       mimetype: "text/plain"
     });
+  });
+});
+
+describe("groupParticipants", () => {
+  it("lists members with their LID, phone, admin flag and the account itself", async () => {
+    socket.groupMetadata.mockResolvedValue({
+      id: "120363999@g.us",
+      participants: [
+        { id: "140716@lid", phoneNumber: "5531991147761@s.whatsapp.net", admin: "admin" },
+        { id: "5521988887777@s.whatsapp.net", lid: "222@lid", admin: null },
+        { id: "888@lid", phoneNumber: "5511888888888@s.whatsapp.net" }
+      ]
+    });
+
+    const list = await new BaileysChannel(7).groupParticipants({ number: "120363999", isGroup: true, jid: "120363999@g.us" });
+
+    expect(socket.groupMetadata).toHaveBeenCalledWith("120363999@g.us");
+    expect(list).toEqual([
+      { jid: "140716@lid", lid: "140716@lid", phone: "5531991147761", isAdmin: true, isMe: false },
+      { jid: "5521988887777@s.whatsapp.net", lid: "222@lid", phone: "5521988887777", isAdmin: false, isMe: false },
+      { jid: "888@lid", lid: "888@lid", phone: "5511888888888", isAdmin: false, isMe: true }
+    ]);
   });
 });

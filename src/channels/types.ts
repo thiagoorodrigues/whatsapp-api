@@ -59,6 +59,18 @@ export interface NumberCheck {
 
 export type Presence = "available" | "unavailable";
 
+/** A member of a group, as the channel knows it. */
+export interface GroupParticipant {
+  /** Id the group uses for the member (LID or phone JID). */
+  jid: string;
+  lid?: string;
+  /** Phone digits, when known. */
+  phone?: string;
+  isAdmin: boolean;
+  /** The connected account itself. */
+  isMe: boolean;
+}
+
 export interface MessagingChannel {
   readonly kind: "baileys";
   readonly connectionId: number;
@@ -73,4 +85,5 @@ export interface MessagingChannel {
   sendTyping(chat: ChatAddress, typing: boolean): Promise<void>;
   checkNumber(number: string): Promise<NumberCheck>;
   profilePictureUrl(chat: ChatAddress): Promise<string | null>;
+  groupParticipants(chat: ChatAddress): Promise<GroupParticipant[]>;
 }

@@ -1,12 +1,13 @@
 import fs from "fs";
 import type { AnyMessageContent, WAMessage, WASocket } from "@whiskeysockets/baileys";
 import { getWbot } from "../../libs/wbot";
-import { getContactJid } from "../../helpers/GetPhoneJid";
+import { getContactJid, isLidJid, toPhoneNumber, toUserLid } from "../../helpers/GetPhoneJid";
 import { markSentByPlatform, newMessageId } from "./sentByPlatform";
 import { logger } from "../../utils/logger";
-import { cachedProfilePicture } from "../../libs/whatsappCache";
+import { cachedProfilePicture, getGroupMetadata } from "../../libs/whatsappCache";
 import {
   ChatAddress,
+  GroupParticipant,
   MediaSource,
   MessageRef,
   MessagingChannel,
@@ -191,6 +192,27 @@ class BaileysChannel implements MessagingChannel {
     const jid = jidOf(chat);
     const url = await cachedProfilePicture(this.connectionId, jid, () => this.socket().profilePictureUrl(jid));
     return url || null;
+  }
+
+  async groupParticipants(chat: ChatAddress): Promise<GroupParticipant[]> {
+    const socket = this.socket();
+    const jid = chat.jid || (await this.groupJid(jidOf({ ...chat, isGroup: true })));
+    const { participants } = await getGroupMetadata(socket, jid);
+    const myPhone = toPhoneNumber(socket.user?.id);
+    const myLid = toUserLid((socket.user as any)?.lid);
+
+    return participants.map(p => {
+      const byLid = isLidJid(p.id);
+      const lid = byLid ? toUserLid(p.id) : toUserLid(p.lid);
+      const phone = toPhoneNumber(byLid ? p.phoneNumber : p.id);
+      return {
+        jid: p.id,
+        ...(lid ? { lid } : {}),
+        ...(phone ? { phone } : {}),
+        isAdmin: !!p.admin,
+        isMe: (!!phone && phone === myPhone) || (!!lid && lid === myLid)
+      };
+    });
   }
 }
 
