@@ -124,7 +124,7 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
           // retries read the original content from the database.
           try {
             const stored = await Message.findOne({
-              where: { id: key.id! },
+              where: { messagesWhatsappsId: key.id! },
               attributes: ["dataJson"]
             });
             if (stored?.dataJson) {
@@ -249,7 +249,7 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
                   qrcode: ""
                 });
                 await DeleteBaileysService(whatsappUpdate.id);
-                io.emit("whatsappSession", {
+                io.emit(`company-${whatsapp.companyId}-whatsappSession`, {
                   action: "update",
                   session: whatsappUpdate
                 });

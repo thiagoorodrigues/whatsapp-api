@@ -23,12 +23,12 @@ const SetTicketMessagesAsRead = async (ticket: Ticket): Promise<void> => {
       order: [["createdAt", "DESC"]]
     });    
 
-    if (getJsonMessage.length > 0) {
-      const lastMessages: proto.IWebMessageInfo = JSON.parse(
-        JSON.stringify(getJsonMessage[0].dataJson)
-      );
+    // dataJson is the raw message saved as a JSON string (call logs have none).
+    const rawMessage = getJsonMessage.find(m => m.dataJson)?.dataJson;
+    if (rawMessage) {
+      const lastMessages: proto.IWebMessageInfo = JSON.parse(rawMessage);
 
-      if (lastMessages.key && lastMessages.key.fromMe === false) {
+      if (lastMessages?.key && lastMessages.key.fromMe === false) {
         await (wbot as WASocket).chatModify(
           { markRead: true, lastMessages: [lastMessages as WAMessage] },
           getContactJid(ticket.contact, ticket.isGroup)

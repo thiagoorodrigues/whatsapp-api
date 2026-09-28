@@ -14,14 +14,26 @@ interface MessageData {
   mediaUrl?: string;
   ack?: number;
   queueId?: number;
-  createdAt?: string
+  createdAt?: string;
+  messagesWhatsappsId?: string;
 }
 interface Request {
   messageData: MessageData;
   companyId: number;
 }
 
-const CreateMessageService = async ({ messageData, companyId }: Request): Promise<Message> => {
+const CreateMessageService = async ({ messageData: data, companyId }: Request): Promise<Message> => {
+  // A message saved when sent and again from the WhatsApp echo keeps one
+  // row: the second save updates the first.
+  let messageData = data;
+  if (data.messagesWhatsappsId) {
+    const existing = await Message.findOne({
+      where: { messagesWhatsappsId: data.messagesWhatsappsId, companyId },
+      attributes: ["id"]
+    });
+    if (existing && existing.id !== data.id) messageData = { ...data, id: existing.id };
+  }
+
   await Message.upsert({ ...messageData, companyId });
 
   const message = await Message.findByPk(messageData.id, {
