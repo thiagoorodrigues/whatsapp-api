@@ -64,6 +64,8 @@ export interface InboundMessage {
   quotedExternalId?: string;
   /** Set when this is an edit: id of the message edited. */
   editOf?: string;
+  /** Channel-native ids of the people mentioned ("@name" in groups). */
+  mentions: string[];
   /** Channel payload, saved as Message.dataJson and sent to webhooks. */
   raw: unknown;
 }
@@ -80,5 +82,6 @@ export const normalizedForWebhook = (inbound: InboundMessage) => ({
   text: inbound.text,
   quotedId: inbound.quotedExternalId || null,
   editOf: inbound.editOf || null,
+  mentions: inbound.mentions || [],
   hasMedia: inbound.hasMedia
 });

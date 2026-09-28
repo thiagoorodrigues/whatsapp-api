@@ -17,6 +17,8 @@ jest.mock("../../../libs/whatsappCache", () => ({
 
 // eslint-disable-next-line import/first
 import toInbound from "../toInbound";
+// eslint-disable-next-line import/first
+import { normalizedForWebhook } from "../../inbound";
 
 const wbot: any = { id: 2, user: { id: "5511888888888:4@s.whatsapp.net", name: "Loja" } };
 
@@ -127,5 +129,33 @@ describe("toInbound", () => {
     );
     expect(inbound.editOf).toBe("A1");
     expect(inbound.text).toBe("Oi, tudo bem?");
+  });
+  it("lists the mentioned jids of a group message", async () => {
+    const inbound = await toInbound(
+      {
+        key: { id: "M1", fromMe: false, remoteJid: "120363430882999421@g.us", participant: "5531991147761@s.whatsapp.net" } as any,
+        message: {
+          extendedTextMessage: {
+            text: "@140716097450191 olha isso",
+            contextInfo: { mentionedJid: ["140716097450191@lid"] }
+          }
+        },
+        messageTimestamp: 1700000000,
+        pushName: "Thiago"
+      },
+      wbot,
+      1
+    );
+    expect(inbound.mentions).toEqual(["140716097450191@lid"]);
+    expect(normalizedForWebhook(inbound).mentions).toEqual(["140716097450191@lid"]);
+  });
+
+  it("has no mentions on a plain text", async () => {
+    const inbound = await toInbound(
+      { key: { id: "M2", fromMe: false, remoteJid: "5531991147761@s.whatsapp.net" } as any, message: { conversation: "Oi" }, messageTimestamp: 1 },
+      wbot,
+      1
+    );
+    expect(inbound.mentions).toEqual([]);
   });
 });

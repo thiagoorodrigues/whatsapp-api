@@ -22,6 +22,7 @@ import {
   isValidMsg,
   mediaInfo
 } from "./parse";
+import { getMentionedJids } from "../../helpers/mentions";
 
 type Session = WASocket & { id?: number };
 
@@ -146,6 +147,7 @@ const toInbound = async (msg: proto.IWebMessageInfo, wbot: Session, companyId: n
     loadMedia: hasMedia ? loadMedia : undefined,
     quotedExternalId,
     editOf: editedMessageId(msg),
+    mentions: getMentionedJids(msg.message),
     raw: msg
   };
 };
