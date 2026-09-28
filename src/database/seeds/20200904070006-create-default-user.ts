@@ -17,7 +17,8 @@ module.exports = {
               companyId: 1,
               createdAt: new Date(),
               updatedAt: new Date(),
-              super: true
+              super: true,
+              status: true
             }
           ],
           { transaction: t }
