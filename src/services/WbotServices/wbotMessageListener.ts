@@ -1,3 +1,4 @@
+import { wasSentByPlatform } from "../../channels/baileys/sentByPlatform";
 import path, { join } from "path";
 // import { promisify } from "util";
 // import { readFile, writeFile } from "fs";
@@ -898,7 +899,7 @@ export const handleRating = async (
   });
 
   if (complationMessage) {
-    const body = formatBody(`\u200e${complationMessage}`, ticket.contact);
+    const body = formatBody(complationMessage, ticket.contact);
     await SendWhatsAppMessage({ body, ticket });
   }
 
@@ -1563,6 +1564,8 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
       if (!messages) return;
 
       messages.forEach(async (message: proto.IWebMessageInfo) => {
+        // Sent through the channel: already saved by whoever sent it.
+        if (message.key.fromMe && wasSentByPlatform(message.key.id)) return;
         const messageExists = await Message.count({ where: { messagesWhatsappsId: message.key.id!, companyId } });
         if (message.message?.reactionMessage) return;
 

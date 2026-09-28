@@ -10,6 +10,8 @@ jest.mock("../../libs/wbot", () => ({
 import BaileysChannel, { jidOf, toBaileysContent } from "../baileys/BaileysChannel";
 // eslint-disable-next-line import/first
 import { contentFromFile, contentFromUpload } from "../media";
+// eslint-disable-next-line import/first
+import { newMessageId, wasSentByPlatform } from "../baileys/sentByPlatform";
 
 const sent = { key: { id: "WA_SENT", fromMe: true, remoteJid: "5511999999999@s.whatsapp.net" } };
 
@@ -80,8 +82,25 @@ describe("BaileysChannel", () => {
       { type: "text", text: "oi" },
       { quoted: { externalId: "WA_Q", raw: JSON.stringify(quotedRaw) } }
     );
-    expect(socket.sendMessage).toHaveBeenCalledWith("5511999999999@s.whatsapp.net", { text: "oi" }, { quoted: quotedRaw });
-    expect(result).toEqual({ externalId: "WA_SENT", raw: sent });
+    expect(socket.sendMessage).toHaveBeenCalledWith(
+      "5511999999999@s.whatsapp.net",
+      { text: "oi" },
+      { messageId: expect.stringMatching(/^3EB0[0-9A-F]{18}$/), quoted: quotedRaw }
+    );
+    expect(result).toEqual({ externalId: "WA_SENT", chatJid: "5511999999999@s.whatsapp.net", raw: sent });
+  });
+
+  it("marks what it sends so the echo is skipped, except when asked", async () => {
+    socket.sendMessage.mockImplementation(async (jid: string, content: any, options: any) => ({
+      key: { id: options.messageId, fromMe: true, remoteJid: jid }
+    }));
+    const channel = new BaileysChannel(7);
+    const own = await channel.send({ number: "5511999999999" }, { type: "text", text: "oi" });
+    expect(wasSentByPlatform(own.externalId)).toBe(true);
+    const campaign = await channel.send({ number: "5511999999999" }, { type: "text", text: "oi" }, { processEcho: true });
+    expect(wasSentByPlatform(campaign.externalId)).toBe(false);
+    expect(wasSentByPlatform("3EB0TYPEDONTHEPHONE")).toBe(false);
+    expect(newMessageId()).not.toBe(newMessageId());
   });
 
   it("resolves group ids stored without the dash", async () => {

@@ -6,7 +6,6 @@ import formatBody from "../../helpers/Mustache";
 import SendWhatsAppMessage from "./SendWhatsAppMessage";
 import moment from "moment";
 import ShowTicketService from "../TicketServices/ShowTicketService";
-import { verifyMessage } from "./wbotMessageListener";
 import TicketTraking from "../../models/TicketTraking";
 import { logger } from "../../utils/logger";
 
@@ -83,7 +82,7 @@ export const ClosedAllOpenTickets = async (companyId: number): Promise<void> => 
         expiresTicket !== "0" && Number(expiresTicket) > 0) {
 
         //mensagem de encerramento por inatividade
-        const bodyExpiresMessageInactive = formatBody(`\u200e ${expiresInactiveMessage}`, showTicket.contact);
+        const bodyExpiresMessageInactive = formatBody(expiresInactiveMessage, showTicket.contact);
 
         // let dataLimite = new Date();
         // dataLimite.setMinutes(dataLimite.getMinutes() - Number(expiresTicket));
@@ -95,9 +94,7 @@ export const ClosedAllOpenTickets = async (companyId: number): Promise<void> => 
             closeTicket(showTicket, showTicket.status, bodyExpiresMessageInactive);
 
             if (expiresInactiveMessage !== "" && expiresInactiveMessage !== undefined) {
-              const sentMessage = await SendWhatsAppMessage({ body: bodyExpiresMessageInactive, ticket: showTicket });
-
-              await verifyMessage(sentMessage, showTicket, showTicket.contact);
+              await SendWhatsAppMessage({ body: bodyExpiresMessageInactive, ticket: showTicket });
             }
 
             await ticketTraking.update({

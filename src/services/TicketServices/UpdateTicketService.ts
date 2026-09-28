@@ -12,7 +12,7 @@ import SendWhatsAppMessage from "../WbotServices/SendWhatsAppMessage";
 import FindOrCreateATicketTrakingService from "./FindOrCreateATicketTrakingService";
 import { closingUserId } from "../ReportService/trackingRules";
 import { getTicketChannel, ticketAddress } from "../../channels";
-import { verifyMessage } from "../WbotServices/wbotMessageListener";
+import SaveSentMessageService from "../MessageServices/SaveSentMessageService";
 import ListSettingsServiceOne from "../SettingServices/ListSettingsServiceOne"; //NOVO PLW DESIGN//
 import ShowUserService from "../UserServices/ShowUserService"; //NOVO PLW DESIGN//
 import { isNil } from "lodash";
@@ -117,7 +117,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
         
         if (ticketTraking.ratingAt == null) {
           const ratingTxt = ratingMessage || "";
-          let bodyRatingMessage = `\u200e${ratingTxt}\n\n`;
+          let bodyRatingMessage = `${ratingTxt}\n\n`;
           bodyRatingMessage += "Digite de 1 à 10 para qualificar nosso atendimento onde:\n*1* - _Muito Ruim_\n*10* - _Excelente_";
           await SendWhatsAppMessage({ body: bodyRatingMessage, ticket, ratingMsg: true });
 
@@ -144,7 +144,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
       }
 
       if (!isNil(complationMessage) && complationMessage !== "") {
-        const body = `\u200e${complationMessage}`;
+        const body = complationMessage;
         await SendWhatsAppMessage({ body, ticket });
       }
 
@@ -239,7 +239,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
         isTransfer = true
 
         const queueChangedMessage = await channel.send(ticketAddress(ticket), { type: "text", text: msgtxt });
-        await verifyMessage(queueChangedMessage.raw, ticket, ticket.contact);
+        await SaveSentMessageService({ ticket, sent: queueChangedMessage, body: msgtxt });
 
         if (userLoggedId) {
           //Log de transferência
@@ -262,7 +262,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
         isTransfer = true
 
         const queueChangedMessage = await channel.send(ticketAddress(ticket), { type: "text", text: msgtxt });
-        await verifyMessage(queueChangedMessage.raw, ticket, ticket.contact);
+        await SaveSentMessageService({ ticket, sent: queueChangedMessage, body: msgtxt });
 
         if (userLoggedId) {
           //Log de transferência
@@ -287,7 +287,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
         const msgtxt = "*Mensagem automática*:\nVocê foi transferido para o departamento *" + queue?.name + "* e contará com a presença de *" + nome.name + "*\naguarde, já vamos te atender! - _*" + moment().format('DD/MM/YYYY HH:mm:ss') + "*_";
 
         const queueChangedMessage = await channel.send(ticketAddress(ticket), { type: "text", text: msgtxt });
-        await verifyMessage(queueChangedMessage.raw, ticket, ticket.contact);
+        await SaveSentMessageService({ ticket, sent: queueChangedMessage, body: msgtxt });
 
         if (userLoggedId) {
           //Log de transferência
@@ -309,7 +309,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
         isTransfer = true
 
         const queueChangedMessage = await channel.send(ticketAddress(ticket), { type: "text", text: msgtxt });
-        await verifyMessage(queueChangedMessage.raw, ticket, ticket.contact);
+        await SaveSentMessageService({ ticket, sent: queueChangedMessage, body: msgtxt });
 
         if (userLoggedId) {
           //Log de transferência
@@ -332,7 +332,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
         const msgtxt = "*Mensagem automática*:\nVocê foi transferido para o atendente _*" + nome.name + "*_\naguarde, já vamos te atender! - _*" + moment().format('DD/MM/YYYY HH:mm:ss') + "*_";
 
         const queueChangedMessage = await channel.send(ticketAddress(ticket), { type: "text", text: msgtxt });
-        await verifyMessage(queueChangedMessage.raw, ticket, ticket.contact);
+        await SaveSentMessageService({ ticket, sent: queueChangedMessage, body: msgtxt });
 
         isTransfer = true
         if (userLoggedId) {

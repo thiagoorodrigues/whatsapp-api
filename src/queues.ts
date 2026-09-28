@@ -690,6 +690,10 @@ async function handlePrepareContact(job) {
   }
 }
 
+// Campaign messages are still saved by their WhatsApp echo, which also
+// closes the ticket it opens (U+200C marker, see wbotMessageListener).
+const CAMPAIGN_SEND = { processEcho: true };
+
 async function handleDispatchCampaign(job) {
   try {
     const { data } = job;
@@ -731,14 +735,14 @@ async function handleDispatchCampaign(job) {
       const publicFolder = path.resolve(__dirname, "..", "public");
       const filePath = path.join(publicFolder, campaign.mediaPath);
 
-      await channel.send(to, contentFromFile(campaign.mediaName, filePath, body));
+      await channel.send(to, contentFromFile(campaign.mediaName, filePath, body), CAMPAIGN_SEND);
     }
     else {
       if (campaign.confirmation && campaignShipping.confirmation === null) {
-        await channel.send(to, { type: "text", text: body });
+        await channel.send(to, { type: "text", text: body }, CAMPAIGN_SEND);
         await campaignShipping.update({ confirmationRequestedAt: moment() });
       } else {
-        await channel.send(to, { type: "text", text: body });
+        await channel.send(to, { type: "text", text: body }, CAMPAIGN_SEND);
       }
     }
     await campaignShipping.update({ deliveredAt: moment() });

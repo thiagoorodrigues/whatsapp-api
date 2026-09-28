@@ -1,9 +1,9 @@
-import { WAMessage } from "@whiskeysockets/baileys";
 import * as Sentry from "@sentry/node";
 import AppError from "../../errors/AppError";
 import Message from "../../models/Message";
 import Ticket from "../../models/Ticket";
 import { getTicketChannel, messageRef, ticketAddress } from "../../channels";
+import SaveSentMessageService from "../MessageServices/SaveSentMessageService";
 
 import formatBody from "../../helpers/Mustache";
 
@@ -15,7 +15,7 @@ interface Request {
   closeTicket?: boolean
 }
 
-const SendWhatsAppMessage = async ({ body, ticket, quotedMsg, ratingMsg, closeTicket = true }: Request): Promise<WAMessage> => {
+const SendWhatsAppMessage = async ({ body, ticket, quotedMsg, ratingMsg, closeTicket = true }: Request): Promise<Message> => {
   const channel = await getTicketChannel(ticket);
 
   let quoted;
@@ -27,16 +27,12 @@ const SendWhatsAppMessage = async ({ body, ticket, quotedMsg, ratingMsg, closeTi
   try {
     const text = formatBody(body, ticket.contact);
     const sent = await channel.send(ticketAddress(ticket), { type: "text", text }, { quoted });
+    const saved = await SaveSentMessageService({ ticket, sent, body: text, quotedMsgId: quotedMsg?.id });
 
-    if (!closeTicket)
-      return sent.raw;
+    if (closeTicket && !!ratingMsg)
+      await ticket.update({ status: 'closed' });
 
-    if (!!ratingMsg)
-      await ticket.update({ lastMessage: text, status: 'closed' });
-    else
-      await ticket.update({ lastMessage: text });
-
-    return sent.raw;
+    return saved;
   } catch (err) {
     Sentry.captureException(err);
     throw new AppError("ERR_SENDING_WAPP_MSG");

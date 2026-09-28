@@ -1,4 +1,3 @@
-import { WAMessage } from "@whiskeysockets/baileys";
 import * as Sentry from "@sentry/node";
 import fs from "fs";
 import { exec } from "child_process";
@@ -7,6 +6,8 @@ import ffmpegPath from "@ffmpeg-installer/ffmpeg";
 import AppError from "../../errors/AppError";
 import { getTicketChannel, ticketAddress } from "../../channels";
 import { contentFromUpload } from "../../channels/media";
+import Message from "../../models/Message";
+import SaveSentMessageService from "../MessageServices/SaveSentMessageService";
 import Ticket from "../../models/Ticket";
 import formatBody from "../../helpers/Mustache";
 import { logger } from "../../utils/logger";
@@ -86,7 +87,7 @@ const processAudioFile = async (audio: string): Promise<string> => {
   });
 };
 
-const SendWhatsAppMedia = async ({ media, ticket, body }: Request): Promise<WAMessage> => {
+const SendWhatsAppMedia = async ({ media, ticket, body }: Request): Promise<Message> => {
   try {
     const channel = await getTicketChannel(ticket);
     const bodyMessage = formatBody(body, ticket.contact);
@@ -96,10 +97,15 @@ const SendWhatsAppMedia = async ({ media, ticket, body }: Request): Promise<WAMe
       ? { ...media, buffer: await processeFileAudio(media, media.mimetype, false) }
       : media;
 
-    const sent = await channel.send(ticketAddress(ticket), contentFromUpload(file, isAudio ? undefined : bodyMessage));
+    const caption = isAudio ? undefined : bodyMessage;
+    const sent = await channel.send(ticketAddress(ticket), contentFromUpload(file, caption));
 
-    await ticket.update({ lastMessage: bodyMessage });
-    return sent.raw;
+    return SaveSentMessageService({
+      ticket,
+      sent,
+      body: caption,
+      media: { buffer: file.buffer, mimetype: isAudio ? "audio/mp4" : media.mimetype, fileName: media.originalname }
+    });
 
   } catch (err) {
     Sentry.captureException(err);

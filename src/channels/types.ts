@@ -32,14 +32,21 @@ export interface MessageRef {
 
 export interface SendOptions {
   quoted?: MessageRef;
+  /**
+   * Let the inbound pipeline handle this message's echo as if it was typed
+   * on the phone (campaigns still rely on it). Default: the sender saves it.
+   */
+  processEcho?: boolean;
 }
 
 export interface SentMessage {
   /** Id of the message on the channel (Message.messagesWhatsappsId). */
   externalId: string | null;
+  /** Channel-native address the message went to (Message.remoteJid). */
+  chatJid?: string | null;
   /**
-   * Channel payload of the sent message. Baileys callers still hand it to
-   * verifyMessage until messages are saved on send.
+   * Channel payload of the sent message (saved as Message.dataJson; Baileys
+   * needs it to quote and resend).
    */
   raw?: any;
 }

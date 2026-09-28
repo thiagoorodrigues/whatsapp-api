@@ -2,6 +2,7 @@ import fs from "fs";
 import type { AnyMessageContent, WAMessage, WASocket } from "@whiskeysockets/baileys";
 import { getWbot } from "../../libs/wbot";
 import { getContactJid } from "../../helpers/GetPhoneJid";
+import { markSentByPlatform, newMessageId } from "./sentByPlatform";
 import {
   ChatAddress,
   MediaSource,
@@ -101,8 +102,15 @@ class BaileysChannel implements MessagingChannel {
   async send(to: ChatAddress, content: OutgoingContent, options: SendOptions = {}): Promise<SentMessage> {
     const jid = to.isGroup && !to.jid ? await this.groupJid(jidOf(to)) : jidOf(to);
     const quoted = quotedOf(options.quoted);
-    const sent = await this.socket().sendMessage(jid, toBaileysContent(content), quoted ? { quoted } : {});
-    return { externalId: sent?.key?.id || null, raw: sent };
+    // The id is chosen here so the echo can be recognized even if it
+    // arrives before sendMessage returns.
+    const messageId = newMessageId();
+    if (!options.processEcho) markSentByPlatform(messageId);
+    const sent = await this.socket().sendMessage(jid, toBaileysContent(content), {
+      messageId,
+      ...(quoted ? { quoted } : {})
+    });
+    return { externalId: sent?.key?.id || messageId, chatJid: sent?.key?.remoteJid || jid, raw: sent };
   }
 
   async deleteMessage(chat: ChatAddress, message: MessageRef): Promise<void> {

@@ -19,8 +19,7 @@ export const SendMessage = async (
 
     const content = messageData.mediaPath
       ? contentFromFile(messageData.fileName, messageData.mediaPath, messageData.body)
-      : // U+200E marks messages the WhatsApp echo must not store again.
-        { type: "text" as const, text: `\u200e ${messageData.body}` };
+      : { type: "text" as const, text: messageData.body };
 
     const sent = await channel.send(to, content);
     return sent.raw;

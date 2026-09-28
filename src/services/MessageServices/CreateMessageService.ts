@@ -16,6 +16,12 @@ interface MessageData {
   queueId?: number;
   createdAt?: string;
   messagesWhatsappsId?: string;
+  quotedMsgId?: string;
+  remoteJid?: string | null;
+  participant?: string | null;
+  dataJson?: string | null;
+  isAws?: boolean;
+  isEdited?: boolean;
 }
 interface Request {
   messageData: MessageData;
