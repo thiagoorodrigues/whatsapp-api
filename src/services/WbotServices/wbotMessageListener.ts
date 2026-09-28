@@ -1563,7 +1563,7 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
       if (!messages) return;
 
       messages.forEach(async (message: proto.IWebMessageInfo) => {
-        const messageExists = await Message.count({ where: { id: message.key.id!, companyId } });
+        const messageExists = await Message.count({ where: { messagesWhatsappsId: message.key.id!, companyId } });
         if (message.message?.reactionMessage) return;
 
         if (!messageExists) {
@@ -1591,8 +1591,9 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
     wbot.ev.on("messages.update", (messageUpdate: WAMessageUpdate[]) => {
       if (messageUpdate.length === 0) return;
       messageUpdate.forEach(async (message: WAMessageUpdate) => {
+        // Delivery/read status of a message: only the ack changes. Marking
+        // chats as read is done when an agent opens the ticket.
         if (message.update.status) {
-          (wbot as WASocket)!.readMessages([message.key])
           handleMsgAck(message, message.update.status);
         }
       });
@@ -1620,7 +1621,6 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
                 status = 5;
               }
 
-              (wbot as WASocket)!.readMessages([message.key])
               handleMsgAck(message, status);
             }
           }
@@ -1653,7 +1653,7 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
         if (initialDate && finalDate) {
           for (let message of messageList) {
             const messageTimestamp = Number(message.messageTimestamp) * 1000; // Assuming messageTimestamp is in seconds
-            const messageExists = await Message.count({ where: { id: message.key.id!, companyId } });
+            const messageExists = await Message.count({ where: { messagesWhatsappsId: message.key.id!, companyId } });
 
             if (!messageExists && messageTimestamp > initialDate && messageTimestamp < finalDate) {
               // logger.info(message.key.remoteJid);
@@ -1665,7 +1665,7 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
         } else if (initialDate && !finalDate) {
           for (let message of messageList) {
             const messageTimestamp = Number(message.messageTimestamp) * 1000; // Assuming messageTimestamp is in seconds
-            const messageExists = await Message.count({ where: { id: message.key.id!, companyId } });
+            const messageExists = await Message.count({ where: { messagesWhatsappsId: message.key.id!, companyId } });
 
             if (!messageExists && messageTimestamp > initialDate) {
               // logger.info(message.key.remoteJid);
