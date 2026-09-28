@@ -22,6 +22,8 @@ contactRoutes.post("/contacts", isAuth, ContactController.store);
 
 contactRoutes.put("/contacts/:contactId", isAuth, ContactController.update);
 
+contactRoutes.post("/contacts/delete-impact", isAuth, ContactController.deleteImpact);
+
 contactRoutes.delete("/contacts/:contactId", isAuth, ContactController.remove);
 
 export default contactRoutes;

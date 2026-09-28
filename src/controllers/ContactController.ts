@@ -8,6 +8,7 @@ import ShowContactService from "../services/ContactServices/ShowContactService";
 import UpdateContactService from "../services/ContactServices/UpdateContactService";
 import DeleteContactService from "../services/ContactServices/DeleteContactService";
 import GetContactService from "../services/ContactServices/GetContactService";
+import ContactDeleteImpactService from "../services/ContactServices/ContactDeleteImpactService";
 
 import CheckIsValidContact from "../services/WbotServices/CheckIsValidContact";
 import GetProfilePicUrl from "../services/WbotServices/GetProfilePicUrl";
@@ -195,4 +196,11 @@ export const list = async (req: Request, res: Response): Promise<Response> => {
   const contacts = await SimpleListService({ name, companyId });
 
   return res.json(contacts);
+};
+
+// Tickets and messages that deleting the contacts would take with them
+// (shown in the delete confirmation).
+export const deleteImpact = async (req: Request, res: Response): Promise<Response> => {
+  const ids = Array.isArray(req.body?.contactIds) ? req.body.contactIds : [];
+  return res.json(await ContactDeleteImpactService(ids, req.user.companyId));
 };
