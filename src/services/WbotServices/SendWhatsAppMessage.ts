@@ -13,9 +13,11 @@ interface Request {
   quotedMsg?: Message;
   ratingMsg?: boolean;
   closeTicket?: boolean
+  /** Jids of the group members mentioned (see ListGroupParticipantsService). */
+  mentions?: string[];
 }
 
-const SendWhatsAppMessage = async ({ body, ticket, quotedMsg, ratingMsg, closeTicket = true }: Request): Promise<Message> => {
+const SendWhatsAppMessage = async ({ body, ticket, quotedMsg, ratingMsg, closeTicket = true, mentions }: Request): Promise<Message> => {
   const channel = await getTicketChannel(ticket);
 
   let quoted;
@@ -26,7 +28,14 @@ const SendWhatsAppMessage = async ({ body, ticket, quotedMsg, ratingMsg, closeTi
 
   try {
     const text = formatBody(body, ticket.contact);
-    const sent = await channel.send(ticketAddress(ticket), { type: "text", text }, { quoted });
+    // Only members of the group can be mentioned.
+    let mentioned: string[] = [];
+    if (ticket.isGroup && mentions?.length) {
+      const members = new Set((await channel.groupParticipants(ticketAddress(ticket))).map(p => p.jid));
+      mentioned = mentions.filter(jid => members.has(jid));
+    }
+    const content = mentioned.length ? { type: "text" as const, text, mentions: mentioned } : { type: "text" as const, text };
+    const sent = await channel.send(ticketAddress(ticket), content, { quoted });
     const saved = await SaveSentMessageService({ ticket, sent, body: text, quotedMsgId: quotedMsg?.id });
 
     if (closeTicket && !!ratingMsg)

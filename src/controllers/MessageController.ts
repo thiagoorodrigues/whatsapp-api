@@ -37,6 +37,8 @@ type MessageData = {
   fromMe: boolean;
   read: boolean;
   quotedMsg?: Message;
+  /** Jids of the group members mentioned. */
+  mentions?: string[];
   number?: string;
   closeTicket?: true;
   isGroup?: boolean;
@@ -82,7 +84,7 @@ export const markRead = async (req: Request, res: Response): Promise<Response> =
 
 export const store = async (req: Request, res: Response): Promise<Response> => {
   const { ticketId } = req.params;
-  const { body, quotedMsg }: MessageData = req.body;
+  const { body, quotedMsg, mentions }: MessageData = req.body;
   const medias = req.files as Express.Multer.File[];
   const { companyId } = req.user;
 
@@ -97,7 +99,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
       })
     );
   } else {
-    const send = await SendWhatsAppMessage({ body, ticket, quotedMsg });
+    const send = await SendWhatsAppMessage({ body, ticket, quotedMsg, mentions });
   }
 
   return res.send();
