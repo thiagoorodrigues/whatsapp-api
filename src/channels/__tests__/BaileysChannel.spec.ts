@@ -105,15 +105,15 @@ describe("BaileysChannel", () => {
     });
   });
 
-  it("marks what it sends so the echo is skipped, except when asked", async () => {
+  it("marks everything it sends so the echo is skipped", async () => {
     socket.sendMessage.mockImplementation(async (jid: string, content: any, options: any) => ({
       key: { id: options.messageId, fromMe: true, remoteJid: jid }
     }));
     const channel = new BaileysChannel(7);
     const own = await channel.send({ number: "5511999999999" }, { type: "text", text: "oi" });
     expect(wasSentByPlatform(own.externalId)).toBe(true);
-    const campaign = await channel.send({ number: "5511999999999" }, { type: "text", text: "oi" }, { processEcho: true });
-    expect(wasSentByPlatform(campaign.externalId)).toBe(false);
+    const another = await channel.send({ number: "5511999999999" }, { type: "text", text: "oi" });
+    expect(wasSentByPlatform(another.externalId)).toBe(true);
     expect(wasSentByPlatform("3EB0TYPEDONTHEPHONE")).toBe(false);
     expect(newMessageId()).not.toBe(newMessageId());
   });

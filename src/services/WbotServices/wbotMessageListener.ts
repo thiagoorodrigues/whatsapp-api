@@ -20,7 +20,6 @@ import Message from "../../models/Message";
 import Ticket from "../../models/Ticket";
 import { logger } from "../../utils/logger";
 import {
-  verifyCampaignMessageAndCloseTicket,
   verifyRecentCampaign
 } from "../InboundServices/CampaignReplyService";
 import ProcessInboundMessage from "../InboundServices/ProcessInboundMessage";
@@ -64,7 +63,6 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
           if (!inbound) return;
           await ProcessInboundMessage(inbound);
           await verifyRecentCampaign(inbound);
-          await verifyCampaignMessageAndCloseTicket(inbound);
         }
       });
     });

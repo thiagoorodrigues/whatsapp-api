@@ -16,6 +16,8 @@ import CampaignSetting from "./models/CampaignSetting";
 import CampaignShipping from "./models/CampaignShipping";
 import { getChannel, numberAddress } from "./channels";
 import { contentFromFile } from "./channels/media";
+import mime from "mime-types";
+import SaveCampaignMessageService, { campaignText } from "./services/CampaignService/SaveCampaignMessageService";
 import sequelize from "./database";
 import { getIO } from "./libs/socket";
 import path from "path";
@@ -630,7 +632,7 @@ async function handlePrepareContact(job) {
         variables,
         contact
       );
-      campaignShipping.message = `\u200c ${message}`;
+      campaignShipping.message = message;
     }
 
     if (campaign.confirmation) {
@@ -643,7 +645,7 @@ async function handlePrepareContact(job) {
           variables,
           contact
         );
-        campaignShipping.confirmationMessage = `\u200c ${message}`;
+        campaignShipping.confirmationMessage = message;
       }
     }
 
@@ -690,10 +692,6 @@ async function handlePrepareContact(job) {
   }
 }
 
-// Campaign messages are still saved by their WhatsApp echo, which also
-// closes the ticket it opens (U+200C marker, see wbotMessageListener).
-const CAMPAIGN_SEND = { processEcho: true };
-
 async function handleDispatchCampaign(job) {
   try {
     const { data } = job;
@@ -725,27 +723,38 @@ async function handleDispatchCampaign(job) {
 
     const to = await numberAddress(campaignShipping.number, campaign.companyId);
 
-    let body = campaignShipping.message;
+    const askingConfirmation = campaign.confirmation && campaignShipping.confirmation === null;
+    const body = campaignText(askingConfirmation ? campaignShipping.confirmationMessage : campaignShipping.message);
 
-    if (campaign.confirmation && campaignShipping.confirmation === null) {
-      body = campaignShipping.confirmationMessage
-    }
-
+    let sent;
+    let media;
     if (campaign.mediaPath) {
       const publicFolder = path.resolve(__dirname, "..", "public");
       const filePath = path.join(publicFolder, campaign.mediaPath);
 
-      await channel.send(to, contentFromFile(campaign.mediaName, filePath, body), CAMPAIGN_SEND);
-    }
-    else {
-      if (campaign.confirmation && campaignShipping.confirmation === null) {
-        await channel.send(to, { type: "text", text: body }, CAMPAIGN_SEND);
-        await campaignShipping.update({ confirmationRequestedAt: moment() });
-      } else {
-        await channel.send(to, { type: "text", text: body }, CAMPAIGN_SEND);
-      }
+      sent = await channel.send(to, contentFromFile(campaign.mediaName, filePath, body));
+      media = { path: filePath, fileName: campaign.mediaName, mimetype: `${mime.lookup(filePath) || "application/octet-stream"}` };
+    } else {
+      sent = await channel.send(to, { type: "text", text: body });
+      if (askingConfirmation) await campaignShipping.update({ confirmationRequestedAt: moment() });
     }
     await campaignShipping.update({ deliveredAt: moment() });
+
+    // The echo is ignored: the message gets into the contact's history here.
+    try {
+      await SaveCampaignMessageService({
+        companyId: campaign.companyId,
+        whatsappId: campaign.whatsapp.id,
+        number: campaignShipping.number,
+        name: campaignShipping.contact?.name || campaignShipping.number,
+        sent,
+        body,
+        media
+      });
+    } catch (err: any) {
+      Sentry.captureException(err);
+      logger.error(`Campaign message sent but not saved: Campanha=${campaignId};Registro=${campaignShippingId}: ${err.message}`);
+    }
 
     await verifyAndFinalizeCampaign(campaign);
 

@@ -32,11 +32,6 @@ export interface MessageRef {
 
 export interface SendOptions {
   quoted?: MessageRef;
-  /**
-   * Let the inbound pipeline handle this message's echo as if it was typed
-   * on the phone (campaigns still rely on it). Default: the sender saves it.
-   */
-  processEcho?: boolean;
   /** Shown as "Encaminhada" (forwarded) to the recipient. */
   forwarded?: boolean;
 }

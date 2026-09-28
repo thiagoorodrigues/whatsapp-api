@@ -112,7 +112,7 @@ class BaileysChannel implements MessagingChannel {
     // The id is chosen here so the echo can be recognized even if it
     // arrives before sendMessage returns.
     const messageId = newMessageId();
-    if (!options.processEcho) markSentByPlatform(messageId);
+    markSentByPlatform(messageId);
     const baileysContent = toBaileysContent(content);
     if (options.forwarded) {
       (baileysContent as any).contextInfo = { ...(baileysContent as any).contextInfo, isForwarded: true, forwardingScore: 1 };

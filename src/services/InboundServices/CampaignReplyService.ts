@@ -1,11 +1,8 @@
 import moment from "moment";
 import { Op } from "sequelize";
 import { InboundMessage } from "../../channels/inbound";
-import { getIO } from "../../libs/socket";
 import Campaign from "../../models/Campaign";
 import CampaignShipping from "../../models/CampaignShipping";
-import Message from "../../models/Message";
-import Ticket from "../../models/Ticket";
 import { campaignQueue, parseToMilliseconds, randomValue } from "../../queues";
 
 // A reply to a campaign that asks for confirmation sends the campaign
@@ -40,36 +37,5 @@ export const verifyRecentCampaign = async (inbound: InboundMessage) => {
         );
       }
     }
-  }
-};
-
-// Campaign messages open a ticket through their echo (U+200C marks them);
-// it is closed right away.
-export const verifyCampaignMessageAndCloseTicket = async (inbound: InboundMessage) => {
-  const { companyId } = inbound;
-  const io = getIO();
-  const isCampaign = /\u200c/.test(inbound.text);
-  if (inbound.fromMe && isCampaign) {
-    const messageRecord = await Message.findOne({
-      where: { messagesWhatsappsId: inbound.externalId, companyId },
-    });
-    if (!messageRecord) return;
-
-    const ticket = await Ticket.findByPk(messageRecord.ticketId);
-    await ticket.update({ status: "closed" });
-
-    io.to("open").emit(`company-${ticket.companyId}-ticket`, {
-      action: "delete",
-      ticket,
-      ticketId: ticket.id,
-    });
-
-    io.to(ticket.status)
-      .to(ticket.id.toString())
-      .emit(`company-${ticket.companyId}-ticket`, {
-        action: "update",
-        ticket,
-        ticketId: ticket.id,
-      });
   }
 };
