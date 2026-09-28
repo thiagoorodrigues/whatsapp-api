@@ -29,18 +29,24 @@ export const forgetGroup = (connectionId: number | undefined, jid: string): void
   groups.del(groupKey(connectionId, jid));
 };
 
-export const getProfilePictureUrl = async (wbot: Session, jid: string): Promise<string> => {
-  const key = `${wbot.id}:${jid}`;
+/**
+ * Profile picture of a chat, asked to WhatsApp at most once an hour. An
+ * empty string means no picture (or hidden by privacy settings).
+ */
+export const cachedProfilePicture = async (
+  connectionId: number,
+  jid: string,
+  fetch: () => Promise<string | null | undefined>
+): Promise<string> => {
+  const key = `${connectionId}:${jid}`;
   const cached = pictures.get<string>(key);
-  if (cached) return cached;
-  let url: string;
+  if (cached !== undefined) return cached;
+  let url = "";
   try {
-    url = (await wbot.profilePictureUrl(jid)) || "";
+    url = (await fetch()) || "";
   } catch (e) {
-    // No picture or hidden by privacy settings: not worth asking again soon.
     url = "";
   }
-  const result = url || `${process.env.FRONTEND_URL}/nopicture.png`;
-  pictures.set(key, result);
-  return result;
+  pictures.set(key, url);
+  return url;
 };

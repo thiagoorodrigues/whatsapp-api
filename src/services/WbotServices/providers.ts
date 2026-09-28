@@ -1,9 +1,10 @@
-import { proto, WASocket } from "@whiskeysockets/baileys";
+import { InboundMessage } from "../../channels/inbound";
+import { OutgoingContent } from "../../channels/types";
 import SendTicketMessageService from "../MessageServices/SendTicketMessageService";
 import Contact from "../../models/Contact";
 import Setting from "../../models/Setting";
 import Ticket from "../../models/Ticket";
-import { getBodyMessage, isNumeric, sleep, validaCpfCnpj, sendMessageImage, sendMessageLink, makeid } from "./wbotMessageListener";
+import { isNumeric, sleep, validaCpfCnpj, makeid } from "../../helpers/botUtils";
 import formatBody from "../../helpers/Mustache";
 
 import puppeteer from "puppeteer";
@@ -12,14 +13,48 @@ import axios from 'axios';
 import UpdateTicketService from "../TicketServices/UpdateTicketService";
 import fs from 'fs';
 
-export const provider = async (ticket: Ticket, msg: proto.IWebMessageInfo, companyId: number, contact: Contact, wbot: WASocket) => {
+// Image and PDF by URL for the ISP bots (providers.ts); a failure tells
+// the customer instead.
+const sendMediaOrApology = async (ticket: Ticket, contact: Contact, content: OutgoingContent) => {
+  try {
+    await SendTicketMessageService(ticket, content);
+  } catch (error) {
+    await SendTicketMessageService(ticket, {
+      type: "text",
+      text: formatBody("Não consegui enviar o PDF, tente novamente!", contact)
+    });
+  }
+};
+
+const sendMessageImage = async (
+  contact: Contact,
+  ticket: Ticket,
+  url: string,
+  caption: string
+) => sendMediaOrApology(ticket, contact, { type: "image", url, caption });
+
+const sendMessageLink = async (
+  contact: Contact,
+  ticket: Ticket,
+  url: string,
+  caption: string
+) =>
+  sendMediaOrApology(ticket, contact, {
+    type: "document",
+    url,
+    caption,
+    fileName: caption,
+    mimetype: "application/pdf"
+  });
+
+export const provider = async (ticket: Ticket, inbound: InboundMessage, companyId: number, contact: Contact) => {
   // Every reply goes through the ticket's channel and is saved in the ticket.
   const send = (content: { text: string }) => SendTicketMessageService(ticket, { type: "text", text: content.text });
 
   const filaescolhida = ticket.queue?.name
   if (filaescolhida === "2ª Via de Boleto" || filaescolhida === "2 Via de Boleto") {
     let cpfcnpj
-    cpfcnpj = getBodyMessage(msg);
+    cpfcnpj = inbound.text;
     cpfcnpj = cpfcnpj.replace(/\./g, '');
     cpfcnpj = cpfcnpj.replace('-', '')
     cpfcnpj = cpfcnpj.replace('/', '')
@@ -76,7 +111,7 @@ export const provider = async (ticket: Ticket, msg: proto.IWebMessageInfo, compa
     const urlixc = urlixcdb.value
     const asaastk = asaastoken.value
 
-    const cnpj_cpf = getBodyMessage(msg);
+    const cnpj_cpf = inbound.text;
     let numberCPFCNPJ = cpfcnpj;
 
     if (urlmkauth != "" && Client_Id != "" && Client_Secret != "") {
@@ -181,7 +216,7 @@ export const provider = async (ticket: Ticket, msg: proto.IWebMessageInfo, compa
                           await send(bodyqrcode);
                           let linkBoleto = `https://chart.googleapis.com/chart?cht=qr&chs=500x500&chld=L|0&chl=${qrcode}`
                           await sleep(2000)
-                          await sendMessageImage(wbot, contact, ticket, linkBoleto, "")
+                          await sendMessageImage(contact, ticket, linkBoleto, "")
                         }
                         const bodyPdf = { text: formatBody(`Agora vou te enviar o boleto em *PDF* caso você precise.`, contact) };
                         await sleep(2000)
@@ -205,7 +240,7 @@ export const provider = async (ticket: Ticket, msg: proto.IWebMessageInfo, compa
                           });
 
                           await browser.close();
-                          await sendMessageLink(wbot, contact, ticket, nomePDF, nomePDF);
+                          await sendMessageLink(contact, ticket, nomePDF, nomePDF);
                         });
 
 
@@ -418,7 +453,7 @@ export const provider = async (ticket: Ticket, msg: proto.IWebMessageInfo, compa
                           await send(bodyPix);
                           let linkBoleto = `https://chart.googleapis.com/chart?cht=qr&chs=500x500&chld=L|0&chl=${payload}`
                           await sleep(2000)
-                          await sendMessageImage(wbot, contact, ticket, linkBoleto, '')
+                          await sendMessageImage(contact, ticket, linkBoleto, '')
                           var optionsBoletopend = {
                             method: 'GET',
                             url: `https://www.asaas.com/api/v3/payments/${id_payment_pending}/identificationField`,
@@ -556,7 +591,7 @@ export const provider = async (ticket: Ticket, msg: proto.IWebMessageInfo, compa
                         await send(bodyPix);
                         let linkBoleto = `https://chart.googleapis.com/chart?cht=qr&chs=500x500&chld=L|0&chl=${payload}`
                         await sleep(2000)
-                        await sendMessageImage(wbot, contact, ticket, linkBoleto, '')
+                        await sendMessageImage(contact, ticket, linkBoleto, '')
                         var optionsBoleto = {
                           method: 'GET',
                           url: `https://www.asaas.com/api/v3/payments/${id_payment_overdue}/identificationField`,
@@ -832,7 +867,7 @@ export const provider = async (ticket: Ticket, msg: proto.IWebMessageInfo, compa
                       await send(body_pixqr);
                       let linkBoleto = `https://chart.googleapis.com/chart?cht=qr&chs=500x500&chld=L|0&chl=${pix}`
                       await sleep(2000)
-                      await sendMessageImage(wbot, contact, ticket, linkBoleto, '')
+                      await sendMessageImage(contact, ticket, linkBoleto, '')
                       ///VE SE ESTA BLOQUEADO PARA LIBERAR!
                       var optionscontrato = {
                         method: 'POST',
@@ -1191,7 +1226,7 @@ export const provider = async (ticket: Ticket, msg: proto.IWebMessageInfo, compa
 
   if (filaescolhida === "Religue de Confiança" || filaescolhida === "Liberação em Confiança") {
     let cpfcnpj
-    cpfcnpj = getBodyMessage(msg);
+    cpfcnpj = inbound.text;
     cpfcnpj = cpfcnpj.replace(/\./g, '');
     cpfcnpj = cpfcnpj.replace('-', '')
     cpfcnpj = cpfcnpj.replace('/', '')
@@ -1248,7 +1283,7 @@ export const provider = async (ticket: Ticket, msg: proto.IWebMessageInfo, compa
     const urlixc = urlixcdb.value
     const asaastk = asaastoken.value
 
-    const cnpj_cpf = getBodyMessage(msg);
+    const cnpj_cpf = inbound.text;
     let numberCPFCNPJ = cpfcnpj;
 
     if (ixcapikey.value != "" && urlixcdb.value != "") {

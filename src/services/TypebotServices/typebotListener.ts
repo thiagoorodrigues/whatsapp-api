@@ -1,8 +1,8 @@
 import axios, { AxiosRequestConfig } from "axios";
 import Ticket from "../../models/Ticket";
 import QueueIntegrations from "../../models/QueueIntegrations";
-import { WASocket, delay, proto } from "@whiskeysockets/baileys";
-import { getBodyMessage } from "../WbotServices/wbotMessageListener";
+import { sleep as delay } from "../../helpers/botUtils";
+import { InboundMessage } from "../../channels/inbound";
 import { logger } from "../../utils/logger";
 import { isNil } from "lodash";
 import UpdateTicketService from "../TicketServices/UpdateTicketService";
@@ -10,26 +10,19 @@ import SendTicketMessageService from "../MessageServices/SendTicketMessageServic
 import { getTicketChannel, OutgoingContent, ticketAddress } from "../../channels";
 
 
-type Session = WASocket & {
-    id?: number;
-};
-
 interface Request {
-    wbot: Session;
-    msg: proto.IWebMessageInfo;
+    inbound: InboundMessage;
     ticket: Ticket;
     typebot: QueueIntegrations;
 }
 
 
 const typebotListener = async ({
-    wbot,
-    msg,
+    inbound,
     ticket,
     typebot
 }: Request): Promise<void> => {
 
-    if (msg.key.remoteJid === 'status@broadcast') return;
 
     // Replies go through the ticket's channel and are saved in the ticket.
     const reply = (content: OutgoingContent) => SendTicketMessageService(ticket, content);
@@ -54,11 +47,12 @@ const typebotListener = async ({
         typebotRestartMessage
     } = typebot;
 
-    const number = msg.key.remoteJid.replace(/\D/g, '');
+    // Phone of the contact (chats may arrive by LID).
+    const number = ticket.contact?.number || inbound.sender.jid.replace(/\D/g, '');
 
-    let body = getBodyMessage(msg);
+    let body = inbound.text;
 
-    async function createSession(msg, typebot, number) {
+    async function createSession(typebot, number) {
         try {
             const id = Math.floor(Math.random() * 10000000000).toString();
 
@@ -69,7 +63,7 @@ const typebotListener = async ({
                 "isOnlyRegistering": false,
                 "prefilledVariables": {
                     "number": number,
-                    "pushName": msg.pushName || ""
+                    "pushName": inbound.sender.name || ""
                 },
             };
 
@@ -113,7 +107,7 @@ const typebotListener = async ({
         }
 
         if (isNil(ticket.typebotSessionId)) {
-            dataStart = await createSession(msg, typebot, number);
+            dataStart = await createSession(typebot, number);
             sessionId = dataStart.sessionId
             status = true;
             await ticket.update({

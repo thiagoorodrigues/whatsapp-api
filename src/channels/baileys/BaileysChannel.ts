@@ -4,6 +4,7 @@ import { getWbot } from "../../libs/wbot";
 import { getContactJid } from "../../helpers/GetPhoneJid";
 import { markSentByPlatform, newMessageId } from "./sentByPlatform";
 import { logger } from "../../utils/logger";
+import { cachedProfilePicture } from "../../libs/whatsappCache";
 import {
   ChatAddress,
   MediaSource,
@@ -187,11 +188,9 @@ class BaileysChannel implements MessagingChannel {
   }
 
   async profilePictureUrl(chat: ChatAddress): Promise<string | null> {
-    try {
-      return (await this.socket().profilePictureUrl(jidOf(chat))) || null;
-    } catch (e) {
-      return null;
-    }
+    const jid = jidOf(chat);
+    const url = await cachedProfilePicture(this.connectionId, jid, () => this.socket().profilePictureUrl(jid));
+    return url || null;
   }
 }
 

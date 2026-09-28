@@ -1,4 +1,4 @@
-import { cachedGroupMetadata, forgetGroup, getGroupMetadata, getProfilePictureUrl } from "../whatsappCache";
+import { cachedGroupMetadata, cachedProfilePicture, forgetGroup, getGroupMetadata } from "../whatsappCache";
 
 const socket = (id: number): any => ({
   id,
@@ -21,12 +21,12 @@ describe("whatsappCache", () => {
     expect(a.groupMetadata).toHaveBeenCalledTimes(2);
   });
 
-  it("caches profile pictures, including the no-picture fallback", async () => {
-    process.env.FRONTEND_URL = "http://app";
-    const s = socket(3);
-    s.profilePictureUrl.mockRejectedValue(new Error("item-not-found"));
-    expect(await getProfilePictureUrl(s, "5511999999999@s.whatsapp.net")).toBe("http://app/nopicture.png");
-    expect(await getProfilePictureUrl(s, "5511999999999@s.whatsapp.net")).toBe("http://app/nopicture.png");
-    expect(s.profilePictureUrl).toHaveBeenCalledTimes(1);
+  it("caches profile pictures, including 'no picture'", async () => {
+    const fetch = jest.fn().mockRejectedValue(new Error("item-not-found"));
+    expect(await cachedProfilePicture(3, "5511999999999@s.whatsapp.net", fetch)).toBe("");
+    expect(await cachedProfilePicture(3, "5511999999999@s.whatsapp.net", fetch)).toBe("");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const other = jest.fn().mockResolvedValue("https://pps.whatsapp.net/a.jpg");
+    expect(await cachedProfilePicture(4, "5511999999999@s.whatsapp.net", other)).toBe("https://pps.whatsapp.net/a.jpg");
   });
 });
