@@ -4,6 +4,7 @@ import { buildContext, buildSystemPrompt } from "./prompt";
 import { buildToolSet, DeferredAction } from "./tools";
 import { HttpContext } from "./httpTools";
 import { openMcpSession } from "./mcpTools";
+import { knowledgeForTurn, searchKnowledge } from "./knowledge/KnowledgeService";
 import { ChatMessage, ToolCallRecord } from "./types";
 
 export const MAX_TOOL_STEPS = 8;
@@ -31,9 +32,13 @@ const generateReply = async (params: {
   httpContext?: HttpContext;
 }): Promise<ReplyResult> => {
   const { agent, apiKey, history, queues } = params;
+  const knowledge = await knowledgeForTurn(agent.id, agent.companyId);
   const toolSet = buildToolSet(agent.tools || {}, {
     queues,
-    http: params.httpContext || { contactName: params.contactName }
+    http: params.httpContext || { contactName: params.contactName },
+    searchKnowledge: knowledge.searchable
+      ? query => searchKnowledge(agent.id, agent.companyId, query)
+      : undefined
   });
   const mcp = await openMcpSession(agent.tools?.mcp || [], { companyId: agent.companyId });
 
@@ -48,7 +53,7 @@ const generateReply = async (params: {
     effort: agent.effort,
     maxTokens: agent.maxTokens,
     temperature: agent.temperature,
-    system: buildSystemPrompt(agent.prompt || ""),
+    system: buildSystemPrompt(agent.prompt || "", knowledge),
     systemContext: buildContext({ companyName: params.companyName, contactName: params.contactName }),
     history,
     tools: [...toolSet.definitions, ...mcp.definitions],

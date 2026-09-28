@@ -1,5 +1,11 @@
 const runTurn = jest.fn();
 jest.mock("../providers", () => ({ getProvider: () => ({ runTurn }) }));
+const knowledgeForTurn = jest.fn(async (..._a: any[]) => ({ alwaysIncluded: [], searchable: false }));
+const searchKnowledge = jest.fn();
+jest.mock("../knowledge/KnowledgeService", () => ({
+  knowledgeForTurn: (...a: any[]) => knowledgeForTurn(...a),
+  searchKnowledge: (...a: any[]) => searchKnowledge(...a)
+}));
 
 // eslint-disable-next-line import/first
 import generateReply from "../generateReply";
@@ -41,5 +47,28 @@ describe("generateReply", () => {
     expect(req.tools.map((t: any) => t.name)).toEqual(["transferir_para_atendente"]);
     expect(result.reply).toBe("Vou te passar para o suporte.");
     expect(result.actions).toEqual([{ type: "transfer", queueId: 7, reason: "boleto" }]);
+  });
+
+  it("offers the knowledge search and puts 'always include' documents in the prompt", async () => {
+    knowledgeForTurn.mockResolvedValueOnce({
+      alwaysIncluded: [{ title: "Preços", description: null, content: "Entrega Contagem: R$ 15" }],
+      searchable: true
+    });
+    searchKnowledge.mockResolvedValue([{ title: "Manual", description: "v2", content: "Modo econômico: botão 3" }]);
+    runTurn.mockImplementation(async req => {
+      const call = await req.executeTool("buscar_base_conhecimento", { consulta: "modo econômico" });
+      return { text: "Aperte o botão 3.", toolCalls: [{ name: "buscar_base_conhecimento", input: {}, result: call.result }], inputTokens: 1, outputTokens: 1, stopReason: "end_turn" };
+    });
+    await generateReply({
+      agent: { id: 4, companyId: 1, provider: "anthropic", model: "m", prompt: "Você é a Ana.", tools: {} } as any,
+      apiKey: "k",
+      history: [{ role: "user", text: "como ligo o modo econômico?" }],
+      queues: []
+    });
+    const req = runTurn.mock.calls[runTurn.mock.calls.length - 1][0];
+    expect(req.tools.map((t: any) => t.name)).toContain("buscar_base_conhecimento");
+    expect(req.system).toContain('<documento titulo="Preços">');
+    expect(req.system).toContain("Entrega Contagem: R$ 15");
+    expect(searchKnowledge).toHaveBeenCalledWith(4, 1, "modo econômico");
   });
 });

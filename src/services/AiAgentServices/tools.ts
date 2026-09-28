@@ -11,6 +11,8 @@ export type DeferredAction =
 export interface ToolContext {
   queues: { id: number; name: string }[];
   http?: HttpContext;
+  /** Search of the agent's knowledge base (when it has documents to search). */
+  searchKnowledge?: (query: string) => Promise<{ title: string; description: string | null; content: string }[]>;
 }
 
 export interface ToolSet {
@@ -99,6 +101,42 @@ export const buildToolSet = (config: AiAgentTools = {}, ctx: ToolContext): ToolS
       if (decided) return decided;
       actions.push({ type: "close", reason: text(input.motivo) });
       return { result: "O atendimento será encerrado após sua resposta." };
+    };
+  }
+
+  if (ctx.searchKnowledge) {
+    definitions.push({
+      name: "buscar_base_conhecimento",
+      description:
+        "Busca trechos nos documentos da empresa (base de conhecimento). Use antes de responder sobre produtos, " +
+        "preços, prazos, políticas ou procedimentos. A busca é por palavras: se não achar, tente de novo com " +
+        "sinônimos ou termos mais gerais. Responda só com o que estiver nos trechos; se não houver, diga que não sabe.",
+      parameters: {
+        type: "object",
+        properties: {
+          consulta: { type: "string", description: "Palavras-chave do que procurar, ex.: \"prazo entrega Contagem\"." }
+        },
+        required: ["consulta"],
+        additionalProperties: false
+      }
+    });
+    handlers.buscar_base_conhecimento = async input => {
+      const query = text(input.consulta);
+      if (!query) return { result: "Informe o que procurar.", error: true };
+      const hits = await ctx.searchKnowledge(query);
+      if (!hits.length) {
+        return {
+          result: `Nada encontrado para "${query}". Tente outras palavras ou diga ao cliente que não tem essa informação.`
+        };
+      }
+      return {
+        result: hits
+          .map(
+            (h, i) =>
+              `[${i + 1}] Documento: ${h.title}${h.description ? ` (${h.description})` : ""}\n${h.content}`
+          )
+          .join("\n\n")
+      };
     };
   }
 

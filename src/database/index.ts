@@ -36,6 +36,8 @@ import AiAgent from "../models/AiAgent";
 import AiAgentRun from "../models/AiAgentRun";
 import AiMcpConnection from "../models/AiMcpConnection";
 import AiOAuthClient from "../models/AiOAuthClient";
+import AiKnowledgeDocument from "../models/AiKnowledgeDocument";
+import AiKnowledgeChunk from "../models/AiKnowledgeChunk";
 
 // eslint-disable-next-line
 const dbConfig = require("../config/database");
@@ -81,6 +83,8 @@ const models = [
   AiAgentRun,
   AiMcpConnection,
   AiOAuthClient,
+  AiKnowledgeDocument,
+  AiKnowledgeChunk,
 ];
 
 sequelize.addModels(models);

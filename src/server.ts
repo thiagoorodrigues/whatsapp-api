@@ -7,6 +7,7 @@ import Company from "./models/Company";
 import { startQueueProcess } from "./queues";
 import { TransferTicketQueue } from "./wbotTransferTicketQueue";
 import cron from "node-cron";
+import { resumeInterruptedIndexing } from "./services/AiAgentServices/knowledge/KnowledgeService";
 
 const server = app.listen(process.env.PORT, async () => {
   const companies = await Company.findAll();
@@ -20,6 +21,9 @@ const server = app.listen(process.env.PORT, async () => {
   Promise.all(allPromises).then(() => {
     startQueueProcess();
   });
+
+  // Knowledge documents a restart left half-indexed.
+  resumeInterruptedIndexing().catch(err => logger.error(`Knowledge indexing resume failed: ${err}`));
 
   logger.info(`Server started on port: ${process.env.PORT}`);
 });
