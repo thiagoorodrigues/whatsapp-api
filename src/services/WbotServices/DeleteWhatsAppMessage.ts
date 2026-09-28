@@ -5,7 +5,6 @@ import Message from "../../models/Message";
 import Ticket from "../../models/Ticket";
 
 const DeleteWhatsAppMessage = async (messageId: string): Promise<Message> => {
-  console.log('messageId -> ', messageId);
   const message = await Message.findByPk(messageId, {
     include: [
       {

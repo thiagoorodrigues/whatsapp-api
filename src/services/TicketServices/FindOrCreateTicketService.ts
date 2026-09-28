@@ -27,8 +27,6 @@ const FindOrCreateTicketService = async (contact: Contact, whatsappId: number, u
     order: [["id", "DESC"]]
   });
 
-  console.log(ticket?.id);
-
   if (!!ticket) {
     await ticket.update({ unreadMessages, whatsappId });
   }
