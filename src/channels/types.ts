@@ -14,7 +14,7 @@ export interface ChatAddress {
 export type MediaSource = { buffer: Buffer } | { path: string } | { url: string };
 
 export type OutgoingContent =
-  | { type: "text"; text: string }
+  | { type: "text"; text: string; /** Ids of the people mentioned ("@name" in groups). */ mentions?: string[] }
   | ({ type: "image"; caption?: string } & MediaSource)
   | ({ type: "video"; caption?: string; fileName?: string } & MediaSource)
   | ({ type: "audio"; mimetype?: string; voice?: boolean } & MediaSource)

@@ -38,6 +38,11 @@ describe("addresses", () => {
 });
 
 describe("toBaileysContent", () => {
+  it("sends the mentioned jids of a text", () => {
+    expect(toBaileysContent({ type: "text", text: "oi @123", mentions: ["123@lid"] })).toEqual({ text: "oi @123", mentions: ["123@lid"] });
+    expect(toBaileysContent({ type: "text", text: "oi", mentions: [] })).toEqual({ text: "oi" });
+  });
+
   it("maps each content type", () => {
     const buffer = Buffer.from("x");
     expect(toBaileysContent({ type: "text", text: "oi" })).toEqual({ text: "oi" });

@@ -31,7 +31,7 @@ const media = (source: MediaSource): Buffer | { url: string } => {
 export const toBaileysContent = (content: OutgoingContent): AnyMessageContent => {
   switch (content.type) {
     case "text":
-      return { text: content.text };
+      return content.mentions?.length ? { text: content.text, mentions: content.mentions } : { text: content.text };
     case "image":
       return { image: media(content), caption: content.caption };
     case "video":
