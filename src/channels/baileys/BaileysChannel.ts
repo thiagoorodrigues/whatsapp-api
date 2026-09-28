@@ -3,6 +3,7 @@ import type { AnyMessageContent, WAMessage, WASocket } from "@whiskeysockets/bai
 import { getWbot } from "../../libs/wbot";
 import { getContactJid } from "../../helpers/GetPhoneJid";
 import { markSentByPlatform, newMessageId } from "./sentByPlatform";
+import { logger } from "../../utils/logger";
 import {
   ChatAddress,
   MediaSource,
@@ -16,6 +17,8 @@ import {
 } from "../types";
 
 type Session = WASocket & { id?: number };
+
+const warnedReceipts = new Set<number>();
 
 const media = (source: MediaSource): Buffer | { url: string } => {
   if ("buffer" in source) return source.buffer;
@@ -141,7 +144,27 @@ class BaileysChannel implements MessagingChannel {
           fromMe: false
         };
       });
-    if (keys.length) await this.socket().readMessages(keys);
+    if (!keys.length) return;
+    const socket = this.socket();
+    await socket.readMessages(keys);
+    await this.warnIfReceiptsHidden(socket);
+  }
+
+  // Baileys sends "read-self" (only this account's devices) when the
+  // account hides read receipts in WhatsApp's privacy settings.
+  private async warnIfReceiptsHidden(socket: Session): Promise<void> {
+    if (warnedReceipts.has(this.connectionId)) return;
+    try {
+      const privacy = await socket.fetchPrivacySettings();
+      if (privacy?.readreceipts && privacy.readreceipts !== "all") {
+        warnedReceipts.add(this.connectionId);
+        logger.warn(
+          `Connection ${this.connectionId}: read receipts are off in WhatsApp privacy settings; contacts will not see messages as read`
+        );
+      }
+    } catch (e) {
+      // informational only
+    }
   }
 
   async setPresence(presence: Presence): Promise<void> {

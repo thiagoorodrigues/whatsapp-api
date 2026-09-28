@@ -72,6 +72,14 @@ export const index = async (req: Request, res: Response): Promise<Response> => {
   return res.json({ count, messages, ticket, hasMore });
 };
 
+// Messages that arrive while the agent has the chat open on screen.
+export const markRead = async (req: Request, res: Response): Promise<Response> => {
+  const { ticketId } = req.params;
+  const ticket = await ShowTicketService(ticketId, req.user.companyId);
+  await SetTicketMessagesAsRead(ticket);
+  return res.status(204).send();
+};
+
 export const store = async (req: Request, res: Response): Promise<Response> => {
   const { ticketId } = req.params;
   const { body, quotedMsg }: MessageData = req.body;
