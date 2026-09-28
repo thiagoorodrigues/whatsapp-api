@@ -58,8 +58,7 @@ const SaveSentMessageService = async ({ ticket, sent, body, media, quotedMsgId }
       ack: 1,
       quotedMsgId,
       remoteJid: sent.chatJid,
-      dataJson: sent.raw ? JSON.stringify(sent.raw) : null,
-      isAws: false
+      dataJson: sent.raw ? JSON.stringify(sent.raw) : null
     }
   });
 };

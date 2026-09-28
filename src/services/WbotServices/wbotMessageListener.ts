@@ -656,7 +656,6 @@ const verifyMediaMessage = async (
     remoteJid: msg.key.remoteJid,
     participant: msg.key.participant,
     dataJson: JSON.stringify(msg),
-    isAws: false,
     createdAt: timeConverter(Number(msg.messageTimestamp))
   };
 
@@ -718,8 +717,7 @@ export const verifyMessage = async (msg: proto.IWebMessageInfo, ticket: Ticket, 
     participant: msg.key.participant,
     dataJson: JSON.stringify(msg),
     isEdited: isEdited,
-    createdAt: timeConverter(Number(msg.messageTimestamp)),
-    isAws: false
+    createdAt: timeConverter(Number(msg.messageTimestamp))
   };
 
   await ticket.update({

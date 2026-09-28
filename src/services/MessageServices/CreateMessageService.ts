@@ -20,7 +20,6 @@ interface MessageData {
   remoteJid?: string | null;
   participant?: string | null;
   dataJson?: string | null;
-  isAws?: boolean;
   isEdited?: boolean;
 }
 interface Request {

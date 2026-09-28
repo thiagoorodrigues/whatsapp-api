@@ -1,20 +1,22 @@
 import AppError from "../../errors/AppError";
 import { getDefaultChannel } from "../../channels";
 
-// Only fails when the number cannot be checked (no connected session or a
-// WhatsApp error): the lookup result never blocked contacts and still
-// doesn't.
-const CheckIsValidContact = async (
-  number: string,
-  companyId: number
-): Promise<void> => {
+/**
+ * Checks that the number has WhatsApp and returns it as WhatsApp knows it
+ * (digits only; e.g. Brazilian numbers may come back without the 9th digit).
+ */
+const CheckIsValidContact = async (number: string, companyId: number): Promise<string> => {
   const channel = await getDefaultChannel(companyId);
 
+  let result;
   try {
-    await channel.checkNumber(number);
+    result = await channel.checkNumber(number);
   } catch (err: any) {
     throw new AppError("ERR_WAPP_CHECK_CONTACT");
   }
+
+  if (!result.exists) throw new AppError("ERR_WAPP_INVALID_CONTACT");
+  return (result.jid || number).split("@")[0].replace(/\D/g, "");
 };
 
 export default CheckIsValidContact;

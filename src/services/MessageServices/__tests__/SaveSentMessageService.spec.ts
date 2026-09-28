@@ -35,8 +35,7 @@ describe("SaveSentMessageService", () => {
         ack: 1,
         quotedMsgId: "q1",
         remoteJid: "123@lid",
-        dataJson: JSON.stringify(sent.raw),
-        isAws: false
+        dataJson: JSON.stringify(sent.raw)
       })
     );
     expect(ticket.update).toHaveBeenCalledWith({ lastMessage: "Olá", fromMe: true });
@@ -55,7 +54,6 @@ describe("SaveSentMessageService", () => {
       expect.objectContaining({
         mediaUrl: "company1/123_ab_boleto_maio.pdf",
         mediaType: "application",
-        isAws: false,
         body: "boleto maio.pdf"
       })
     );

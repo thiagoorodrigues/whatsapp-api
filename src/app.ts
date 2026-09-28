@@ -2,6 +2,7 @@ import "./bootstrap";
 import "reflect-metadata";
 import "express-async-errors";
 import express, { Request, Response, NextFunction } from "express";
+import multer from "multer";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import * as Sentry from "@sentry/node";
@@ -45,6 +46,11 @@ app.use(async (err: Error, req: Request, res: Response, _: NextFunction) => {
   if (err instanceof AppError) {
     logger.warn(err);
     return res.status(err.statusCode).json({ error: err.message });
+  }
+
+  if (err instanceof multer.MulterError) {
+    const code = err.code === "LIMIT_FILE_SIZE" ? "ERR_FILE_TOO_LARGE" : "ERR_UPLOAD_INVALID";
+    return res.status(400).json({ error: code });
   }
 
   logger.error(err);

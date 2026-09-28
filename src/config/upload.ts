@@ -5,10 +5,13 @@ import fs from "fs";
 const publicFolder = path.resolve(__dirname, "..", "..", "public");
 
 // Files sent by agents: kept in memory, then saved in the company folder
-// when the message goes out (helpers/mediaStorage).
+// when the message goes out (helpers/mediaStorage). WhatsApp takes
+// documents up to 100 MB on most devices.
+export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+
 export const memoryUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 4 * 1024 * 1024 }
+  limits: { fileSize: MAX_UPLOAD_BYTES, files: 10 }
 });
 
 export default {

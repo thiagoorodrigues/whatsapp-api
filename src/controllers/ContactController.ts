@@ -9,7 +9,6 @@ import UpdateContactService from "../services/ContactServices/UpdateContactServi
 import DeleteContactService from "../services/ContactServices/DeleteContactService";
 import GetContactService from "../services/ContactServices/GetContactService";
 
-import CheckContactNumber from "../services/WbotServices/CheckNumber";
 import CheckIsValidContact from "../services/WbotServices/CheckIsValidContact";
 import GetProfilePicUrl from "../services/WbotServices/GetProfilePicUrl";
 import AppError from "../errors/AppError";
@@ -83,12 +82,9 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   try {
     await schema.validate(newContact);
 
-    await CheckIsValidContact(newContact.number, companyId);
-
+    // Groups have no phone number to check.
     if (!newContact.isGroup) {
-      const validNumber = await CheckContactNumber(newContact.number, companyId);
-      const number = validNumber.jid.replace(/\D/g, "");
-      newContact.number = number;
+      newContact.number = await CheckIsValidContact(newContact.number, companyId);
     }
 
 
@@ -151,12 +147,8 @@ export const update = async (
     throw new AppError(err.message);
   }
 
-  await CheckIsValidContact(contactData.number, companyId);
-
-  if (!contactData.isGroup) {
-    const validNumber = await CheckContactNumber(contactData.number, companyId);
-    const number = validNumber.jid.replace(/\D/g, "");
-    contactData.number = number;
+  if (!contactData.isGroup && contactData.number) {
+    contactData.number = await CheckIsValidContact(contactData.number, companyId);
   }
 
   const { contactId } = req.params;
