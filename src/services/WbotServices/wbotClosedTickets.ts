@@ -8,6 +8,7 @@ import moment from "moment";
 import ShowTicketService from "../TicketServices/ShowTicketService";
 import TicketTraking from "../../models/TicketTraking";
 import { logger } from "../../utils/logger";
+import { expiringWhatsapps } from "./autoTicketRules";
 
 export const ClosedAllOpenTickets = async (companyId: number): Promise<void> => {
 
@@ -49,10 +50,26 @@ export const ClosedAllOpenTickets = async (companyId: number): Promise<void> => 
   try {
 
 
+    // Só faz sentido percorrer tickets se alguma conexão tem expiração configurada;
+    // e a conexão é lida uma vez, sem a sessão do Baileys, não uma vez por ticket.
+    const whatsapps = expiringWhatsapps(
+      await Whatsapp.findAll({
+        where: { companyId },
+        attributes: ["id", "expiresTicket", "expiresInactiveMessage"]
+      })
+    );
+    if (whatsapps.length === 0) return;
+    const byId = new Map(whatsapps.map(w => [w.id, w]));
+
     let subtractHour = moment().subtract(1, 'hour').format('YYYY-MM-DD HH:mm:ss')
 
     const { rows: tickets } = await Ticket.findAndCountAll({
-      where: { status: { [Op.in]: ["open", "pending"] }, companyId, updatedAt: { [Op.lte]: subtractHour } },
+      where: {
+        status: { [Op.in]: ["open", "pending"] },
+        companyId,
+        whatsappId: { [Op.in]: whatsapps.map(w => w.id) },
+        updatedAt: { [Op.lte]: subtractHour }
+      },
       order: [["updatedAt", "DESC"]]
     });
 
@@ -60,7 +77,7 @@ export const ClosedAllOpenTickets = async (companyId: number): Promise<void> => 
 
     tickets.forEach(async ticket => {
       const showTicket = await ShowTicketService(ticket.id, companyId);
-      const whatsapp = await Whatsapp.findByPk(showTicket?.whatsappId);
+      const whatsapp = byId.get(showTicket?.whatsappId);
       const ticketTraking = await TicketTraking.findOne({
         where: {
           ticketId: ticket.id,
