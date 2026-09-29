@@ -8,7 +8,7 @@ module.exports = {
           "Plans",
           [
             {
-              name: "SwEasy Omni Envios",
+              name: "WeConex Envios",
               users: 1,
               connections: 1,
               queues: 0,
@@ -23,7 +23,7 @@ module.exports = {
           "Companies",
           [
             {
-              name: "SwEasy OmniChannel",
+              name: "WeConex",
               planId: 1,
               dueDate: "2093-03-14 04:00:00+01",
               createdAt: new Date(),

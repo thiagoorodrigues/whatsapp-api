@@ -13,7 +13,7 @@ const statusRoutes = Router();
 statusRoutes.get("/", (_req, res) =>
   res.json({
     version,
-    message: "API SwEasy OmniChannel em funcionamento.",
+    message: "API WeConex em funcionamento.",
     docs: "/api-docs"
   })
 );

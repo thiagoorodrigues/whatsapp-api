@@ -11,7 +11,7 @@ docsRoutes.use(
   "/api-docs",
   swaggerUi.serve,
   swaggerUi.setup(openapi, {
-    customSiteTitle: "SwEasy OmniChannel – API",
+    customSiteTitle: "WeConex – API",
     swaggerOptions: { persistAuthorization: true }
   })
 );

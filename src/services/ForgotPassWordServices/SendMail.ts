@@ -63,7 +63,7 @@ const SendMail = async (email: string, tokenSenha: string) => {
           from: fromEmail,
           to: email,
           subject:  `Redefinição de Senha`,
-          text: `Olá,\n\nVocê solicitou a redefinição de senha para sua conta no SwEasy OmniChannel. Utilize o seguinte Código de Verificação para concluir o processo de redefinição de senha:\n\nCódigo de Verificação: ${tokenSenha}\n\nPor favor, copie e cole o Código de Verificação no campo 'Código de Verificação' na plataforma SwEasy OmniChannel.\n\nSe você não solicitou esta redefinição de senha, por favor, ignore este e-mail.\n\n\nAtenciosamente,\nEquipe SwEasy OmniChannel`
+          text: `Olá,\n\nVocê solicitou a redefinição de senha para sua conta no WeConex. Utilize o seguinte Código de Verificação para concluir o processo de redefinição de senha:\n\nCódigo de Verificação: ${tokenSenha}\n\nPor favor, copie e cole o Código de Verificação no campo 'Código de Verificação' na plataforma WeConex.\n\nSe você não solicitou esta redefinição de senha, por favor, ignore este e-mail.\n\n\nAtenciosamente,\nEquipe WeConex`
         };
 
         const info = await transporter.sendMail(mailOptions);

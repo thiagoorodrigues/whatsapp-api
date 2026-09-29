@@ -56,7 +56,7 @@ const security = [{ connectionToken: [] }];
 const openapi = {
   openapi: "3.0.3",
   info: {
-    title: "SwEasy OmniChannel – API de mensagens",
+    title: "WeConex – API de mensagens",
     version: "1.0.0",
     description: [
       "API para enviar mensagens de WhatsApp a partir de outros sistemas.",
