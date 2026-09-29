@@ -1,10 +1,9 @@
-import { Op, fn, where, col, Filterable, Includeable } from "sequelize";
+import { Op, fn, where, col, literal, Filterable, Includeable } from "sequelize";
 import buildTicketFilters from "./buildTicketFilters";
 import { startOfDay, endOfDay, parseISO } from "date-fns";
 
 import Ticket from "../../models/Ticket";
 import Contact from "../../models/Contact";
-import Message from "../../models/Message";
 import Queue from "../../models/Queue";
 import User from "../../models/User";
 import ShowUserService from "../UserServices/ShowUserService";
@@ -101,47 +100,41 @@ const ListTicketsService = async ({
     };
   }
 
-  if (searchParam) {
-    const sanitizedSearchParam = searchParam.toLocaleLowerCase().trim();
+  // Matching messages go through a subquery: joining them made the LIMIT
+  // count ticket x message rows, so one chat quoting the term many times
+  // filled the page and hid the contacts whose name actually matched.
+  let searchOrder: any[] = [];
 
-    includeCondition = [
-      ...includeCondition,
-      {
-        model: Message,
-        as: "messages",
-        attributes: ["id", "body"],
-        where: {
-          body: where(
-            fn("LOWER", col("body")),
-            "LIKE",
-            `%${sanitizedSearchParam}%`
-          )
-        },
-        required: false,
-        duplicating: false
-      }
-    ];
+  if (searchParam) {
+    const term = `%${searchParam.toLocaleLowerCase().trim()}%`;
+    const escapedTerm = Ticket.sequelize.escape(term);
 
     whereCondition = {
       ...whereCondition,
       [Op.or]: [
+        where(fn("LOWER", col("contact.name")), "LIKE", term),
+        { "$contact.number$": { [Op.like]: term } },
         {
-          "$contact.name$": where(
-            fn("LOWER", col("contact.name")),
-            "LIKE",
-            `%${sanitizedSearchParam}%`
-          )
-        },
-        { "$contact.number$": { [Op.like]: `%${sanitizedSearchParam}%` } },
-        {
-          "$message.body$": where(
-            fn("LOWER", col("body")),
-            "LIKE",
-            `%${sanitizedSearchParam}%`
-          )
+          id: {
+            [Op.in]: literal(
+              `(SELECT "ticketId" FROM "Messages" WHERE "companyId" = ${Number(
+                companyId
+              )} AND LOWER("body") LIKE ${escapedTerm})`
+            )
+          }
         }
       ]
     };
+
+    // Tickets whose contact name or number matches come first.
+    searchOrder = [
+      [
+        literal(
+          `CASE WHEN LOWER("contact"."name") LIKE ${escapedTerm} OR "contact"."number" LIKE ${escapedTerm} THEN 0 ELSE 1 END`
+        ),
+        "ASC"
+      ]
+    ];
   }
 
   if (date) {
@@ -242,7 +235,7 @@ const ListTicketsService = async ({
     distinct: true,
     limit,
     offset,
-    order: [["updatedAt", "DESC"]],
+    order: [...searchOrder, ["updatedAt", "DESC"]],
     subQuery: false
   });
 
