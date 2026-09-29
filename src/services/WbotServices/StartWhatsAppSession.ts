@@ -6,16 +6,7 @@ import wbotMonitor from "./wbotMonitor";
 import { logger } from "../../utils/logger";
 import * as Sentry from "@sentry/node";
 import SyncSessionContactsService from "../WhatsappContactServices/SyncSessionContactsService";
-
-// LID <-> phone pairs the session already learned (saved by authState).
-const sessionLidMapping = (session?: string | null): Record<string, unknown> | undefined => {
-  if (!session) return undefined;
-  try {
-    return JSON.parse(session)?.keys?.lidMapping;
-  } catch (e) {
-    return undefined;
-  }
-};
+import { readKeysOfType } from "../../models/BaileysKey";
 
 export const StartWhatsAppSession = async (
   whatsapp: Whatsapp,
@@ -35,12 +26,12 @@ export const StartWhatsAppSession = async (
     wbotMonitor(wbot, whatsapp, companyId);
 
     try {
-      await whatsapp.reload();
       await SyncSessionContactsService({
         whatsappId: whatsapp.id,
         companyId,
         me: wbot.user,
-        lidMapping: sessionLidMapping(whatsapp.session)
+        // LID <-> phone pairs the session already learned (saved by the key store).
+        lidMapping: await readKeysOfType(whatsapp.id, "lid-mapping")
       });
     } catch (err) {
       logger.warn(`Could not sync session contacts: ${err}`);
