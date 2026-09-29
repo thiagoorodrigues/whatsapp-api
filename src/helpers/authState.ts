@@ -1,7 +1,7 @@
 import type { AuthenticationCreds, AuthenticationState } from "@whiskeysockets/baileys";
 import { initAuthCreds, proto } from "@whiskeysockets/baileys";
 import Whatsapp from "../models/Whatsapp";
-import { sequelizeKeyRepo } from "../models/BaileysKey";
+import { clearBaileysKeys, sequelizeKeyRepo } from "../models/BaileysKey";
 import { makeSignalKeyStore, parseKey, serializeKey } from "./baileysKeyStore";
 
 // Creds ficam em Whatsapps.session como { creds }; as chaves de sinal ficam
@@ -10,7 +10,13 @@ const authState = async (
   whatsapp: Whatsapp
 ): Promise<{ state: AuthenticationState; saveState: () => Promise<void> }> => {
   const stored = whatsapp.session ? (parseKey(whatsapp.session) as any) : null;
-  const creds: AuthenticationCreds = stored?.creds || initAuthCreds();
+  let creds: AuthenticationCreds = stored?.creds;
+  if (!creds) {
+    // Identidade nova: nenhuma chave da identidade anterior pode sobrar, mesmo
+    // que um socket antigo tenha gravado depois da limpeza do logout.
+    await clearBaileysKeys(whatsapp.id);
+    creds = initAuthCreds();
+  }
 
   const saveState = async () => {
     try {
