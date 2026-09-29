@@ -13,6 +13,7 @@ import { wasSentByPlatform } from "../../channels/baileys/sentByPlatform";
 import { filterMessages } from "../../channels/baileys/parse";
 import toInbound from "../../channels/baileys/toInbound";
 import { sleep } from "../../helpers/botUtils";
+import { queueFor } from "../../helpers/serialQueue";
 import { toPhoneNumber, toUserLid } from "../../helpers/GetPhoneJid";
 import { forgetGroup } from "../../libs/whatsappCache";
 import Contact from "../../models/Contact";
@@ -47,24 +48,33 @@ const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyI
 
 const wbotMessageListener = async (wbot: Session, companyId: number): Promise<void> => {
   try {
-    wbot.ev.on("messages.upsert", async (messageUpsert: ImessageUpsert) => {
+    // Mensagens são processadas uma por vez, na ordem, por conexão: sem
+    // corrida entre a checagem de duplicidade e a gravação, e sem picos de
+    // consultas numa rajada de grupo.
+    const queue = queueFor(wbot.id, {
+      onError: err => {
+        Sentry.captureException(err);
+        logger.error(`messages queue (whatsapp ${wbot.id}): ${err?.message || err}`);
+      },
+      onBacklog: size => logger.warn(`messages queue (whatsapp ${wbot.id}) has ${size} pending`)
+    });
 
-      const messages = messageUpsert.messages.filter(filterMessages).map(msg => msg);
-      if (!messages) return;
+    wbot.ev.on("messages.upsert", (messageUpsert: ImessageUpsert) => {
+      const messages = messageUpsert.messages.filter(filterMessages);
+      if (!messages.length) return;
 
-      messages.forEach(async (message: proto.IWebMessageInfo) => {
+      messages.forEach((message: proto.IWebMessageInfo) => queue.push(async () => {
         // Sent through the channel: already saved by whoever sent it.
         if (message.key.fromMe && wasSentByPlatform(message.key.id)) return;
-        const messageExists = await Message.count({ where: { messagesWhatsappsId: message.key.id!, companyId } });
         if (message.message?.reactionMessage) return;
+        const messageExists = await Message.count({ where: { messagesWhatsappsId: message.key.id!, companyId } });
+        if (messageExists) return;
 
-        if (!messageExists) {
-          const inbound = await toInbound(message, wbot, companyId);
-          if (!inbound) return;
-          await ProcessInboundMessage(inbound);
-          await verifyRecentCampaign(inbound);
-        }
-      });
+        const inbound = await toInbound(message, wbot, companyId);
+        if (!inbound) return;
+        await ProcessInboundMessage(inbound);
+        await verifyRecentCampaign(inbound);
+      }));
     });
 
     // Baileys 7 reports every phone <-> LID pair it discovers; remember it on
@@ -135,7 +145,7 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
       }
     });
 
-    wbot.ev.on('messaging-history.set', async ({ chats, contacts, messages, isLatest }) => {
+    wbot.ev.on('messaging-history.set', ({ chats, contacts, messages, isLatest }) => queue.push(async () => {
       await saveSyncedContacts(contacts as SyncedContact[]);
       logger.info("Chamado para serviço de importação de messages;");
 
@@ -186,7 +196,7 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
 
         //logger.info("Serviço de importação de messages finalizado;");
       }
-    })
+    }));
 
   } catch (error) {
     Sentry.captureException(error);

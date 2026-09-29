@@ -20,6 +20,7 @@ import Message from "../models/Message";
 import { logger } from "../utils/logger";
 import MAIN_LOGGER from "@whiskeysockets/baileys/lib/Utils/logger";
 import authState from "../helpers/authState";
+import { reconnectDecision } from "../helpers/reconnectPolicy";
 import { toPhoneNumber } from "../helpers/GetPhoneJid";
 import { Boom } from "@hapi/boom";
 import AppError from "../errors/AppError";
@@ -40,6 +41,8 @@ type Session = WASocket & {
 const sessions: Session[] = [];
 
 const retriesQrCodeMap = new Map<number, number>();
+// Quedas seguidas por conexão; zera quando a conexão abre.
+const reconnectAttempts = new Map<number, number>();
 
 export const getWbot = (whatsappId: number): Session => {
   const sessionIndex = sessions.findIndex(s => s.id === whatsappId);
@@ -110,9 +113,14 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
           },
           syncFullHistory: true,
           version,
-          // defaultQueryTimeoutMs: 60000,
-          // retryRequestDelayMs: 250,
-          // keepAliveIntervalMs: 1000 * 60 * 10 * 3,
+          // Resiliência (valores usados pela Evolution API em produção).
+          connectTimeoutMs: 30000,
+          keepAliveIntervalMs: 30000,
+          retryRequestDelayMs: 350,
+          maxMsgRetryCount: 4,
+          qrTimeout: 45000,
+          // Gravação das chaves na tabela BaileysKeys: retenta o commit se o banco oscilar.
+          transactionOpts: { maxCommitRetries: 10, delayBetweenTriesMs: 3000 },
           msgRetryCounterCache,
           generateHighQualityLinkPreview: true,
           shouldIgnoreJid: jid => isJidBroadcast(jid),
@@ -186,7 +194,14 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
             );
 
             if (connection === "close") {
-              if ((lastDisconnect?.error as Boom)?.output?.statusCode === 403) {
+              const statusCode = disconnectError?.output?.statusCode;
+              const attempt = reconnectAttempts.get(id) || 0;
+              const decision = reconnectDecision(statusCode, attempt);
+              removeWbot(id, false);
+
+              if (decision.action === "logout") {
+                // Sessão encerrada pelo WhatsApp: limpa tudo e volta a pedir QR.
+                logger.warn(`Session ${name} closed for good (status=${statusCode}); a new QR is needed`);
                 await whatsapp.update({ status: "PENDING", session: "" });
                 await clearBaileysKeys(whatsapp.id);
                 await DeleteBaileysService(whatsapp.id);
@@ -194,34 +209,19 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
                   action: "update",
                   session: whatsapp
                 });
-                removeWbot(id, false);
-              }
-              if (
-                (lastDisconnect?.error as Boom)?.output?.statusCode !==
-                DisconnectReason.loggedOut
-              ) {
-                removeWbot(id, false);
-                setTimeout(
-                  () => StartWhatsAppSession(whatsapp, whatsapp.companyId),
-                  2000
-                );
+                reconnectAttempts.delete(id);
+                setTimeout(() => StartWhatsAppSession(whatsapp, whatsapp.companyId), 2000);
               } else {
-                await whatsapp.update({ status: "PENDING", session: "" });
-                await clearBaileysKeys(whatsapp.id);
-                await DeleteBaileysService(whatsapp.id);
-                io.emit(`company-${whatsapp.companyId}-whatsappSession`, {
-                  action: "update",
-                  session: whatsapp
-                });
-                removeWbot(id, false);
-                setTimeout(
-                  () => StartWhatsAppSession(whatsapp, whatsapp.companyId),
-                  2000
+                reconnectAttempts.set(id, attempt + 1);
+                logger.warn(
+                  `Session ${name} closed (status=${statusCode}); reconnecting in ${decision.delayMs} ms (attempt ${attempt + 1})`
                 );
+                setTimeout(() => StartWhatsAppSession(whatsapp, whatsapp.companyId), decision.delayMs);
               }
             }
 
             if (connection === "open") {
+              reconnectAttempts.delete(id);
               // user.id is "5531...:<device>@s.whatsapp.net"; keep the digits.
               const connectedNumber = toPhoneNumber(wsocket.user?.id);
               await whatsapp.update({
