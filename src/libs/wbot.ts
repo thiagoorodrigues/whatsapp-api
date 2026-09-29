@@ -15,6 +15,7 @@ import makeWALegacySocket from "@whiskeysockets/baileys";
 import P from "pino";
 
 import Whatsapp from "../models/Whatsapp";
+import { clearBaileysKeys } from "../models/BaileysKey";
 import Message from "../models/Message";
 import { logger } from "../utils/logger";
 import MAIN_LOGGER from "@whiskeysockets/baileys/lib/Utils/logger";
@@ -187,6 +188,7 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
             if (connection === "close") {
               if ((lastDisconnect?.error as Boom)?.output?.statusCode === 403) {
                 await whatsapp.update({ status: "PENDING", session: "" });
+                await clearBaileysKeys(whatsapp.id);
                 await DeleteBaileysService(whatsapp.id);
                 io.emit(`company-${whatsapp.companyId}-whatsappSession`, {
                   action: "update",
@@ -205,6 +207,7 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
                 );
               } else {
                 await whatsapp.update({ status: "PENDING", session: "" });
+                await clearBaileysKeys(whatsapp.id);
                 await DeleteBaileysService(whatsapp.id);
                 io.emit(`company-${whatsapp.companyId}-whatsappSession`, {
                   action: "update",

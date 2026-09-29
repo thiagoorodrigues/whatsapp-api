@@ -1,82 +1,31 @@
-import type {
-  AuthenticationCreds,
-  AuthenticationState,
-  SignalDataTypeMap
-} from "@whiskeysockets/baileys";
-import { BufferJSON, initAuthCreds, proto } from "@whiskeysockets/baileys";
+import type { AuthenticationCreds, AuthenticationState } from "@whiskeysockets/baileys";
+import { initAuthCreds, proto } from "@whiskeysockets/baileys";
 import Whatsapp from "../models/Whatsapp";
+import { sequelizeKeyRepo } from "../models/BaileysKey";
+import { makeSignalKeyStore, parseKey, serializeKey } from "./baileysKeyStore";
 
-const KEY_MAP: { [T in keyof SignalDataTypeMap]: string } = {
-  "pre-key": "preKeys",
-  session: "sessions",
-  "sender-key": "senderKeys",
-  "app-state-sync-key": "appStateSyncKeys",
-  "app-state-sync-version": "appStateVersions",
-  "sender-key-memory": "senderKeyMemory",
-  // Baileys 7: LID <-> phone mappings, per-user device lists, trusted
-  // contact tokens and identity keys. Missing any of these breaks the
-  // session's LID migration and sending to LID-addressed chats.
-  "lid-mapping": "lidMapping",
-  "device-list": "deviceList",
-  tctoken: "tctokens",
-  "identity-key": "identityKeys"
-};
-
+// Creds ficam em Whatsapps.session como { creds }; as chaves de sinal ficam
+// uma por linha em BaileysKeys, lidas e gravadas só quando o Baileys pede.
 const authState = async (
   whatsapp: Whatsapp
-): Promise<{ state: AuthenticationState; saveState: () => void }> => {
-  let creds: AuthenticationCreds;
-  let keys: any = {};
+): Promise<{ state: AuthenticationState; saveState: () => Promise<void> }> => {
+  const stored = whatsapp.session ? (parseKey(whatsapp.session) as any) : null;
+  const creds: AuthenticationCreds = stored?.creds || initAuthCreds();
 
   const saveState = async () => {
     try {
-      await whatsapp.update({
-        session: JSON.stringify({ creds, keys }, BufferJSON.replacer, 0)
-      });
+      await whatsapp.update({ session: serializeKey({ creds }) });
     } catch (error) {
       console.log(error);
     }
   };
 
-  // const getSessionDatabase = await whatsappById(whatsapp.id);
-
-  if (whatsapp.session && whatsapp.session !== null) {
-    const result = JSON.parse(whatsapp.session, BufferJSON.reviver);
-    creds = result.creds;
-    keys = result.keys;
-  } else {
-    creds = initAuthCreds();
-    keys = {};
-  }
+  const keys = makeSignalKeyStore(sequelizeKeyRepo(whatsapp.id), {
+    reviveAppStateSyncKey: value => proto.Message.AppStateSyncKeyData.create(value as any)
+  });
 
   return {
-    state: {
-      creds,
-      keys: {
-        get: (type, ids) => {
-          const key = KEY_MAP[type];
-          return ids.reduce((dict: any, id) => {
-            let value = keys[key]?.[id];
-            if (value) {
-              if (type === "app-state-sync-key") {
-                value = proto.Message.AppStateSyncKeyData.create(value);
-              }
-              dict[id] = value;
-            }
-            return dict;
-          }, {});
-        },
-        set: (data: any) => {
-          // eslint-disable-next-line no-restricted-syntax, guard-for-in
-          for (const i in data) {
-            const key = KEY_MAP[i as keyof SignalDataTypeMap];
-            keys[key] = keys[key] || {};
-            Object.assign(keys[key], data[i]);
-          }
-          saveState();
-        }
-      }
-    },
+    state: { creds, keys: keys as AuthenticationState["keys"] },
     saveState
   };
 };

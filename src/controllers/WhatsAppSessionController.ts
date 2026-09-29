@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { getWbot } from "../libs/wbot";
 import ShowWhatsAppService from "../services/WhatsappService/ShowWhatsAppService";
+import { clearBaileysKeys } from "../models/BaileysKey";
 import { StartWhatsAppSession } from "../services/WbotServices/StartWhatsAppSession";
 import UpdateWhatsAppService from "../services/WhatsappService/UpdateWhatsAppService";
 
@@ -23,6 +24,7 @@ const update = async (req: Request, res: Response): Promise<Response> => {
     companyId,
     whatsappData: { session: "" }
   });
+  await clearBaileysKeys(whatsapp.id);
 
   await StartWhatsAppSession(whatsapp, companyId);
 
@@ -36,6 +38,7 @@ const remove = async (req: Request, res: Response): Promise<Response> => {
 
   if (whatsapp.session) {
     await whatsapp.update({ status: "DISCONNECTED", session: "" });
+    await clearBaileysKeys(whatsapp.id);
     const wbot = getWbot(whatsapp.id);
     await wbot.logout();
   }
