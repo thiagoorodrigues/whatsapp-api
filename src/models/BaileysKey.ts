@@ -9,6 +9,8 @@ import {
   DataType
 } from "sequelize-typescript";
 import { Op } from "sequelize";
+import * as Sentry from "@sentry/node";
+import { logger } from "../utils/logger";
 import Whatsapp from "./Whatsapp";
 import { KeyRepo, KeyRow, parseKey } from "../helpers/baileysKeyStore";
 
@@ -38,6 +40,13 @@ class BaileysKey extends Model<BaileysKey> {
   updatedAt: Date;
 }
 
+// Falha ao gravar chave de sinal: o Baileys retenta o commit, mas o log do
+// Baileys fica em "error" e esconderia as tentativas. Fica visível aqui.
+const reportKeyFailure = (whatsappId: number, op: string, err: unknown): void => {
+  Sentry.captureException(err);
+  logger.error(`BaileysKeys ${op} failed for whatsapp ${whatsappId}: ${(err as Error)?.message || err}`);
+};
+
 export const sequelizeKeyRepo = (whatsappId: number): KeyRepo => ({
   async find(type, ids) {
     const rows = await BaileysKey.findAll({
@@ -48,13 +57,23 @@ export const sequelizeKeyRepo = (whatsappId: number): KeyRepo => ({
   },
   async upsert(rows: KeyRow[]) {
     const now = new Date();
-    await BaileysKey.bulkCreate(
-      rows.map(r => ({ whatsappId, ...r, createdAt: now, updatedAt: now })) as any,
-      { updateOnDuplicate: ["value", "updatedAt"] }
-    );
+    try {
+      await BaileysKey.bulkCreate(
+        rows.map(r => ({ whatsappId, ...r, createdAt: now, updatedAt: now })) as any,
+        { updateOnDuplicate: ["value", "updatedAt"] }
+      );
+    } catch (err) {
+      reportKeyFailure(whatsappId, "upsert", err);
+      throw err;
+    }
   },
   async remove(type, ids) {
-    await BaileysKey.destroy({ where: { whatsappId, type, keyId: { [Op.in]: ids } } });
+    try {
+      await BaileysKey.destroy({ where: { whatsappId, type, keyId: { [Op.in]: ids } } });
+    } catch (err) {
+      reportKeyFailure(whatsappId, "remove", err);
+      throw err;
+    }
   }
 });
 

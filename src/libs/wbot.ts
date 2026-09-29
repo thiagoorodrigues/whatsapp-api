@@ -2,7 +2,6 @@ import * as Sentry from "@sentry/node";
 import makeWASocket, {
   WASocket,
   Browsers,
-  DisconnectReason,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
   isJidBroadcast,
@@ -53,11 +52,32 @@ export const getWbot = (whatsappId: number): Session => {
   return sessions[sessionIndex];
 };
 
+// Timer de reconexão pendente por conexão: no máximo um.
+const reconnectTimers = new Map<number, NodeJS.Timeout>();
+
+const cancelReconnect = (whatsappId: number): void => {
+  const timer = reconnectTimers.get(whatsappId);
+  if (timer) clearTimeout(timer);
+  reconnectTimers.delete(whatsappId);
+};
+
+const scheduleReconnect = (whatsapp: Whatsapp, delayMs: number): void => {
+  cancelReconnect(whatsapp.id);
+  reconnectTimers.set(
+    whatsapp.id,
+    setTimeout(() => {
+      reconnectTimers.delete(whatsapp.id);
+      StartWhatsAppSession(whatsapp, whatsapp.companyId);
+    }, delayMs)
+  );
+};
+
 export const removeWbot = async (
   whatsappId: number,
   isLogout = true
 ): Promise<void> => {
   try {
+    cancelReconnect(whatsappId);
     const sessionIndex = sessions.findIndex(s => s.id === whatsappId);
     if (sessionIndex !== -1) {
       if (isLogout) {
@@ -69,6 +89,22 @@ export const removeWbot = async (
     }
   } catch (err) {
     logger.error(err);
+  }
+};
+
+// Fecha um socket antigo da mesma conexão sem disparar a reconexão dele,
+// para que nunca existam dois sockets pareados com as mesmas credenciais.
+const discardWbot = (whatsappId: number): void => {
+  cancelReconnect(whatsappId);
+  const sessionIndex = sessions.findIndex(s => s.id === whatsappId);
+  if (sessionIndex === -1) return;
+  const stale = sessions[sessionIndex];
+  sessions.splice(sessionIndex, 1);
+  try {
+    stale.ev.removeAllListeners("connection.update");
+    stale.ws.close();
+  } catch (err) {
+    logger.warn(`Could not close stale socket ${whatsappId}: ${err}`);
   }
 };
 
@@ -86,6 +122,7 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
         if (!whatsappUpdate) return;
 
         const { id, name, provider } = whatsappUpdate;
+        discardWbot(id);
 
         const { version, isLatest } = await fetchLatestBaileysVersion();
         const isLegacy = provider === "stable" ? true : false;
@@ -113,14 +150,11 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
           },
           syncFullHistory: true,
           version,
-          // Resiliência (valores usados pela Evolution API em produção).
+          // Só o que difere dos padrões do Baileys 7 (keepAlive 30 s e
+          // transactionOpts 10x3 s já são o padrão): mais tempo para abrir a
+          // conexão numa rede lenta e um pouco mais de espaço entre retentativas.
           connectTimeoutMs: 30000,
-          keepAliveIntervalMs: 30000,
           retryRequestDelayMs: 350,
-          maxMsgRetryCount: 4,
-          qrTimeout: 45000,
-          // Gravação das chaves na tabela BaileysKeys: retenta o commit se o banco oscilar.
-          transactionOpts: { maxCommitRetries: 10, delayBetweenTriesMs: 3000 },
           msgRetryCounterCache,
           generateHighQualityLinkPreview: true,
           shouldIgnoreJid: jid => isJidBroadcast(jid),
@@ -197,6 +231,9 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
               const statusCode = disconnectError?.output?.statusCode;
               const attempt = reconnectAttempts.get(id) || 0;
               const decision = reconnectDecision(statusCode, attempt);
+              if (disconnectError?.data) {
+                logger.warn(`Session ${name} close reason: ${JSON.stringify(disconnectError.data)}`);
+              }
               removeWbot(id, false);
 
               if (decision.action === "logout") {
@@ -210,13 +247,13 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
                   session: whatsapp
                 });
                 reconnectAttempts.delete(id);
-                setTimeout(() => StartWhatsAppSession(whatsapp, whatsapp.companyId), 2000);
+                scheduleReconnect(whatsapp, 2000);
               } else {
                 reconnectAttempts.set(id, attempt + 1);
                 logger.warn(
                   `Session ${name} closed (status=${statusCode}); reconnecting in ${decision.delayMs} ms (attempt ${attempt + 1})`
                 );
-                setTimeout(() => StartWhatsAppSession(whatsapp, whatsapp.companyId), decision.delayMs);
+                scheduleReconnect(whatsapp, decision.delayMs);
               }
             }
 
@@ -262,6 +299,10 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
                 wsocket.ws.close();
                 wsocket = null;
                 retriesQrCodeMap.delete(id);
+                // Sem isto o socket morto fica em `sessions` e a próxima
+                // tentativa de conexão nunca é registrada.
+                removeWbot(id, false);
+                reconnectAttempts.delete(id);
               } else {
                 logger.info(`Session QRCode Generate ${name}`);
                 retriesQrCodeMap.set(id, (retriesQrCode += 1));

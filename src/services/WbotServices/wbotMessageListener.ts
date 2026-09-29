@@ -13,7 +13,7 @@ import { wasSentByPlatform } from "../../channels/baileys/sentByPlatform";
 import { filterMessages } from "../../channels/baileys/parse";
 import toInbound from "../../channels/baileys/toInbound";
 import { sleep } from "../../helpers/botUtils";
-import { queueFor } from "../../helpers/serialQueue";
+import { SerialQueue, queueFor } from "../../helpers/serialQueue";
 import { toPhoneNumber, toUserLid } from "../../helpers/GetPhoneJid";
 import { forgetGroup } from "../../libs/whatsappCache";
 import Contact from "../../models/Contact";
@@ -57,6 +57,13 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
         logger.error(`messages queue (whatsapp ${wbot.id}): ${err?.message || err}`);
       },
       onBacklog: size => logger.warn(`messages queue (whatsapp ${wbot.id}) has ${size} pending`)
+    });
+
+    // Importação de histórico tem fila própria: um lote pode levar minutos
+    // (2 s por mensagem) e não pode segurar as mensagens ao vivo.
+    const historyQueue = new SerialQueue(`history-${wbot.id}`, {
+      onError: err => logger.error(`history queue (whatsapp ${wbot.id}): ${err?.message || err}`),
+      taskTimeoutMs: 60 * 60 * 1000
     });
 
     wbot.ev.on("messages.upsert", (messageUpsert: ImessageUpsert) => {
@@ -145,7 +152,7 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
       }
     });
 
-    wbot.ev.on('messaging-history.set', ({ chats, contacts, messages, isLatest }) => queue.push(async () => {
+    wbot.ev.on('messaging-history.set', ({ chats, contacts, messages, isLatest }) => historyQueue.push(async () => {
       await saveSyncedContacts(contacts as SyncedContact[]);
       logger.info("Chamado para serviço de importação de messages;");
 
