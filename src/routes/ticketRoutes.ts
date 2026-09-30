@@ -1,5 +1,6 @@
 import express from "express";
 import isAuth from "../middleware/isAuth";
+import requirePlanFeature from "../middleware/requirePlanFeature";
 
 import * as TicketController from "../controllers/TicketController";
 
@@ -11,7 +12,7 @@ ticketRoutes.get("/tickets/:ticketId", isAuth, TicketController.show);
 
 ticketRoutes.get("/tickets/:ticketId/participants", isAuth, TicketController.participants);
 
-ticketRoutes.get("/ticket/kanban", isAuth, TicketController.kanban);
+ticketRoutes.get("/ticket/kanban", isAuth, requirePlanFeature("useKanban"), TicketController.kanban);
 
 ticketRoutes.get("/tickets/u/:uuid", isAuth, TicketController.showFromUUID);
 
