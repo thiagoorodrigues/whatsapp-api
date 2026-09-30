@@ -28,6 +28,7 @@ import flowRoutes from "./flowRoutes";
 import aiAgentRoutes from "./aiAgentRoutes";
 import emailRoute from "./emailRoute"; //Email
 import forgotsRoutes from "./forgotPasswordRoutes"; // Reset Passwd
+import crmRoutes from "./crmRoutes";
 const routes = Router();
 
 routes.use(userRoutes);
@@ -57,6 +58,7 @@ routes.use(ticketTagRoutes);
 routes.use(queueIntegrationRoutes);
 routes.use(flowRoutes);
 routes.use(aiAgentRoutes);
+routes.use(crmRoutes);
 routes.use(emailRoute); //Email
 routes.use(forgotsRoutes);// Reset Passwd
 
