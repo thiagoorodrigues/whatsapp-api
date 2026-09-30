@@ -82,6 +82,7 @@ const ForwardMessageService = async ({ messageId, contactIds, companyId, userId 
     include: [{ model: Ticket, as: "ticket", attributes: ["id", "whatsappId"] }]
   });
   if (!message || message.isDeleted) throw new AppError("ERR_NO_MESSAGE_FOUND", 404);
+  if (message.isPrivate) throw new AppError("ERR_INTERNAL_NOTE_ACTION");
 
   const { content, media } = contentOf(message);
   const whatsappId = message.ticket.whatsappId;

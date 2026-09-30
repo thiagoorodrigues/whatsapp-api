@@ -19,6 +19,11 @@ const DeleteWhatsAppMessage = async (messageId: string): Promise<Message> => {
     throw new AppError("No message found with this ID.");
   }
 
+  // Internal notes never went to WhatsApp.
+  if (message.isPrivate) {
+    throw new AppError("ERR_INTERNAL_NOTE_ACTION");
+  }
+
   const { ticket } = message;
 
   const messageToDelete = await GetWbotMessage(ticket, messageId);
