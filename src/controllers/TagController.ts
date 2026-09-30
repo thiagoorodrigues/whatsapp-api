@@ -43,7 +43,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   });
 
   const io = getIO();
-  io.emit("tag", {
+  io.emit(`company-${companyId}-tag`, {
     action: "create",
     tag
   });
@@ -76,12 +76,13 @@ export const update = async (
   }
 
   const { tagId } = req.params;
+  const { companyId } = req.user;
   const tagData = req.body;
 
   const tag = await UpdateService({ tagData, id: tagId });
 
   const io = getIO();
-  io.emit("tag", {
+  io.emit(`company-${companyId}-tag`, {
     action: "update",
     tag
   });
@@ -94,11 +95,12 @@ export const remove = async (
   res: Response
 ): Promise<Response> => {
   const { tagId } = req.params;
+  const { companyId } = req.user;
 
   await DeleteService(tagId);
 
   const io = getIO();
-  io.emit("tag", {
+  io.emit(`company-${companyId}-tag`, {
     action: "delete",
     tagId
   });

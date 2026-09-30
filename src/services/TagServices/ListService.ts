@@ -49,16 +49,19 @@ const ListService = async ({
       'id',
       'name',
       'color',
+      'kanban',
       [fn('count', col('ticketTags.tagId')), 'ticketsCount']
     ],
     group: ['Tag.id']
   });
 
-  const hasMore = count > offset + tags.length;
+  // With `group`, Sequelize returns one count per tag instead of a number.
+  const total = Array.isArray(count) ? count.length : count;
+  const hasMore = total > offset + tags.length;
 
   return {
     tags,
-    count,
+    count: total,
     hasMore
   };
 };
