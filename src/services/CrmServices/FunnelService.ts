@@ -200,6 +200,10 @@ export const updateStage = async (
   await findVisibleFunnel(v, funnelId);
   const stage = await findStageInFunnel(v, funnelId, stageId);
   if (data.archived !== undefined && stage.kind !== "open") throw new AppError("ERR_CRM_STAGE_LOCKED", 400);
+  // An archived stage leaves the board, so its deals would become unreachable.
+  if (data.archived && (await Deal.count({ where: { stageId, companyId: v.companyId } })) > 0) {
+    throw new AppError("ERR_CRM_STAGE_NOT_EMPTY", 400);
+  }
   const patch: Record<string, unknown> = {};
   if (data.name !== undefined) {
     if (!data.name.trim()) throw new AppError("ERR_CRM_NAME_REQUIRED", 400);
@@ -220,19 +224,32 @@ export const deleteStage = async (
 ): Promise<void> => {
   assertAdmin(v);
   await findVisibleFunnel(v, funnelId);
-  const stage = await findStageInFunnel(v, funnelId, stageId);
-  if (stage.kind !== "open") throw new AppError("ERR_CRM_STAGE_LOCKED", 400);
-  const deals = await Deal.count({ where: { stageId, companyId: v.companyId } });
-  if (deals > 0) {
-    if (!moveToStageId || moveToStageId === stageId) throw new AppError("ERR_CRM_STAGE_NOT_EMPTY", 400);
-    const target = await findStageInFunnel(v, funnelId, moveToStageId);
-    if (target.kind !== "open" || target.archived) throw new AppError("ERR_CRM_STAGE_LOCKED", 400);
-    await Deal.update(
-      { stageId: target.id, stageEnteredAt: new Date() },
-      { where: { stageId, companyId: v.companyId } }
-    );
-  }
-  await stage.destroy();
+  // Locking the stage row makes concurrent moves into it wait, so no deal can
+  // arrive between the count and the delete.
+  await Funnel.sequelize!.transaction(async transaction => {
+    const stage = await FunnelStage.findOne({
+      where: { id: stageId, funnelId, companyId: v.companyId },
+      transaction,
+      lock: true
+    });
+    if (!stage) throw notFound();
+    if (stage.kind !== "open") throw new AppError("ERR_CRM_STAGE_LOCKED", 400);
+    const deals = await Deal.count({ where: { stageId, companyId: v.companyId }, transaction });
+    if (deals > 0) {
+      if (!moveToStageId || moveToStageId === stageId) throw new AppError("ERR_CRM_STAGE_NOT_EMPTY", 400);
+      const target = await FunnelStage.findOne({
+        where: { id: moveToStageId, funnelId, companyId: v.companyId },
+        transaction
+      });
+      if (!target) throw notFound();
+      if (target.kind !== "open" || target.archived) throw new AppError("ERR_CRM_STAGE_LOCKED", 400);
+      await Deal.update(
+        { stageId: target.id, stageEnteredAt: new Date() },
+        { where: { stageId, companyId: v.companyId }, transaction }
+      );
+    }
+    await stage.destroy({ transaction });
+  });
   emitFunnel(v.companyId, funnelId);
 };
 

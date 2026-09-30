@@ -44,4 +44,23 @@ describe("stage locks", () => {
     (Deal.count as jest.Mock).mockResolvedValue(2);
     await expect(deleteStage(admin, 3, 7)).rejects.toMatchObject({ message: "ERR_CRM_STAGE_NOT_EMPTY" });
   });
+
+  it("does not archive an open stage that still has deals", async () => {
+    (FunnelStage.findOne as jest.Mock).mockResolvedValue({ id: 7, funnelId: 3, kind: "open", update: jest.fn() });
+    (Deal.count as jest.Mock).mockResolvedValue(1);
+    await expect(updateStage(admin, 3, 7, { archived: true })).rejects.toMatchObject({ message: "ERR_CRM_STAGE_NOT_EMPTY" });
+  });
+  it("moves the deals and deletes the stage in one transaction", async () => {
+    const destroy = jest.fn();
+    (FunnelStage.findOne as jest.Mock)
+      .mockResolvedValueOnce({ id: 7, funnelId: 3, kind: "open", destroy })
+      .mockResolvedValueOnce({ id: 9, funnelId: 3, kind: "open", archived: false });
+    (Deal.count as jest.Mock).mockResolvedValue(2);
+    await deleteStage(admin, 3, 7, 9);
+    const tx = expect.objectContaining({ transaction: expect.anything() });
+    expect(FunnelStage.findOne).toHaveBeenNthCalledWith(1, expect.objectContaining({ transaction: expect.anything(), lock: expect.anything() }));
+    expect(Deal.count).toHaveBeenCalledWith(tx);
+    expect(Deal.update).toHaveBeenCalledWith(expect.objectContaining({ stageId: 9 }), tx);
+    expect(destroy).toHaveBeenCalledWith(tx);
+  });
 });

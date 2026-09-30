@@ -83,8 +83,8 @@ existentes e ao criar empresa.
   `DealEvents`. Para `lost` exige `lossReasonId`; para `won`/`lost` grava `closedAt`;
   voltar para `open` limpa `closedAt`, `lossReasonId`, `lossNote` e grava `reopened`.
 - **Mover entre funis** é permitido pela gaveta (escolhe funil e coluna `open`).
-- **Arquivar:** funil ou coluna com negócios não é apagado. Coluna `open` só é
-  apagada vazia; para esvaziar, a tela oferece mover os negócios para outra coluna.
+- **Arquivar:** funil com negócios não é apagado, só arquivado. Coluna `open` só é
+  apagada ou arquivada vazia; para esvaziar, a tela oferece mover os negócios para outra coluna.
   Colunas `won`/`lost` não são apagadas nem arquivadas.
 - **Limite de funis:** criar funil com `crmFunnels > 0` e total não arquivado
   `>= crmFunnels` retorna `ERR_CRM_FUNNEL_LIMIT` (403).
@@ -128,10 +128,10 @@ Todas com `isAuth` e `requirePlanFeature("useCrm")`. Configuração exige admin.
 | `GET/POST/PUT /crm/rules[/:id]` | regras de criação automática (admin) |
 | `GET/POST/PUT /crm/loss-reasons[/:id]` | motivos de perda (listar: todos; editar: admin) |
 
-**Tempo real:** evento `company-${companyId}-deal` com `{ action: "create" | "update" | "delete", deal }`
-e `company-${companyId}-funnel` para mudanças de configuração. O quadro aplica o
-evento se o negócio estiver no funil aberto e na visão do usuário; na dúvida,
-recarrega a coluna afetada. Mensagens não lidas vêm do evento `appMessage` já
+**Tempo real:** evento `company-${companyId}-deal` com `{ action: "create" | "update" | "delete", dealId, funnelId, stageId }` (só ids: o socket chega a todos os clientes, então o conteúdo vem pela API com a visibilidade aplicada)
+e `company-${companyId}-funnel` para mudanças de configuração. O quadro, ao receber o
+evento do funil aberto, recarrega o negócio por `GET /crm/deals/:id` (404 = saiu da
+visão) ou a coluna afetada. Mensagens não lidas vêm do evento `appMessage` já
 existente, pelo `contactId`.
 
 ## Telas

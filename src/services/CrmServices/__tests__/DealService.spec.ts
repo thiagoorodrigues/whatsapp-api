@@ -1,4 +1,4 @@
-import { sanitizeDealInput } from "../DealService";
+import { sanitizeDealInput, dealEventPayload } from "../DealService";
 
 jest.mock("../../../libs/socket", () => ({ getIO: () => ({ emit: jest.fn() }) }));
 
@@ -42,5 +42,12 @@ describe("sanitizeDealInput", () => {
   });
   it("refuses an empty title", () => {
     expect(() => sanitizeDealInput({ title: "   " })).toThrow("ERR_CRM_NAME_REQUIRED");
+  });
+});
+
+describe("dealEventPayload", () => {
+  it("broadcasts only ids, never deal contents", () => {
+    const card: any = { id: 5, funnelId: 2, stageId: 8, title: "Segredo", value: 999, contact: { name: "Maria", number: "5511" } };
+    expect(dealEventPayload("update", card)).toEqual({ action: "update", dealId: 5, funnelId: 2, stageId: 8 });
   });
 });

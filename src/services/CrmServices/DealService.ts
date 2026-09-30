@@ -116,8 +116,17 @@ const loadCard = async (companyId: number, id: number): Promise<DealCard> => {
   return toCard(deal, await unreadByContact(companyId, [deal.contactId]));
 };
 
+// Sockets reach every client, so events carry ids only; the board refetches
+// through the scoped REST routes.
+export const dealEventPayload = (action: "create" | "update" | "delete", deal: DealCard) => ({
+  action,
+  dealId: deal.id,
+  funnelId: deal.funnelId,
+  stageId: deal.stageId
+});
+
 const emitDeal = (companyId: number, action: "create" | "update" | "delete", deal: DealCard) => {
-  getIO().emit(`company-${companyId}-deal`, { action, deal });
+  getIO().emit(`company-${companyId}-deal`, dealEventPayload(action, deal));
 };
 
 const ownerWhere = (v: Viewer, funnel: FunnelView): WhereOptions | undefined => {
@@ -196,11 +205,12 @@ export const listDeals = async (
   return { stages: result };
 };
 
-const topPosition = async (companyId: number, stageId: number): Promise<number> => {
+const topPosition = async (companyId: number, stageId: number, transaction: any): Promise<number> => {
   const first = await Deal.findOne({
     where: { companyId, stageId },
     order: [["position", "ASC"]],
-    attributes: ["position"]
+    attributes: ["position"],
+    transaction
   });
   return positionBetween(null, first ? first.position : null);
 };
@@ -242,7 +252,7 @@ export const createDeal = async (
         source: fields.source ?? null,
         notes: fields.notes ?? null,
         status: "open",
-        position: await topPosition(v.companyId, stage.id),
+        position: await topPosition(v.companyId, stage.id, transaction),
         stageEnteredAt: now
       } as any,
       { transaction }
@@ -314,9 +324,15 @@ export const updateDeal = async (v: Viewer, id: number, data: DealInput): Promis
   return card;
 };
 
-const neighbourPosition = async (companyId: number, stageId: number, dealId: number | null | undefined) => {
+// Reads inside the move's transaction so it sees a renumbering done there.
+const neighbourPosition = async (
+  companyId: number,
+  stageId: number,
+  dealId: number | null | undefined,
+  transaction: any
+) => {
   if (!dealId) return null;
-  const n = await Deal.findOne({ where: { id: dealId, companyId, stageId }, attributes: ["position"] });
+  const n = await Deal.findOne({ where: { id: dealId, companyId, stageId }, attributes: ["position"], transaction });
   if (!n) throw notFound();
   return n.position;
 };
@@ -329,7 +345,8 @@ export const moveDeal = async (
   const { deal } = await findVisibleDeal(v, id);
   const { stage, funnel: target } = await findVisibleStage(v, Number(data.stageId));
   if (!canSeeDeal(v, target, deal)) throw notFound();
-  if (stage.kind === "lost") {
+  // Reordering inside Perdido keeps the reason it already has.
+  if (stage.kind === "lost" && stage.id !== deal.stageId) {
     if (!data.lossReasonId || !(await findActiveLossReason(v.companyId, Number(data.lossReasonId)))) {
       throw new AppError("ERR_CRM_LOSS_REASON_REQUIRED", 400);
     }
@@ -343,8 +360,8 @@ export const moveDeal = async (
   if (target.id !== deal.funnelId) patch.funnelId = target.id;
 
   await Deal.sequelize!.transaction(async transaction => {
-    let before = await neighbourPosition(v.companyId, stage.id, data.beforeId);
-    let after = await neighbourPosition(v.companyId, stage.id, data.afterId);
+    let before = await neighbourPosition(v.companyId, stage.id, data.beforeId, transaction);
+    let after = await neighbourPosition(v.companyId, stage.id, data.afterId, transaction);
     if (needsRenumber(before, after)) {
       const ordered = await Deal.findAll({
         where: { companyId: v.companyId, stageId: stage.id, id: { [Op.ne]: deal.id } },
@@ -355,8 +372,8 @@ export const moveDeal = async (
       for (const p of renumber(ordered)) {
         await Deal.update({ position: p.position }, { where: { id: p.id, companyId: v.companyId }, transaction });
       }
-      before = await neighbourPosition(v.companyId, stage.id, data.beforeId);
-      after = await neighbourPosition(v.companyId, stage.id, data.afterId);
+      before = await neighbourPosition(v.companyId, stage.id, data.beforeId, transaction);
+      after = await neighbourPosition(v.companyId, stage.id, data.afterId, transaction);
     }
     await deal.update({ ...patch, position: positionBetween(before, after) }, { transaction });
     if (events.length) {
