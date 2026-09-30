@@ -24,6 +24,7 @@ import {
   verifyRecentCampaign
 } from "../InboundServices/CampaignReplyService";
 import ProcessInboundMessage from "../InboundServices/ProcessInboundMessage";
+import ReactToMessageService from "../MessageServices/ReactToMessageService";
 import UpdateMessageAckService from "../MessageServices/UpdateMessageAckService";
 import ShowWhatsAppService from "../WhatsappService/ShowWhatsAppService";
 import UpsertWhatsappContactsService, { SyncedContact } from "../WhatsappContactServices/UpsertWhatsappContactsService";
@@ -73,7 +74,6 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
       messages.forEach((message: proto.IWebMessageInfo) => queue.push(async () => {
         // Sent through the channel: already saved by whoever sent it.
         if (message.key.fromMe && wasSentByPlatform(message.key.id)) return;
-        if (message.message?.reactionMessage) return;
         const messageExists = await Message.count({ where: { messagesWhatsappsId: message.key.id!, companyId } });
         if (messageExists) return;
 
@@ -83,6 +83,20 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
         await verifyRecentCampaign(inbound);
       }));
     });
+
+    // Reactions go on the message reacted to. Same queue as messages, so a
+    // reaction right after its message finds it saved.
+    wbot.ev.on("messages.reaction", reactions => reactions.forEach(({ key, reaction }) => queue.push(async () => {
+      const from = reaction.key;
+      await ReactToMessageService({
+        companyId,
+        externalId: key?.id,
+        jid: from?.fromMe ? "me" : from?.participant || from?.remoteJid,
+        fromMe: !!from?.fromMe,
+        emoji: reaction.text || "",
+        at: Number(reaction.senderTimestampMs || 0) || Date.now()
+      });
+    })));
 
     // Baileys 7 reports every phone <-> LID pair it discovers; remember it on
     // the contact so sends go to the LID and LID-only messages (e.g. sent

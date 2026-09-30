@@ -131,6 +131,10 @@ class Message extends Model<Message> {
   @BelongsTo(() => User)
   user: User;
 
+  /** Emoji reactions, one per person (`jid` "me" for our own). */
+  @Column(DataType.JSONB)
+  reactions: { emoji: string; jid: string; fromMe: boolean; at: number }[];
+
   /** Names of the people mentioned; filled by ResolveMentionsService. */
   @Column(DataType.VIRTUAL)
   mentions: { token: string; name: string | null; phone: string | null }[];

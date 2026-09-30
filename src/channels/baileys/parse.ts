@@ -3,6 +3,7 @@ import {
   downloadMediaMessage,
   extractMessageContent,
   getContentType,
+  normalizeMessageContent,
   proto,
   WAMessage,
   WAMessageStubType
@@ -199,7 +200,16 @@ ${JSON.stringify(msg?.message)}`);
   }
 };
 
+/**
+ * Reactions are not messages: they go on the message reacted to
+ * (messages.reaction). They may come wrapped, e.g. in chats with
+ * disappearing messages.
+ */
+export const isReaction = (msg: proto.IWebMessageInfo): boolean =>
+  !!normalizeMessageContent(msg.message)?.reactionMessage;
+
 export const filterMessages = (msg: WAMessage): boolean => {
+  if (isReaction(msg)) return false;
   if (msg.message?.protocolMessage?.editedMessage) return true;
   if (msg.message?.protocolMessage) return false;
 
