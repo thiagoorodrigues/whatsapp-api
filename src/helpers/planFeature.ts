@@ -8,7 +8,8 @@ export type PlanFeature =
   | "useKanban"
   | "useIntegrations"
   | "useFlowBuilder"
-  | "useAiAgents";
+  | "useAiAgents"
+  | "useCrm";
 
 // Whether the company's plan includes a feature.
 export const hasPlanFeature = async (companyId: number, feature: PlanFeature): Promise<boolean> => {

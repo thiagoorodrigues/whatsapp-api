@@ -40,6 +40,13 @@ import AiKnowledgeDocument from "../models/AiKnowledgeDocument";
 import AiKnowledgeChunk from "../models/AiKnowledgeChunk";
 import WhatsappContact from "../models/WhatsappContact";
 import BaileysKey from "../models/BaileysKey";
+import Funnel from "../models/Funnel";
+import FunnelStage from "../models/FunnelStage";
+import FunnelQueue from "../models/FunnelQueue";
+import LossReason from "../models/LossReason";
+import Deal from "../models/Deal";
+import DealEvent from "../models/DealEvent";
+import FunnelRule from "../models/FunnelRule";
 
 // eslint-disable-next-line
 const dbConfig = require("../config/database");
@@ -88,7 +95,14 @@ const models = [
   AiKnowledgeDocument,
   AiKnowledgeChunk,
   WhatsappContact,
-  BaileysKey
+  BaileysKey,
+  Funnel,
+  FunnelStage,
+  FunnelQueue,
+  LossReason,
+  Deal,
+  DealEvent,
+  FunnelRule
 ];
 
 sequelize.addModels(models);

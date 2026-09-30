@@ -15,6 +15,8 @@ interface PlanData {
   useIntegrations?: boolean;
   useFlowBuilder?: boolean;
   useAiAgents?: boolean;
+  useCrm?: boolean;
+  crmFunnels?: number;
 }
 
 const UpdatePlanService = async (planData: PlanData): Promise<Plan> => {

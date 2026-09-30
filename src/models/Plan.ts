@@ -62,6 +62,13 @@ class Plan extends Model<Plan> {
 
   @Column
   useAiAgents: boolean;
+
+  @Column
+  useCrm: boolean;
+
+  // Max active sales funnels; 0 means unlimited.
+  @Column
+  crmFunnels: number;
 }
 
 export default Plan;

@@ -30,6 +30,8 @@ type StorePlanData = {
   useIntegrations?: boolean;
   useFlowBuilder?: boolean;
   useAiAgents?: boolean;
+  useCrm?: boolean;
+  crmFunnels?: number;
 };
 
 type UpdatePlanData = {
@@ -46,6 +48,8 @@ type UpdatePlanData = {
   useIntegrations?: boolean;
   useFlowBuilder?: boolean;
   useAiAgents?: boolean;
+  useCrm?: boolean;
+  crmFunnels?: number;
 };
 
 export const index = async (req: Request, res: Response): Promise<Response> => {
