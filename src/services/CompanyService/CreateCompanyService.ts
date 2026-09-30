@@ -2,6 +2,7 @@ import * as Yup from "yup";
 import AppError from "../../errors/AppError";
 import Company from "../../models/Company";
 import User from "../../models/User";
+import { seedLossReasons } from "../CrmServices/LossReasonService";
 import Setting from "../../models/Setting";
 
 interface CompanyData {
@@ -64,6 +65,8 @@ const CreateCompanyService = async (
     dueDate,
     recurrence
   });
+
+  await seedLossReasons(company.id);
 
   const user = await User.create({
     name: company.name,
