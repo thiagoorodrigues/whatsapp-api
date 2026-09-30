@@ -16,6 +16,7 @@ import Company from "./Company";
 import Queue from "./Queue";
 import { publicFileUrl } from "../helpers/mediaStorage";
 import Whatsapp from "./Whatsapp";
+import User from "./User";
 
 @Table
 class Message extends Model<Message> {
@@ -116,6 +117,19 @@ class Message extends Model<Message> {
   @Default(false)
   @Column
   isForwarded: boolean;
+
+  /** Internal note: shown to the team only, never sent to WhatsApp. */
+  @Default(false)
+  @Column
+  isPrivate: boolean;
+
+  /** Author of an internal note. */
+  @ForeignKey(() => User)
+  @Column
+  userId: number;
+
+  @BelongsTo(() => User)
+  user: User;
 
   /** Names of the people mentioned; filled by ResolveMentionsService. */
   @Column(DataType.VIRTUAL)
