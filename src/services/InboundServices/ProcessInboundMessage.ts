@@ -251,6 +251,7 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
       where: {
         contactId: contact.id,
         companyId,
+        isPrivate: false,
       },
       order: [["createdAt", "DESC"]],
     });
@@ -558,7 +559,8 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
       const lastMessage = await Message.findOne({
         where: {
           ticketId: ticket.id,
-          fromMe: true
+          fromMe: true,
+          isPrivate: false
         },
         order: [["createdAt", "DESC"]]
       });

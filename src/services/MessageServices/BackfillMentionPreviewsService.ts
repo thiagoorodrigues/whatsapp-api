@@ -18,7 +18,7 @@ const BackfillMentionPreviewsService = async (): Promise<number> => {
   let changed = 0;
   for (const ticket of tickets) {
     const last = await Message.findOne({
-      where: { ticketId: ticket.id },
+      where: { ticketId: ticket.id, isPrivate: false },
       attributes: ["id", "body", "dataJson"],
       order: [["createdAt", "DESC"]]
     });

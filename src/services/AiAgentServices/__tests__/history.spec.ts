@@ -17,6 +17,14 @@ jest.mock("../generateReply", () => jest.fn());
 import { agentMayAnswer, toHistory } from "../RunAiAgentService";
 
 describe("conversation history", () => {
+  it("leaves internal notes out of the agent history", () => {
+    const history = toHistory([
+      { fromMe: false, body: "Quero cancelar", isDeleted: false, isPrivate: false },
+      { fromMe: true, body: "cliente irritado, cuidado", isDeleted: false, isPrivate: true }
+    ] as any);
+    expect(history).toEqual([{ role: "user", text: "Quero cancelar" }]);
+  });
+
   it("merges consecutive turns and starts with the customer", () => {
     expect(
       normalizeHistory([

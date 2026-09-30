@@ -64,7 +64,8 @@ const mediaLabel = (mediaType?: string) => {
 
 export const toHistory = (messages: Message[]): ChatMessage[] =>
   messages
-    .filter(m => !m.isDeleted)
+    // Internal notes are for the team, never part of the conversation.
+    .filter(m => !m.isDeleted && !m.isPrivate)
     .map(m => ({
       role: (m.fromMe ? "assistant" : "user") as ChatMessage["role"],
       text: (m.body || "").trim() || (m.fromMe ? "" : mediaLabel(m.mediaType))
@@ -124,7 +125,7 @@ const turn = async (ticketId: number, agentId: number, send: Sender) => {
     if (!apiKey) throw new Error("O agente não tem chave de API cadastrada");
 
     const recent = await Message.findAll({
-      where: { ticketId: ticket.id },
+      where: { ticketId: ticket.id, isPrivate: false },
       order: [["createdAt", "DESC"]],
       limit: HISTORY_MAX_MESSAGES
     });

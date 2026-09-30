@@ -24,7 +24,7 @@ describe("BackfillMentionPreviewsService", () => {
     findLast.mockResolvedValue({ body: "oi @1", dataJson: "{}" });
 
     expect(await BackfillMentionPreviewsService()).toBe(1);
-    expect(findLast).toHaveBeenCalledWith(expect.objectContaining({ where: { ticketId: 8 } }));
+    expect(findLast).toHaveBeenCalledWith(expect.objectContaining({ where: { ticketId: 8, isPrivate: false } }));
     expect(update).toHaveBeenCalledWith({ lastMessage: "oi @Maria" });
   });
 
