@@ -5,6 +5,7 @@ import Message from "../../models/Message";
 import Ticket from "../../models/Ticket";
 import ShowTicketService from "../TicketServices/ShowTicketService";
 import Queue from "../../models/Queue";
+import User from "../../models/User";
 import ResolveMentionsService from "./ResolveMentionsService";
 
 interface Request {
@@ -66,6 +67,11 @@ const ListMessagesService = async ({
       {
         model: Queue,
         as: "queue"
+      },
+      {
+        model: User,
+        as: "user",
+        attributes: ["id", "name"]
       }
     ],
     offset,

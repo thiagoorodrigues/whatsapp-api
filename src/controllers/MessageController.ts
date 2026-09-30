@@ -18,6 +18,7 @@ import DeleteWhatsAppMessage from "../services/WbotServices/DeleteWhatsAppMessag
 import SendWhatsAppMedia from "../services/WbotServices/SendWhatsAppMedia";
 import ForwardMessageService from "../services/MessageServices/ForwardMessageService";
 import SendWhatsAppMessage from "../services/WbotServices/SendWhatsAppMessage";
+import CreateInternalNoteService from "../services/MessageServices/CreateInternalNoteService";
 import CheckContactNumber from "../services/WbotServices/CheckNumber";
 import CheckIsValidContact from "../services/WbotServices/CheckIsValidContact";
 import GetProfilePicUrl from "../services/WbotServices/GetProfilePicUrl";
@@ -90,6 +91,14 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   const { companyId } = req.user;
 
   const ticket = await ShowTicketService(ticketId, companyId);
+
+  // Internal note: saved for the team, never sent to the customer.
+  const { isPrivate } = req.body;
+  if (isPrivate === true || isPrivate === "true") {
+    if (medias?.length) throw new AppError("ERR_INTERNAL_NOTE_MEDIA");
+    await CreateInternalNoteService({ ticket, body, userId: +req.user.id });
+    return res.send();
+  }
 
   SetTicketMessagesAsRead(ticket);
 

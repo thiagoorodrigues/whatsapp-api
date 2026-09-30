@@ -2,6 +2,7 @@ import { getIO } from "../../libs/socket";
 import Message from "../../models/Message";
 import Ticket from "../../models/Ticket";
 import Whatsapp from "../../models/Whatsapp";
+import User from "../../models/User";
 import ResolveMentionsService from "./ResolveMentionsService";
 import { previewWithMentions } from "../../helpers/mentions";
 
@@ -24,6 +25,8 @@ interface MessageData {
   dataJson?: string | null;
   isEdited?: boolean;
   isForwarded?: boolean;
+  isPrivate?: boolean;
+  userId?: number;
 }
 interface Request {
   messageData: MessageData;
@@ -64,7 +67,8 @@ const CreateMessageService = async ({ messageData: data, companyId }: Request): 
         model: Message,
         as: "quotedMsg",
         include: ["contact"]
-      }
+      },
+      { model: User, as: "user", attributes: ["id", "name"] }
     ]
   });
 
@@ -77,9 +81,12 @@ const CreateMessageService = async ({ messageData: data, companyId }: Request): 
   }
 
   await ResolveMentionsService([message], companyId);
-  // The ticket list shows "@Maria", not the digits of the mention.
-  const preview = previewWithMentions(message.ticket.lastMessage, message.body, message.mentions);
-  if (preview) await message.ticket.update({ lastMessage: preview });
+  // The ticket list shows "@Maria", not the digits of the mention. An
+  // internal note is not part of the conversation with the customer.
+  if (!message.isPrivate) {
+    const preview = previewWithMentions(message.ticket.lastMessage, message.body, message.mentions);
+    if (preview) await message.ticket.update({ lastMessage: preview });
+  }
 
   const io = getIO();
   io.to(message.ticketId.toString())
