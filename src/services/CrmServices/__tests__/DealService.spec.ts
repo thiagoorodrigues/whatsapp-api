@@ -1,0 +1,46 @@
+import { sanitizeDealInput } from "../DealService";
+
+jest.mock("../../../libs/socket", () => ({ getIO: () => ({ emit: jest.fn() }) }));
+
+describe("sanitizeDealInput", () => {
+  it("keeps only known fields and normalises them", () => {
+    expect(
+      sanitizeDealInput({
+        title: "  Plano Pro ",
+        value: "2400,50",
+        source: "instagram",
+        notes: " ligar depois ",
+        expectedCloseDate: "2026-10-15",
+        userId: 3,
+        // @ts-expect-error unknown field is dropped
+        status: "won"
+      })
+    ).toEqual({
+      title: "Plano Pro",
+      value: 2400.5,
+      source: "instagram",
+      notes: "ligar depois",
+      expectedCloseDate: "2026-10-15",
+      userId: 3
+    });
+  });
+  it("refuses negative or non-numeric values", () => {
+    expect(() => sanitizeDealInput({ value: -1 })).toThrow("ERR_CRM_INVALID_VALUE");
+    expect(() => sanitizeDealInput({ value: "abc" })).toThrow("ERR_CRM_INVALID_VALUE");
+  });
+  it("refuses unknown sources and bad dates", () => {
+    expect(() => sanitizeDealInput({ source: "tiktok" })).toThrow("ERR_CRM_INVALID_SOURCE");
+    expect(() => sanitizeDealInput({ expectedCloseDate: "15/10/2026" })).toThrow("ERR_CRM_INVALID_DATE");
+  });
+  it("clears optional fields with empty values", () => {
+    expect(sanitizeDealInput({ source: "", notes: "", expectedCloseDate: "", userId: null })).toEqual({
+      source: null,
+      notes: null,
+      expectedCloseDate: null,
+      userId: null
+    });
+  });
+  it("refuses an empty title", () => {
+    expect(() => sanitizeDealInput({ title: "   " })).toThrow("ERR_CRM_NAME_REQUIRED");
+  });
+});
