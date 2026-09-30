@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import AppError from "../errors/AppError";
 import TicketTag from '../models/TicketTag';
 import Tag from '../models/Tag'
+import { getIO } from "../libs/socket";
+import MoveKanbanTicketService from "../services/TagServices/MoveKanbanTicketService";
 
 export const store = async (req: Request, res: Response): Promise<Response> => {
   const { ticketId, tagId } = req.params;
@@ -54,4 +56,16 @@ export const remove = async (req: Request, res: Response): Promise<Response> => 
   } catch (error) {
     return res.status(500).json({ error: 'Failed to remove ticket tags.' });
   }
+};
+
+export const moveKanban = async (req: Request, res: Response): Promise<Response> => {
+  const { ticketId } = req.params;
+  const { tagId = null } = req.body;
+  const { companyId } = req.user;
+
+  await MoveKanbanTicketService({ ticketId, tagId, companyId });
+
+  getIO().emit(`company-${companyId}-ticketTags`, { action: "update", ticketId: +ticketId });
+
+  return res.status(200).json({ ticketId: +ticketId, tagId });
 };

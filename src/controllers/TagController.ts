@@ -126,5 +126,7 @@ export const syncTags = async (
 
   const tags = await SyncTagService({ ...data, companyId });
 
+  getIO().emit(`company-${companyId}-ticketTags`, { action: "update", ticketId: data.ticketId });
+
   return res.json(tags);
 };
