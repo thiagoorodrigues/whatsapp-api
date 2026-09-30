@@ -174,7 +174,11 @@ Só aparece com `useCrm` no plano.
 | `ERR_CRM_STAGE_NOT_EMPTY` (400) | apagar coluna com negócios |
 | `ERR_CRM_STAGE_LOCKED` (400) | apagar/arquivar/reordenar Ganho ou Perdido |
 | `ERR_CRM_RULE_EMPTY` (400) | regra sem conexão e sem fila |
-| 404 | funil, coluna ou negócio de outra empresa ou fora da visão do usuário |
+| `ERR_CRM_STAGE_ORDER` (400) | lista de reordenação não bate com as colunas abertas |
+| `ERR_CRM_NAME_REQUIRED` (400) | nome ou título vazio |
+| `ERR_CRM_INVALID_VALUE` / `ERR_CRM_INVALID_SOURCE` / `ERR_CRM_INVALID_DATE` (400) | valor negativo ou não numérico, origem fora da lista, data fora de AAAA-MM-DD |
+| `ERR_NO_PERMISSION` (403) | configuração sem ser admin; vendedor com `ownDealsOnly` passando negócio para outro |
+| `ERR_CRM_NOT_FOUND` (404) | funil, coluna, negócio ou motivo de outra empresa ou fora da visão do usuário |
 
 Mensagens em português no `toastError` do frontend.
 
