@@ -1,4 +1,4 @@
-// import cacheLayer from "../libs/cache";
+import { cacheLayer } from "../libs/cache";
 import { getIO } from "../libs/socket";
 import Message from "../models/Message";
 import Ticket from "../models/Ticket";
@@ -7,7 +7,9 @@ import { getTicketChannel, messageRef, ticketAddress } from "../channels";
 
 const SetTicketMessagesAsRead = async (ticket: Ticket): Promise<void> => {
   await ticket.update({ unreadMessages: 0 });
-  // await cacheLayer.set(`contacts:${ticket.contactId}:unreads`, "0");
+  // Incoming messages count from this cache; left as is, the next message
+  // brings back every message already read.
+  await cacheLayer.set(`contacts:${ticket.contactId}:unreads`, "0");
 
   const unread = await Message.findAll({
     where: {

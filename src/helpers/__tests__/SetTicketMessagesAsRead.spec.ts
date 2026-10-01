@@ -7,6 +7,8 @@ jest.mock("../../libs/wbot", () => ({
 }));
 jest.mock("../../libs/socket", () => ({ getIO: () => ({ to: () => ({ to: () => ({ emit: jest.fn() }) }) }) }));
 jest.mock("../../models/Ticket", () => ({}));
+const cacheSet = jest.fn();
+jest.mock("../../libs/cache", () => ({ cacheLayer: { set: (...args: any[]) => cacheSet(...args) } }));
 jest.mock("../../models/Message", () => ({
   __esModule: true,
   default: { findAll: (...args: any[]) => findAll(...args), update: (...args: any[]) => update(...args) }
@@ -52,6 +54,12 @@ describe("SetTicketMessagesAsRead", () => {
     await SetTicketMessagesAsRead(ticket);
     expect(update).toHaveBeenCalled();
     expect(ticket.update).toHaveBeenCalledWith({ unreadMessages: 0 });
+  });
+
+  it("resets the counter new messages are added to", async () => {
+    findAll.mockResolvedValue([]);
+    await SetTicketMessagesAsRead({ ...ticket, contactId: 7 });
+    expect(cacheSet).toHaveBeenCalledWith("contacts:7:unreads", "0");
   });
 
   it("does nothing on WhatsApp when nothing is unread", async () => {

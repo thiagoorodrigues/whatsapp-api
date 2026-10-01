@@ -18,6 +18,7 @@ import { toPhoneNumber, toUserLid } from "../../helpers/GetPhoneJid";
 import { forgetGroup } from "../../libs/whatsappCache";
 import Contact from "../../models/Contact";
 import Message from "../../models/Message";
+import MarkReadOnDeviceService from "../MessageServices/MarkReadOnDeviceService";
 import Ticket from "../../models/Ticket";
 import { logger } from "../../utils/logger";
 import {
@@ -133,12 +134,16 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
     wbot.ev.on("messages.update", (messageUpdate: WAMessageUpdate[]) => {
       if (messageUpdate.length === 0) return;
       messageUpdate.forEach(async (message: WAMessageUpdate) => {
-        // Delivery/read status of a message: only the ack changes. Marking
-        // chats as read is done when an agent opens the ticket.
+        // Delivery/read status of a message we sent.
         if (message.update.status) {
           UpdateMessageAckService(message.key.id, message.update.status);
         }
       });
+      // Received messages read on the phone ("read-self").
+      const readOnPhone = messageUpdate
+        .filter(m => m.key.fromMe === false && Number(m.update.status) >= 4 && m.key.id)
+        .map(m => m.key.id!);
+      MarkReadOnDeviceService(readOnPhone, companyId);
     });
 
     wbot.ev.on("message-receipt.update", async (messageUserReceiptUpdate: MessageUserReceiptUpdate[]) => {
@@ -150,7 +155,11 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
           if (!isNil(msg)) {
             const ticket = await Ticket.findOne({ where: { id: msg.ticketId, companyId: companyId } });
 
-            if (ticket && ticket.isGroup) {
+            // Members only send receipts for our own messages, so a read
+            // receipt for someone else's message means we read it.
+            if (ticket && ticket.isGroup && !msg.fromMe) {
+              if (message.receipt.readTimestamp) MarkReadOnDeviceService([message.key.id!], companyId);
+            } else if (ticket && ticket.isGroup) {
               // One receipt per member: delivered (3) once someone got it,
               // read (4) once someone read it, played (5) for voice notes.
               // Never goes back.
