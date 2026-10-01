@@ -1,7 +1,7 @@
 import AiAgent from "../../models/AiAgent";
 import { getProvider } from "./providers";
 import { buildContext, buildSystemPrompt } from "./prompt";
-import { buildToolSet, DeferredAction } from "./tools";
+import { buildToolSet, DeferredAction, ToolContext } from "./tools";
 import { HttpContext } from "./httpTools";
 import { openMcpSession } from "./mcpTools";
 import { knowledgeForTurn, searchKnowledge } from "./knowledge/KnowledgeService";
@@ -30,6 +30,7 @@ const generateReply = async (params: {
   companyName?: string;
   contactName?: string;
   httpContext?: HttpContext;
+  crm?: ToolContext["crm"];
 }): Promise<ReplyResult> => {
   const { agent, apiKey, history, queues } = params;
   const knowledge = await knowledgeForTurn(agent.id, agent.companyId);
@@ -38,7 +39,8 @@ const generateReply = async (params: {
     http: params.httpContext || { contactName: params.contactName },
     searchKnowledge: knowledge.searchable
       ? query => searchKnowledge(agent.id, agent.companyId, query)
-      : undefined
+      : undefined,
+    crm: params.crm
   });
   const mcp = await openMcpSession(agent.tools?.mcp || [], { companyId: agent.companyId });
 

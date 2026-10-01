@@ -8,6 +8,7 @@ import { validateKey } from "./keys";
 import { sanitizeHttpTools, serializeHttpTools } from "./httpTools";
 import { sanitizeMcpServers, serializeMcpServers } from "./mcpTools";
 import { connectionStatuses, syncAgentConnections } from "./mcpOAuth";
+import { assertCrmToolConfig, crmToolConfig } from "../CrmServices/AgentDealService";
 
 const EFFORTS = ["low", "medium", "high"];
 const STATUSES = ["draft", "active", "paused"];
@@ -64,7 +65,8 @@ const clean = (data: AgentData, partial: boolean, previous: AiAgentTools = {}) =
       },
       close: { enabled: !!tools.close?.enabled },
       http: sanitizeHttpTools(tools.http, previous.http),
-      mcp: sanitizeMcpServers(tools.mcp, previous.mcp)
+      mcp: sanitizeMcpServers(tools.mcp, previous.mcp),
+      crm: crmToolConfig(tools.crm)
     };
   }
   return out;
@@ -123,6 +125,7 @@ export const createAgent = async (data: AgentData, companyId: number) => {
     },
     false
   );
+  await assertCrmToolConfig(companyId, crmToolConfig((values.tools as AiAgentTools | undefined)?.crm));
   const key = data.apiKey ? await validateKey(values.provider as string, data.apiKey) : {};
   const agent = await AiAgent.create({ ...values, ...key, companyId } as any);
   await syncAgentConnections(companyId, agent.id, oauthServerIds(agent.tools));
@@ -132,6 +135,7 @@ export const createAgent = async (data: AgentData, companyId: number) => {
 export const updateAgent = async (id: number | string, data: AgentData, companyId: number) => {
   const agent = await findAgent(id, companyId);
   const values = clean(data, true, agent.tools || {});
+  if (values.tools) await assertCrmToolConfig(companyId, crmToolConfig((values.tools as AiAgentTools).crm));
   const provider = (values.provider as string) || agent.provider;
   let key: Record<string, unknown> = {};
   if (data.apiKey) {

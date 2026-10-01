@@ -13,7 +13,14 @@ export interface ToolContext {
   http?: HttpContext;
   /** Search of the agent's knowledge base (when it has documents to search). */
   searchKnowledge?: (query: string) => Promise<{ title: string; description: string | null; content: string }[]>;
+  /** The conversation's deal in the CRM; absent in the test console, where CRM tools only simulate. */
+  crm?: {
+    register: (input: { summary: string; title?: string; value?: number | string; source?: string }) => Promise<{ ok: boolean; message: string }>;
+    qualify: () => Promise<{ ok: boolean; message: string }>;
+  };
 }
+
+const DEAL_SOURCES = ["ad", "instagram", "site", "referral", "whatsapp", "other"];
 
 export interface ToolSet {
   definitions: ToolDefinition[];
@@ -138,6 +145,61 @@ export const buildToolSet = (config: AiAgentTools = {}, ctx: ToolContext): ToolS
           .join("\n\n")
       };
     };
+  }
+
+  const crm = config.crm;
+  if (crm?.enabled && crm.funnelId && crm.stageId) {
+    definitions.push({
+      name: "registrar_negocio",
+      description:
+        "Registra ou atualiza no CRM o negócio deste contato, depois de entender o que ele quer. " +
+        "Use quando o cliente mostrar interesse real (produto, orçamento, prazo). Chame de novo quando " +
+        "souber mais: o mesmo negócio é atualizado e o resumo é acrescentado. Não avise o cliente sobre o CRM.",
+      parameters: {
+        type: "object",
+        properties: {
+          resumo: {
+            type: "string",
+            description: "Resumo da qualificação: o que o cliente quer, orçamento, prazo, objeções e próximos passos."
+          },
+          titulo: { type: "string", description: "Título curto do negócio, ex.: \"Plano anual - 2 pets\". Opcional." },
+          valor: { type: "number", description: "Valor estimado em reais, se o cliente indicou. Opcional." },
+          origem: {
+            type: "string",
+            enum: DEAL_SOURCES,
+            description: "Como o cliente chegou: ad (anúncio), instagram, site, referral (indicação), whatsapp, other."
+          }
+        },
+        required: ["resumo"],
+        additionalProperties: false
+      }
+    });
+    handlers.registrar_negocio = async input => {
+      const summary = text(input.resumo);
+      if (!summary) return { result: "Informe o resumo da qualificação.", error: true };
+      const payload: { summary: string; title?: string; value?: number | string; source?: string } = { summary };
+      if (text(input.titulo)) payload.title = text(input.titulo);
+      if (input.valor !== undefined && input.valor !== null && input.valor !== "") payload.value = input.valor as number | string;
+      if (text(input.origem)) payload.source = text(input.origem);
+      if (!ctx.crm) return { result: `Simulação (teste): o negócio seria registrado no CRM com o resumo "${summary}".` };
+      const r = await ctx.crm.register(payload);
+      return r.ok ? { result: r.message } : { result: r.message, error: true };
+    };
+
+    if (crm.qualifiedStageId) {
+      definitions.push({
+        name: "marcar_lead_qualificado",
+        description:
+          "Marca no CRM o negócio deste contato como lead qualificado, quando ele confirmou interesse e tem " +
+          "perfil para seguir com o time de vendas. Registre o negócio antes.",
+        parameters: { type: "object", properties: {}, additionalProperties: false }
+      });
+      handlers.marcar_lead_qualificado = async () => {
+        if (!ctx.crm) return { result: "Simulação (teste): o negócio seria movido para a coluna de qualificado." };
+        const r = await ctx.crm.qualify();
+        return r.ok ? { result: r.message } : { result: r.message, error: true };
+      };
+    }
   }
 
   const httpTools = config.http || [];

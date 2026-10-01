@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/node";
 import { OutgoingContent } from "../../channels/types";
 
+import { qualifyContactDeal, registerContactDeal } from "../CrmServices/AgentDealService";
 import AiAgent from "../../models/AiAgent";
 import AiAgentRun from "../../models/AiAgentRun";
 import Company from "../../models/Company";
@@ -84,6 +85,18 @@ export const trimHistory = (history: ChatMessage[], maxChars = HISTORY_MAX_CHARS
   return kept;
 };
 
+// The agent works on the deal of this conversation's contact only.
+const crmFor = (agent: AiAgent, ticket: Ticket) => {
+  const cfg = agent.tools?.crm;
+  if (!cfg?.enabled || !cfg.funnelId || !cfg.stageId || !ticket.contactId) return undefined;
+  const target = { companyId: ticket.companyId, contactId: ticket.contactId, funnelId: cfg.funnelId };
+  return {
+    register: (input: { summary: string; title?: string; value?: number | string; source?: string }) =>
+      registerContactDeal({ ...target, stageId: cfg.stageId, ...input }),
+    qualify: () => qualifyContactDeal({ ...target, stageId: cfg.qualifiedStageId })
+  };
+};
+
 const applyActions = async (ticket: Ticket, actions: DeferredAction[]) => {
   for (const action of actions) {
     if (action.type === "transfer") {
@@ -149,7 +162,8 @@ const turn = async (ticketId: number, agentId: number, send: Sender) => {
         contactName: ticket.contact?.name,
         contactNumber: ticket.contact?.number,
         ticketId: ticket.id
-      }
+      },
+      crm: crmFor(agent, ticket)
     });
 
     if (result.reply) await send({ type: "text", text: result.reply });

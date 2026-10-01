@@ -48,3 +48,43 @@ describe("buildToolSet", () => {
     expect((await set.execute("encerrar_atendimento", { __invalidJson: "{" })).error).toBe(true);
   });
 });
+
+describe("CRM tools", () => {
+  const crmOn = { crm: { enabled: true, funnelId: 5, stageId: 25, qualifiedStageId: 26 } };
+
+  it("are offered only when enabled with a funnel and a stage", () => {
+    const names = (cfg: any) => buildToolSet(cfg, { queues }).definitions.map(d => d.name);
+    expect(names({ crm: { enabled: false, funnelId: 5, stageId: 25, qualifiedStageId: null } })).toEqual([]);
+    expect(names({ crm: { enabled: true, funnelId: 5, stageId: null, qualifiedStageId: null } })).toEqual([]);
+    expect(names({ crm: { enabled: true, funnelId: 5, stageId: 25, qualifiedStageId: null } })).toEqual(["registrar_negocio"]);
+    expect(names(crmOn)).toEqual(["registrar_negocio", "marcar_lead_qualificado"]);
+  });
+
+  it("only simulate in the test console (no CRM context)", async () => {
+    const set = buildToolSet(crmOn, { queues });
+    const r = await set.execute("registrar_negocio", { resumo: "Quer plano anual", valor: 1500 });
+    expect(r.error).toBeFalsy();
+    expect(r.result).toMatch(/simulação/i);
+    const q = await set.execute("marcar_lead_qualificado", {});
+    expect(q.result).toMatch(/simulação/i);
+  });
+
+  it("pass the model's input to the CRM and report its answer", async () => {
+    const register = jest.fn().mockResolvedValue({ ok: true, message: "Negócio criado no CRM para este contato." });
+    const qualify = jest.fn().mockResolvedValue({ ok: false, message: "Registre o negócio antes." });
+    const set = buildToolSet(crmOn, { queues, crm: { register, qualify } });
+    const r = await set.execute("registrar_negocio", { resumo: " Quer plano anual ", titulo: "Plano anual", valor: "1.500,00", origem: "instagram" });
+    expect(register).toHaveBeenCalledWith({ summary: "Quer plano anual", title: "Plano anual", value: "1.500,00", source: "instagram" });
+    expect(r).toEqual({ result: "Negócio criado no CRM para este contato." });
+    const q = await set.execute("marcar_lead_qualificado", {});
+    expect(q).toEqual({ result: "Registre o negócio antes.", error: true });
+  });
+
+  it("refuses an empty summary before calling the CRM", async () => {
+    const register = jest.fn();
+    const set = buildToolSet(crmOn, { queues, crm: { register, qualify: jest.fn() } });
+    const r = await set.execute("registrar_negocio", { resumo: "  " });
+    expect(r.error).toBe(true);
+    expect(register).not.toHaveBeenCalled();
+  });
+});
