@@ -6,6 +6,7 @@ import DealEvent from "../../models/DealEvent";
 import Funnel from "../../models/Funnel";
 import FunnelStage from "../../models/FunnelStage";
 import { emitDeal, loadCard, sanitizeDealInput, topPosition } from "./DealService";
+import { logger } from "../../utils/logger";
 
 // Deal changes made by the AI agent: same CRM rules, no user (events show
 // as automatic), limited to the conversation's contact and one funnel.
@@ -79,11 +80,35 @@ const unavailable = async (companyId: number, funnelId: number | null, stageId: 
   return null;
 };
 
-const openDealOf = (companyId: number, funnelId: number, contactId: number) =>
-  Deal.findOne({ where: { companyId, funnelId, contactId, status: "open" }, order: [["updatedAt", "DESC"]] });
+const openDealOf = (companyId: number, funnelId: number, contactId: number, transaction?: any) =>
+  Deal.findOne({
+    where: { companyId, funnelId, contactId, status: "open" },
+    order: [["updatedAt", "DESC"]],
+    ...(transaction ? { transaction, lock: true } : {})
+  });
+
+// One registration at a time per contact and funnel, across tickets and
+// processes, so two quick messages cannot create two deals.
+const lockContactFunnel = (companyId: number, contactId: number, funnelId: number, transaction: any) =>
+  Deal.sequelize!.query("SELECT pg_advisory_xact_lock(:a, :b)", {
+    replacements: { a: companyId, b: (contactId * 1000003 + funnelId) % 2147483647 },
+    transaction
+  });
+
+// The board update is a courtesy: the deal is saved either way.
+const notify = async (companyId: number, action: "create" | "update", dealId: number) => {
+  try {
+    emitDeal(companyId, action, await loadCard(companyId, dealId));
+  } catch (err) {
+    logger.warn(`CRM agent: deal ${dealId} saved but not broadcast: ${err}`);
+  }
+};
+
+export const crmConfigChanged = (previous: CrmToolConfig | undefined, next: CrmToolConfig): boolean =>
+  JSON.stringify(crmToolConfig(previous)) !== JSON.stringify(crmToolConfig(next));
 
 const ERROR_TEXT: Record<string, string> = {
-  ERR_CRM_INVALID_VALUE: "Valor inválido: informe um número maior ou igual a zero.",
+  ERR_CRM_INVALID_VALUE: "Valor inválido: informe um número entre 0 e 9.999.999.999,99.",
   ERR_CRM_INVALID_SOURCE: "Origem inválida.",
   ERR_CRM_NAME_REQUIRED: "Título vazio."
 };
@@ -112,50 +137,60 @@ export const registerContactDeal = async (params: {
     const code = (err as AppError).message;
     return { ok: false, message: ERROR_TEXT[code] || "Dados inválidos para o negócio." };
   }
-  Object.keys(fields).forEach(k => fields[k] === undefined && delete fields[k]);
-
-  const existing = await openDealOf(companyId, funnelId as number, contactId);
-  if (existing) {
-    const patch = { ...fields, notes: appendSummary(existing.notes, params.summary, now) };
-    await Deal.sequelize!.transaction(async transaction => {
-      await existing.update(patch, { transaction });
-      await DealEvent.create(
-        { companyId, dealId: existing.id, userId: null, type: "edited", toValue: Object.keys(patch).join(",") } as any,
-        { transaction }
-      );
-    });
-    emitDeal(companyId, "update", await loadCard(companyId, existing.id));
-    return { ok: true, created: false, dealId: existing.id, message: "Negócio do contato atualizado no CRM." };
-  }
 
   const contact = await Contact.findOne({ where: { id: contactId, companyId } });
   if (!contact) return { ok: false, message: "Contato não encontrado." };
-  const id = await Deal.sequelize!.transaction(async transaction => {
-    const deal = await Deal.create(
-      {
-        companyId,
-        funnelId,
-        stageId,
-        contactId,
-        userId: null,
-        title: (fields.title as string) || contact.name,
-        value: fields.value ?? 0,
-        source: fields.source ?? null,
-        notes: appendSummary(null, params.summary, now),
-        status: "open",
-        position: await topPosition(companyId, stageId as number, transaction),
-        stageEnteredAt: now
-      } as any,
-      { transaction }
-    );
-    await DealEvent.create(
-      { companyId, dealId: deal.id, userId: null, type: "created", toValue: String(stageId) } as any,
-      { transaction }
-    );
-    return deal.id;
-  });
-  emitDeal(companyId, "create", await loadCard(companyId, id));
-  return { ok: true, created: true, dealId: id, message: "Negócio criado no CRM para este contato." };
+
+  let outcome: { created: boolean; dealId: number };
+  try {
+    outcome = await Deal.sequelize!.transaction(async transaction => {
+      await lockContactFunnel(companyId, contactId, funnelId as number, transaction);
+      const existing = await openDealOf(companyId, funnelId as number, contactId, transaction);
+      if (existing) {
+        // Fill only what nobody set yet; people's edits win over the agent.
+        const patch: Record<string, unknown> = {};
+        if (fields.value !== undefined && !Number(existing.value)) patch.value = fields.value;
+        if (fields.source !== undefined && !existing.source) patch.source = fields.source;
+        patch.notes = appendSummary(existing.notes, params.summary, now);
+        await existing.update(patch, { transaction });
+        await DealEvent.create(
+          { companyId, dealId: existing.id, userId: null, type: "edited", toValue: Object.keys(patch).join(",") } as any,
+          { transaction }
+        );
+        return { created: false, dealId: existing.id };
+      }
+      const deal = await Deal.create(
+        {
+          companyId,
+          funnelId,
+          stageId,
+          contactId,
+          userId: null,
+          title: (fields.title as string) || contact.name,
+          value: fields.value ?? 0,
+          source: fields.source ?? null,
+          notes: appendSummary(null, params.summary, now),
+          status: "open",
+          position: await topPosition(companyId, stageId as number, transaction),
+          stageEnteredAt: now
+        } as any,
+        { transaction }
+      );
+      await DealEvent.create(
+        { companyId, dealId: deal.id, userId: null, type: "created", toValue: String(stageId) } as any,
+        { transaction }
+      );
+      return { created: true, dealId: deal.id };
+    });
+  } catch (err) {
+    logger.error(`CRM agent: could not register deal for contact ${contactId}: ${err}`);
+    return { ok: false, message: "Não foi possível registrar o negócio agora. Siga a conversa normalmente." };
+  }
+
+  await notify(companyId, outcome.created ? "create" : "update", outcome.dealId);
+  return outcome.created
+    ? { ok: true, created: true, dealId: outcome.dealId, message: "Negócio criado no CRM para este contato." }
+    : { ok: true, created: false, dealId: outcome.dealId, message: "Negócio do contato atualizado no CRM." };
 };
 
 export const qualifyContactDeal = async (params: {
@@ -169,21 +204,33 @@ export const qualifyContactDeal = async (params: {
   const now = params.now || new Date();
   const problem = await unavailable(companyId, funnelId, stageId);
   if (problem) return { ok: false, message: problem };
-  const deal = await openDealOf(companyId, funnelId as number, contactId);
-  if (!deal) return { ok: false, message: "Registre o negócio antes de marcar o lead como qualificado." };
-  if (deal.stageId === stageId) return { ok: true, message: "O negócio já está na coluna de qualificado." };
-
-  const from = deal.stageId;
-  await Deal.sequelize!.transaction(async transaction => {
-    await deal.update(
-      { stageId, status: "open", stageEnteredAt: now, position: await topPosition(companyId, stageId as number, transaction) },
-      { transaction }
-    );
-    await DealEvent.create(
-      { companyId, dealId: deal.id, userId: null, type: "stage_changed", fromValue: String(from), toValue: String(stageId) } as any,
-      { transaction }
-    );
-  });
-  emitDeal(companyId, "update", await loadCard(companyId, deal.id));
-  return { ok: true, dealId: deal.id, message: "Lead marcado como qualificado no CRM." };
+  try {
+    const deal = await openDealOf(companyId, funnelId as number, contactId);
+    if (!deal) return { ok: false, message: "Registre o negócio antes de marcar o lead como qualificado." };
+    if (deal.stageId === stageId) return { ok: true, message: "O negócio já está na coluna de qualificado." };
+    const [current, target] = await Promise.all([
+      FunnelStage.findOne({ where: { id: deal.stageId, companyId } }),
+      FunnelStage.findOne({ where: { id: stageId as number, companyId } })
+    ]);
+    // A person may have moved it further already: never pull it back.
+    if (current && target && current.kind === "open" && current.position > target.position) {
+      return { ok: true, message: "O negócio já está adiante no funil; nada foi alterado." };
+    }
+    const from = deal.stageId;
+    await Deal.sequelize!.transaction(async transaction => {
+      await deal.update(
+        { stageId, status: "open", stageEnteredAt: now, position: await topPosition(companyId, stageId as number, transaction) },
+        { transaction }
+      );
+      await DealEvent.create(
+        { companyId, dealId: deal.id, userId: null, type: "stage_changed", fromValue: String(from), toValue: String(stageId) } as any,
+        { transaction }
+      );
+    });
+    await notify(companyId, "update", deal.id);
+    return { ok: true, dealId: deal.id, message: "Lead marcado como qualificado no CRM." };
+  } catch (err) {
+    logger.error(`CRM agent: could not qualify deal for contact ${contactId}: ${err}`);
+    return { ok: false, message: "Não foi possível marcar o lead agora. Siga a conversa normalmente." };
+  }
 };

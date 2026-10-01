@@ -65,7 +65,8 @@ export const sanitizeDealInput = (data: DealInput): Record<string, unknown> => {
   }
   if (data.value !== undefined) {
     const n = typeof data.value === "number" ? data.value : parseMoney(String(data.value));
-    if (!Number.isFinite(n) || n < 0) throw new AppError("ERR_CRM_INVALID_VALUE", 400);
+    // DECIMAL(12,2) holds up to 9.999.999.999,99.
+    if (!Number.isFinite(n) || n < 0 || n > 9999999999.99) throw new AppError("ERR_CRM_INVALID_VALUE", 400);
     out.value = Math.round(n * 100) / 100;
   }
   if (data.source !== undefined) {

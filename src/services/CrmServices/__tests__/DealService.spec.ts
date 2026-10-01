@@ -35,6 +35,10 @@ describe("sanitizeDealInput", () => {
     expect(() => sanitizeDealInput({ value: -1 })).toThrow("ERR_CRM_INVALID_VALUE");
     expect(() => sanitizeDealInput({ value: "abc" })).toThrow("ERR_CRM_INVALID_VALUE");
   });
+  it("refuses values the database cannot store", () => {
+    expect(() => sanitizeDealInput({ value: 1e12 })).toThrow("ERR_CRM_INVALID_VALUE");
+    expect(sanitizeDealInput({ value: 9999999999.99 })).toEqual({ value: 9999999999.99 });
+  });
   it("refuses unknown sources and bad dates", () => {
     expect(() => sanitizeDealInput({ source: "tiktok" })).toThrow("ERR_CRM_INVALID_SOURCE");
     expect(() => sanitizeDealInput({ expectedCloseDate: "15/10/2026" })).toThrow("ERR_CRM_INVALID_DATE");

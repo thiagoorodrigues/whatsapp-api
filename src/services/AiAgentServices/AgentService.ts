@@ -8,7 +8,7 @@ import { validateKey } from "./keys";
 import { sanitizeHttpTools, serializeHttpTools } from "./httpTools";
 import { sanitizeMcpServers, serializeMcpServers } from "./mcpTools";
 import { connectionStatuses, syncAgentConnections } from "./mcpOAuth";
-import { assertCrmToolConfig, crmToolConfig } from "../CrmServices/AgentDealService";
+import { assertCrmToolConfig, crmConfigChanged, crmToolConfig } from "../CrmServices/AgentDealService";
 
 const EFFORTS = ["low", "medium", "high"];
 const STATUSES = ["draft", "active", "paused"];
@@ -135,7 +135,10 @@ export const createAgent = async (data: AgentData, companyId: number) => {
 export const updateAgent = async (id: number | string, data: AgentData, companyId: number) => {
   const agent = await findAgent(id, companyId);
   const values = clean(data, true, agent.tools || {});
-  if (values.tools) await assertCrmToolConfig(companyId, crmToolConfig((values.tools as AiAgentTools).crm));
+  // Only a changed CRM setting is checked again, so an agent whose funnel was
+  // archived (or whose plan lost the CRM) can still be saved and fixed.
+  const nextCrm = values.tools ? crmToolConfig((values.tools as AiAgentTools).crm) : null;
+  if (nextCrm && crmConfigChanged(agent.tools?.crm, nextCrm)) await assertCrmToolConfig(companyId, nextCrm);
   const provider = (values.provider as string) || agent.provider;
   let key: Record<string, unknown> = {};
   if (data.apiKey) {

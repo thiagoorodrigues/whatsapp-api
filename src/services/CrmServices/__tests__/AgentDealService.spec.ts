@@ -22,7 +22,7 @@ jest.mock("../DealService", () => ({
 }));
 jest.mock("../../../models/Deal", () => ({
   __esModule: true,
-  default: { findOne: jest.fn(), create: jest.fn(), sequelize: { transaction: (fn: any) => fn({}) } }
+  default: { findOne: jest.fn(), create: jest.fn(), sequelize: { transaction: (fn: any) => fn({}), query: jest.fn() } }
 }));
 jest.mock("../../../models/DealEvent", () => ({ __esModule: true, default: { create: jest.fn(), bulkCreate: jest.fn() } }));
 jest.mock("../../../models/Funnel", () => ({ __esModule: true, default: { findOne: jest.fn() } }));
@@ -51,6 +51,18 @@ describe("crmToolConfig", () => {
       qualifiedStageId: null
     });
     expect(crmToolConfig(undefined)).toEqual({ enabled: false, funnelId: null, stageId: null, qualifiedStageId: null });
+  });
+});
+
+describe("crmConfigChanged", () => {
+  const { crmConfigChanged } = jest.requireActual("../AgentDealService");
+  const cfg = { enabled: true, funnelId: 5, stageId: 25, qualifiedStageId: null };
+  it("is false when the saved CRM config did not change", () => {
+    expect(crmConfigChanged(cfg, { ...cfg })).toBe(false);
+  });
+  it("is true when it changed or was just turned on", () => {
+    expect(crmConfigChanged(cfg, { ...cfg, stageId: 26 })).toBe(true);
+    expect(crmConfigChanged(undefined, cfg)).toBe(true);
   });
 });
 
@@ -110,7 +122,7 @@ describe("registerContactDeal", () => {
 
   it("updates the open deal instead of creating another, appending the summary", async () => {
     const update = jest.fn();
-    (Deal.findOne as jest.Mock).mockResolvedValue({ id: 7, notes: "ligar depois", value: "0", title: "Maria", update });
+    (Deal.findOne as jest.Mock).mockResolvedValue({ id: 7, notes: "ligar depois", value: "0", title: "Maria", source: null, update });
     const r = await registerContactDeal({ ...base, value: 3000, summary: "Orçamento 3 mil" });
     expect(r).toMatchObject({ ok: true, created: false, dealId: 7 });
     expect(Deal.create).not.toHaveBeenCalled();
@@ -121,6 +133,42 @@ describe("registerContactDeal", () => {
     expect(Deal.findOne).toHaveBeenCalledWith(
       expect.objectContaining({ where: { companyId: 1, funnelId: 5, contactId: 11, status: "open" } })
     );
+  });
+
+  it("serialises registrations per contact and funnel and reads the deal locked", async () => {
+    (Deal.findOne as jest.Mock).mockResolvedValue(null);
+    (Deal.create as jest.Mock).mockResolvedValue({ id: 1 });
+    await registerContactDeal(base);
+    expect((Deal.sequelize as any).query).toHaveBeenCalledWith(
+      expect.stringContaining("pg_advisory_xact_lock"),
+      expect.objectContaining({ transaction: expect.anything() })
+    );
+    expect(Deal.findOne).toHaveBeenCalledWith(expect.objectContaining({ transaction: expect.anything(), lock: true }));
+  });
+
+  it("does not overwrite title, value or source a person already set", async () => {
+    const update = jest.fn();
+    (Deal.findOne as jest.Mock).mockResolvedValue({ id: 7, notes: null, value: "5000.00", title: "Plano empresa", source: "referral", update });
+    await registerContactDeal({ ...base, title: "Outro", value: 100, source: "instagram", summary: "Mais detalhes" });
+    expect(update.mock.calls[0][0]).toEqual({ notes: "Resumo da IA (01/10/2026 14:32): Mais detalhes" });
+  });
+
+  it("answers with an error instead of throwing when the database refuses", async () => {
+    (Deal.findOne as jest.Mock).mockResolvedValue(null);
+    (Deal.create as jest.Mock).mockRejectedValue(new Error("numeric field overflow"));
+    const r = await registerContactDeal(base);
+    expect(r.ok).toBe(false);
+  });
+
+  it("stays ok when only the realtime notice fails after saving", async () => {
+    const { emitDeal } = jest.requireMock("../DealService");
+    (emitDeal as jest.Mock).mockImplementationOnce(() => {
+      throw new Error("Socket IO not initialized");
+    });
+    (Deal.findOne as jest.Mock).mockResolvedValue(null);
+    (Deal.create as jest.Mock).mockResolvedValue({ id: 1 });
+    const r = await registerContactDeal(base);
+    expect(r).toMatchObject({ ok: true, created: true });
   });
 
   it("refuses an invalid value with a readable message and writes nothing", async () => {
@@ -156,6 +204,23 @@ describe("qualifyContactDeal", () => {
     (Deal.findOne as jest.Mock).mockResolvedValue(null);
     const r = await qualifyContactDeal(base);
     expect(r.ok).toBe(false);
+  });
+
+  const stagesById: Record<number, any> = {
+    25: { id: 25, kind: "open", position: 1024 },
+    26: { id: 26, kind: "open", position: 2048 },
+    27: { id: 27, kind: "open", position: 3072 }
+  };
+  beforeEach(() => {
+    (FunnelStage.findOne as jest.Mock).mockImplementation(({ where }: any) => Promise.resolve(stagesById[where.id] || null));
+  });
+
+  it("does not pull back a deal a person already moved further", async () => {
+    const update = jest.fn();
+    (Deal.findOne as jest.Mock).mockResolvedValue({ id: 7, stageId: 27, update });
+    const r = await qualifyContactDeal(base);
+    expect(r.ok).toBe(true);
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("moves the deal to the qualified stage with a system event", async () => {
