@@ -8,7 +8,7 @@ import FunnelStage from "./FunnelStage";
 import Whatsapp from "./Whatsapp";
 import Queue from "./Queue";
 
-// Creates deals automatically; applied in step 5 of the CRM rollout.
+// Creates deals automatically when a contact writes in or enters a queue.
 @Table({ tableName: "FunnelRules" })
 class FunnelRule extends Model<FunnelRule> {
   @PrimaryKey
@@ -30,6 +30,9 @@ class FunnelRule extends Model<FunnelRule> {
   @ForeignKey(() => FunnelStage)
   @Column
   stageId: number;
+
+  @BelongsTo(() => FunnelStage)
+  stage: FunnelStage;
 
   @ForeignKey(() => Whatsapp)
   @Column(DataType.INTEGER)
