@@ -1,9 +1,9 @@
 import Deal from "../../../models/Deal";
-import { lockContactFunnel, findOpenDeal } from "../contactLock";
+import { lockContactFunnel, findOpenDeal, hasDealInFunnel } from "../contactLock";
 
 jest.mock("../../../models/Deal", () => ({
   __esModule: true,
-  default: { findOne: jest.fn(), sequelize: { query: jest.fn() } }
+  default: { findOne: jest.fn(), count: jest.fn(), sequelize: { query: jest.fn() } }
 }));
 
 describe("lockContactFunnel", () => {
@@ -34,5 +34,17 @@ describe("findOpenDeal", () => {
       where: { companyId: 4, funnelId: 5, contactId: 77, status: "open" },
       order: [["updatedAt", "DESC"]]
     });
+  });
+});
+
+describe("hasDealInFunnel", () => {
+  it("counts deals of any status, won and lost included", async () => {
+    (Deal.count as jest.Mock).mockResolvedValue(1);
+    const transaction = { id: "t" };
+    expect(await hasDealInFunnel(4, 5, 77, transaction)).toBe(true);
+    expect(Deal.count).toHaveBeenLastCalledWith({ where: { companyId: 4, funnelId: 5, contactId: 77 }, transaction });
+    (Deal.count as jest.Mock).mockResolvedValue(0);
+    expect(await hasDealInFunnel(4, 5, 77)).toBe(false);
+    expect(Deal.count).toHaveBeenLastCalledWith({ where: { companyId: 4, funnelId: 5, contactId: 77 } });
   });
 });

@@ -2,7 +2,7 @@ import Contact from "../../models/Contact";
 import Deal from "../../models/Deal";
 import DealEvent from "../../models/DealEvent";
 import { logger } from "../../utils/logger";
-import { findOpenDeal, lockContactFunnel } from "./contactLock";
+import { hasDealInFunnel, lockContactFunnel } from "./contactLock";
 import { emitDeal, loadCard, topPosition } from "./DealService";
 import { ActiveRule, activeRules } from "./ruleCache";
 
@@ -24,12 +24,12 @@ export const matchesRule = (rule: ActiveRule, t: { whatsappId: number | null; qu
 export const queueEntered = (oldQueueId: number | null | undefined, newQueueId: number | null | undefined): boolean =>
   !!newQueueId && newQueueId !== oldQueueId;
 
-// Creates the deal unless the contact already has an open one in the funnel.
+// Creates the deal only for contacts that never had one in the funnel.
 const createFromRule = async (ticket: RuleTicket, rule: ActiveRule): Promise<number | null> =>
   Deal.sequelize!.transaction(async transaction => {
     const { companyId, contactId } = ticket;
     await lockContactFunnel(companyId, contactId, rule.funnelId, transaction);
-    if (await findOpenDeal(companyId, rule.funnelId, contactId, transaction)) return null;
+    if (await hasDealInFunnel(companyId, rule.funnelId, contactId, transaction)) return null;
     const contact = await Contact.findOne({ where: { id: contactId, companyId }, attributes: ["id", "name", "number"], transaction });
     if (!contact) return null;
     const deal = await Deal.create(
@@ -71,7 +71,7 @@ const ApplyFunnelRulesService = async (ticket: RuleTicket): Promise<number[]> =>
       try {
         // Most messages come from contacts that already have a deal: check
         // without a transaction first so they do not hold a pool connection.
-        if (await findOpenDeal(ticket.companyId, rule.funnelId, ticket.contactId)) continue;
+        if (await hasDealInFunnel(ticket.companyId, rule.funnelId, ticket.contactId)) continue;
         const dealId = await createFromRule(ticket, rule);
         if (dealId) created.push(dealId);
       } catch (err) {

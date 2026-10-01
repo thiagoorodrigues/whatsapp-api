@@ -2,12 +2,12 @@ import Deal from "../../../models/Deal";
 import DealEvent from "../../../models/DealEvent";
 import Contact from "../../../models/Contact";
 import { activeRules } from "../ruleCache";
-import { findOpenDeal, lockContactFunnel } from "../contactLock";
+import { hasDealInFunnel, lockContactFunnel } from "../contactLock";
 import { emitDeal } from "../DealService";
 import ApplyFunnelRulesService, { matchesRule, queueEntered } from "../ApplyFunnelRulesService";
 
 jest.mock("../ruleCache", () => ({ activeRules: jest.fn() }));
-jest.mock("../contactLock", () => ({ findOpenDeal: jest.fn(), lockContactFunnel: jest.fn() }));
+jest.mock("../contactLock", () => ({ hasDealInFunnel: jest.fn(), lockContactFunnel: jest.fn() }));
 jest.mock("../DealService", () => ({
   topPosition: jest.fn().mockResolvedValue(-1024),
   loadCard: jest.fn(async (_c: number, id: number) => ({ id, funnelId: 5, stageId: 25 })),
@@ -27,7 +27,7 @@ const ticket = { id: 9, companyId: 4, contactId: 77, whatsappId: 2, queueId: 3, 
 beforeEach(() => {
   jest.clearAllMocks();
   (activeRules as jest.Mock).mockResolvedValue([rule()]);
-  (findOpenDeal as jest.Mock).mockResolvedValue(null);
+  (hasDealInFunnel as jest.Mock).mockResolvedValue(false);
   (Contact.findOne as jest.Mock).mockResolvedValue({ id: 77, name: "Maria", number: "5511999990000" });
   let next = 100;
   (Deal.create as jest.Mock).mockImplementation(async () => ({ id: next++ }));
@@ -69,17 +69,18 @@ describe("ApplyFunnelRulesService", () => {
     );
     expect(emitDeal).toHaveBeenCalledWith(4, "create", { id: 100, funnelId: 5, stageId: 25 });
   });
-  it("skips the locked transaction when the contact already has an open deal", async () => {
-    (findOpenDeal as jest.Mock).mockResolvedValue({ id: 50 });
+  it("leaves contacts that ever had a deal in the funnel to manual creation", async () => {
+    (hasDealInFunnel as jest.Mock).mockResolvedValue(true);
     expect(await ApplyFunnelRulesService(ticket)).toEqual([]);
-    expect(findOpenDeal).toHaveBeenCalledWith(4, 5, 77);
+    expect(hasDealInFunnel).toHaveBeenCalledWith(4, 5, 77);
     expect(lockContactFunnel).not.toHaveBeenCalled();
+    expect(Deal.create).not.toHaveBeenCalled();
   });
   it("re-checks inside the lock when the quick check found nothing", async () => {
-    (findOpenDeal as jest.Mock).mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 50 });
+    (hasDealInFunnel as jest.Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     expect(await ApplyFunnelRulesService(ticket)).toEqual([]);
     expect(lockContactFunnel).toHaveBeenCalledWith(4, 77, 5, { id: "t" });
-    expect(findOpenDeal).toHaveBeenLastCalledWith(4, 5, 77, { id: "t" });
+    expect(hasDealInFunnel).toHaveBeenLastCalledWith(4, 5, 77, { id: "t" });
     expect(Deal.create).not.toHaveBeenCalled();
   });
   it("creates one deal per funnel when two of its rules match", async () => {

@@ -15,3 +15,8 @@ export const findOpenDeal = (companyId: number, funnelId: number, contactId: num
     order: [["updatedAt", "DESC"]],
     ...(transaction ? { transaction, lock: true } : {})
   });
+
+// Any deal, won and lost included: automatic rules leave returning contacts
+// to people, since they may only need support.
+export const hasDealInFunnel = async (companyId: number, funnelId: number, contactId: number, transaction?: any) =>
+  (await Deal.count({ where: { companyId, funnelId, contactId }, ...(transaction ? { transaction } : {}) })) > 0;
