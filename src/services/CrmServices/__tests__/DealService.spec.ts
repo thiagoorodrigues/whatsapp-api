@@ -1,4 +1,5 @@
-import { sanitizeDealInput, dealEventPayload } from "../DealService";
+import { Op } from "sequelize";
+import { sanitizeDealInput, dealEventPayload, cursorCondition } from "../DealService";
 
 jest.mock("../../../libs/socket", () => ({ getIO: () => ({ emit: jest.fn() }) }));
 
@@ -49,5 +50,13 @@ describe("dealEventPayload", () => {
   it("broadcasts only ids, never deal contents", () => {
     const card: any = { id: 5, funnelId: 2, stageId: 8, title: "Segredo", value: 999, contact: { name: "Maria", number: "5511" } };
     expect(dealEventPayload("update", card)).toEqual({ action: "update", dealId: 5, funnelId: 2, stageId: 8 });
+  });
+});
+
+describe("cursorCondition", () => {
+  it("continues after the last loaded card, breaking position ties by id", () => {
+    expect(cursorCondition(2048, 7)).toEqual({
+      [Op.or]: [{ position: { [Op.gt]: 2048 } }, { position: 2048, id: { [Op.gt]: 7 } }]
+    });
   });
 });

@@ -6,7 +6,7 @@ import {
   createStage, updateStage, deleteStage, reorderStages
 } from "../services/CrmServices/FunnelService";
 import {
-  listDeals, createDeal, showDeal, updateDeal, moveDeal, listContactDeals
+  listDeals, dealStats, createDeal, showDeal, updateDeal, moveDeal, listContactDeals
 } from "../services/CrmServices/DealService";
 import { listLossReasons, createLossReason, updateLossReason } from "../services/CrmServices/LossReasonService";
 
@@ -49,10 +49,23 @@ export const listDealsHandler = async (req: Request, res: Response): Promise<Res
     await listDeals(await viewer(req), num(req.params.funnelId), {
       stageId: q.stageId ? num(q.stageId) : undefined,
       page: q.page ? num(q.page) : 1,
+      afterPosition: q.afterPosition !== undefined ? num(q.afterPosition) : undefined,
+      afterId: q.afterId !== undefined ? num(q.afterId) : undefined,
       search: q.search,
       userId: q.userId ? num(q.userId) : undefined,
       source: q.source || undefined,
       allClosed: q.allClosed === "true"
+    })
+  );
+};
+
+export const dealStatsHandler = async (req: Request, res: Response): Promise<Response> => {
+  const q = req.query as Record<string, string>;
+  return res.json(
+    await dealStats(await viewer(req), num(req.params.funnelId), {
+      search: q.search,
+      userId: q.userId ? num(q.userId) : undefined,
+      source: q.source || undefined
     })
   );
 };

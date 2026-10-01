@@ -149,17 +149,24 @@ const findVisibleDeal = async (v: Viewer, id: number): Promise<{ deal: Deal; fun
   return { deal, funnel };
 };
 
-export const listDeals = async (
-  v: Viewer,
-  funnelId: number,
-  q: { stageId?: number; page?: number; search?: string; userId?: number; source?: string; allClosed?: boolean }
-) => {
-  const funnel = await findVisibleFunnel(v, funnelId);
-  const stages = q.stageId ? funnel.stages.filter(s => s.id === q.stageId) : funnel.stages;
-  if (q.stageId && !stages.length) throw notFound();
-  const page = Math.max(1, Number(q.page) || 1);
+type DealQuery = {
+  stageId?: number;
+  page?: number;
+  afterPosition?: number;
+  afterId?: number;
+  search?: string;
+  userId?: number;
+  source?: string;
+  allClosed?: boolean;
+};
 
-  const base: any[] = [{ companyId: v.companyId, funnelId }];
+// Keyset pagination: the rows after the last card the client has.
+export const cursorCondition = (afterPosition: number, afterId: number) => ({
+  [Op.or]: [{ position: { [Op.gt]: afterPosition } }, { position: afterPosition, id: { [Op.gt]: afterId } }]
+});
+
+const dealFilters = (v: Viewer, funnel: FunnelView, q: DealQuery): any[] => {
+  const base: any[] = [{ companyId: v.companyId, funnelId: funnel.id }];
   const owner = ownerWhere(v, funnel);
   if (owner) base.push(owner);
   if (q.userId) base.push({ userId: q.userId });
@@ -174,35 +181,74 @@ export const listDeals = async (
       ]
     });
   }
-  const since = subDays(new Date(), CLOSED_WINDOW_DAYS);
+  return base;
+};
+
+const stageConditions = (stage: FunnelStage, base: any[], q: DealQuery): any[] => {
+  const conds = [...base, { stageId: stage.id }];
+  if (stage.kind !== "open" && !q.allClosed) {
+    conds.push({ closedAt: { [Op.gte]: subDays(new Date(), CLOSED_WINDOW_DAYS) } });
+  }
+  return conds;
+};
+
+const stageTotals = async (conds: any[]) => {
+  const where = { [Op.and]: conds };
+  const include = [{ model: Contact, as: "contact", attributes: [] }];
+  const [count, total] = await Promise.all([
+    Deal.count({ where, include, distinct: true, col: "id" } as any),
+    Deal.sum("value", { where, include } as any)
+  ]);
+  return { count, total: Number(total) || 0 };
+};
+
+export const listDeals = async (v: Viewer, funnelId: number, q: DealQuery) => {
+  const funnel = await findVisibleFunnel(v, funnelId);
+  const stages = q.stageId ? funnel.stages.filter(s => s.id === q.stageId) : funnel.stages;
+  if (q.stageId && !stages.length) throw notFound();
+  const page = Math.max(1, Number(q.page) || 1);
+  const useCursor = q.afterPosition !== undefined && q.afterId !== undefined;
+  const base = dealFilters(v, funnel, q);
 
   const result = [];
   for (const stage of stages) {
-    const conds = [...base, { stageId: stage.id }];
-    if (stage.kind !== "open" && !q.allClosed) conds.push({ closedAt: { [Op.gte]: since } });
-    const whereStage = { [Op.and]: conds };
-    const [{ count, rows }, total] = await Promise.all([
-      Deal.findAndCountAll({
-        where: whereStage,
+    const conds = stageConditions(stage, base, q);
+    const rowConds = useCursor ? [...conds, cursorCondition(Number(q.afterPosition), Number(q.afterId))] : conds;
+    const [totals, rows] = await Promise.all([
+      stageTotals(conds),
+      Deal.findAll({
+        where: { [Op.and]: rowConds },
         include: cardInclude,
         order: [["position", "ASC"], ["id", "ASC"]],
-        limit: PAGE_SIZE,
-        offset: (page - 1) * PAGE_SIZE,
-        distinct: true,
+        // One extra row tells whether there is a next page.
+        limit: PAGE_SIZE + 1,
+        offset: useCursor ? 0 : (page - 1) * PAGE_SIZE,
         subQuery: false
-      }),
-      Deal.sum("value", { where: whereStage, include: [{ model: Contact, as: "contact", attributes: [] }] } as any)
+      })
     ]);
-    const unread = await unreadByContact(v.companyId, rows.map(r => r.contactId));
+    const pageRows = rows.slice(0, PAGE_SIZE);
+    const unread = await unreadByContact(v.companyId, pageRows.map(r => r.contactId));
     result.push({
       stageId: stage.id,
-      count,
-      total: Number(total) || 0,
-      deals: rows.map(r => toCard(r, unread)),
-      hasMore: count > page * PAGE_SIZE
+      count: totals.count,
+      total: totals.total,
+      deals: pageRows.map(r => toCard(r, unread)),
+      hasMore: rows.length > PAGE_SIZE
     });
   }
   return { stages: result };
+};
+
+// Counts and sums per stage with the board's filters, so realtime updates
+// can fix the column headers without reloading the cards.
+export const dealStats = async (v: Viewer, funnelId: number, q: DealQuery) => {
+  const funnel = await findVisibleFunnel(v, funnelId);
+  const base = dealFilters(v, funnel, q);
+  const stages = [];
+  for (const stage of funnel.stages) {
+    stages.push({ stageId: stage.id, ...(await stageTotals(stageConditions(stage, base, q))) });
+  }
+  return { stages };
 };
 
 const topPosition = async (companyId: number, stageId: number, transaction: any): Promise<number> => {

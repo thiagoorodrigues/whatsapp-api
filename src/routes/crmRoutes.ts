@@ -18,6 +18,7 @@ crmRoutes.put("/crm/funnels/:funnelId/stages/order", isAuth, crmInPlan, CrmContr
 crmRoutes.put("/crm/funnels/:funnelId/stages/:stageId", isAuth, crmInPlan, CrmController.updateStageHandler);
 crmRoutes.delete("/crm/funnels/:funnelId/stages/:stageId", isAuth, crmInPlan, CrmController.deleteStageHandler);
 crmRoutes.get("/crm/funnels/:funnelId/deals", isAuth, crmInPlan, CrmController.listDealsHandler);
+crmRoutes.get("/crm/funnels/:funnelId/stats", isAuth, crmInPlan, CrmController.dealStatsHandler);
 
 crmRoutes.post("/crm/deals", isAuth, crmInPlan, CrmController.createDealHandler);
 crmRoutes.get("/crm/deals/:dealId", isAuth, crmInPlan, CrmController.showDealHandler);

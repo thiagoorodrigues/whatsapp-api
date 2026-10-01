@@ -17,11 +17,15 @@ describe("crmRoutes", () => {
       path: layer.route.path,
       handlers: layer.route.stack.map((s: any) => s.handle)
     }));
-    expect(stacks.length).toBe(17);
+    expect(stacks.length).toBe(18);
     for (const s of stacks) {
       expect(s.handlers[0].name).toBe("isAuth");
       expect(s.handlers[1]).toBe(guard);
     }
+  });
+  it("exposes the per-stage counts used to keep the board totals right", () => {
+    const paths = (crmRoutes as any).stack.map((l: any) => `${Object.keys(l.route.methods)[0]} ${l.route.path}`);
+    expect(paths).toContain("get /crm/funnels/:funnelId/stats");
   });
   it("declares stages/order before stages/:stageId", () => {
     const paths = (crmRoutes as any).stack.map((l: any) => `${Object.keys(l.route.methods)[0]} ${l.route.path}`);
