@@ -6,7 +6,7 @@ import {
   createStage, updateStage, deleteStage, reorderStages
 } from "../services/CrmServices/FunnelService";
 import {
-  listDeals, dealStats, createDeal, showDeal, updateDeal, moveDeal, listContactDeals
+  listDeals, dealStats, createDeal, showDeal, updateDeal, moveDeal, listContactDeals, deleteDeal
 } from "../services/CrmServices/DealService";
 import { listLossReasons, createLossReason, updateLossReason } from "../services/CrmServices/LossReasonService";
 import { listRules, createRule, updateRule, deleteRule } from "../services/CrmServices/FunnelRuleService";
@@ -79,6 +79,11 @@ export const showDealHandler = async (req: Request, res: Response): Promise<Resp
 
 export const updateDealHandler = async (req: Request, res: Response): Promise<Response> =>
   res.json(await updateDeal(await viewer(req), num(req.params.dealId), req.body));
+
+export const deleteDealHandler = async (req: Request, res: Response): Promise<Response> => {
+  await deleteDeal(await viewer(req), num(req.params.dealId));
+  return res.status(204).send();
+};
 
 export const moveDealHandler = async (req: Request, res: Response): Promise<Response> =>
   res.json(await moveDeal(await viewer(req), num(req.params.dealId), req.body));

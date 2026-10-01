@@ -17,7 +17,7 @@ describe("crmRoutes", () => {
       path: layer.route.path,
       handlers: layer.route.stack.map((s: any) => s.handle)
     }));
-    expect(stacks.length).toBe(22);
+    expect(stacks.length).toBe(23);
     for (const s of stacks) {
       expect(s.handlers[0].name).toBe("isAuth");
       expect(s.handlers[1]).toBe(guard);
@@ -26,6 +26,10 @@ describe("crmRoutes", () => {
   it("exposes the per-stage counts used to keep the board totals right", () => {
     const paths = (crmRoutes as any).stack.map((l: any) => `${Object.keys(l.route.methods)[0]} ${l.route.path}`);
     expect(paths).toContain("get /crm/funnels/:funnelId/stats");
+  });
+  it("lets deals be deleted", () => {
+    const paths = (crmRoutes as any).stack.map((l: any) => `${Object.keys(l.route.methods)[0]} ${l.route.path}`);
+    expect(paths).toContain("delete /crm/deals/:dealId");
   });
   it("exposes the automatic rules", () => {
     const paths = (crmRoutes as any).stack.map((l: any) => `${Object.keys(l.route.methods)[0]} ${l.route.path}`);

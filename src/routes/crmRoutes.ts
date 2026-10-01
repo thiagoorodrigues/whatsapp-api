@@ -23,6 +23,7 @@ crmRoutes.get("/crm/funnels/:funnelId/stats", isAuth, crmInPlan, CrmController.d
 crmRoutes.post("/crm/deals", isAuth, crmInPlan, CrmController.createDealHandler);
 crmRoutes.get("/crm/deals/:dealId", isAuth, crmInPlan, CrmController.showDealHandler);
 crmRoutes.put("/crm/deals/:dealId", isAuth, crmInPlan, CrmController.updateDealHandler);
+crmRoutes.delete("/crm/deals/:dealId", isAuth, crmInPlan, CrmController.deleteDealHandler);
 crmRoutes.put("/crm/deals/:dealId/move", isAuth, crmInPlan, CrmController.moveDealHandler);
 crmRoutes.get("/crm/contacts/:contactId/deals", isAuth, crmInPlan, CrmController.contactDealsHandler);
 
