@@ -2,10 +2,10 @@ import Funnel from "../../../models/Funnel";
 import FunnelStage from "../../../models/FunnelStage";
 import Deal from "../../../models/Deal";
 import Company from "../../../models/Company";
-import { createFunnel, deleteStage, updateStage } from "../FunnelService";
+import { createFunnel, deleteStage, updateStage, listFunnels } from "../FunnelService";
 
 jest.mock("../../../libs/socket", () => ({ getIO: () => ({ emit: jest.fn() }) }));
-jest.mock("../../../models/Funnel", () => ({ __esModule: true, default: { count: jest.fn(), findOne: jest.fn(), create: jest.fn(), sequelize: { transaction: (fn: any) => fn({}) } } }));
+jest.mock("../../../models/Funnel", () => ({ __esModule: true, default: { count: jest.fn(), findOne: jest.fn(), findAll: jest.fn().mockResolvedValue([]), create: jest.fn(), sequelize: { transaction: (fn: any) => fn({}) } } }));
 jest.mock("../../../models/FunnelStage", () => ({ __esModule: true, default: { findOne: jest.fn(), bulkCreate: jest.fn(), findAll: jest.fn() } }));
 jest.mock("../../../models/FunnelQueue", () => ({ __esModule: true, default: { bulkCreate: jest.fn(), destroy: jest.fn() } }));
 jest.mock("../../../models/Deal", () => ({ __esModule: true, default: { count: jest.fn(), update: jest.fn() } }));
@@ -62,5 +62,21 @@ describe("stage locks", () => {
     expect(Deal.count).toHaveBeenCalledWith(tx);
     expect(Deal.update).toHaveBeenCalledWith(expect.objectContaining({ stageId: 9 }), tx);
     expect(destroy).toHaveBeenCalledWith(tx);
+  });
+});
+
+describe("listFunnels", () => {
+  const stageWhere = () => (Funnel.findAll as jest.Mock).mock.calls[0][0].include[0].where;
+  it("hides archived stages on the board", async () => {
+    await listFunnels(admin);
+    expect(stageWhere()).toEqual({ archived: false });
+  });
+  it("brings archived stages to the admin settings", async () => {
+    await listFunnels(admin, { includeArchived: true });
+    expect(stageWhere()).toBeUndefined();
+  });
+  it("keeps them hidden for non-admins even when asked", async () => {
+    await listFunnels(seller, { includeArchived: true });
+    expect(stageWhere()).toEqual({ archived: false });
   });
 });

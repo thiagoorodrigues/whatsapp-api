@@ -30,10 +30,13 @@ const assertAdmin = (v: Viewer) => {
 
 const notFound = () => new AppError("ERR_CRM_NOT_FOUND", 404);
 
-const include = [
-  { model: FunnelStage, as: "stages", where: { archived: false }, required: false },
+// Archived stages stay off the board; the admin settings ask for them.
+const includeWith = (archivedStages: boolean) => [
+  { model: FunnelStage, as: "stages", ...(archivedStages ? {} : { where: { archived: false } }), required: false },
   { model: Queue, as: "queues", attributes: ["id"], through: { attributes: [] } }
 ];
+
+const include = includeWith(false);
 
 const toView = (f: Funnel): FunnelView => ({
   id: f.id,
@@ -54,7 +57,7 @@ export const listFunnels = async (v: Viewer, opts: { includeArchived?: boolean }
   const withArchived = !!opts.includeArchived && isAdmin(v);
   const rows = await Funnel.findAll({
     where: { companyId: v.companyId, ...(withArchived ? {} : { archived: false }) },
-    include,
+    include: includeWith(withArchived),
     order: [["position", "ASC"], ["id", "ASC"]]
   });
   return rows.map(toView).filter(f => (withArchived && f.archived) || canSeeFunnel(v, f));
