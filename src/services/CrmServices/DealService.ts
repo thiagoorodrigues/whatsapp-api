@@ -14,7 +14,7 @@ import { findVisibleFunnel, findVisibleStage, FunnelView } from "./FunnelService
 import { findActiveLossReason } from "./LossReasonService";
 import { needsRenumber, positionBetween, renumber } from "./position";
 import { stageChange } from "./transition";
-import { canSeeDeal, ownerScope, Viewer } from "./visibility";
+import { canDeleteDeal, canSeeDeal, ownerScope, Viewer } from "./visibility";
 
 export const PAGE_SIZE = 50;
 export const CLOSED_WINDOW_DAYS = 30;
@@ -378,6 +378,15 @@ export const updateDeal = async (v: Viewer, id: number, data: DealInput): Promis
   const card = await loadCard(v.companyId, deal.id);
   emitDeal(v.companyId, "update", card);
   return card;
+};
+
+// History rows go with the deal (FK CASCADE on DealEvents).
+export const deleteDeal = async (v: Viewer, id: number): Promise<void> => {
+  const { deal } = await findVisibleDeal(v, id);
+  if (!canDeleteDeal(v, deal)) throw new AppError("ERR_NO_PERMISSION", 403);
+  const ids = { id: deal.id, funnelId: deal.funnelId, stageId: deal.stageId } as DealCard;
+  await deal.destroy();
+  emitDeal(v.companyId, "delete", ids);
 };
 
 // Reads inside the move's transaction so it sees a renumbering done there.

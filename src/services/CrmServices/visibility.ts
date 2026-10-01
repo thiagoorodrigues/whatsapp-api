@@ -23,3 +23,6 @@ export const canSeeDeal = (v: Viewer, f: { ownDealsOnly: boolean }, d: { userId:
   const scope = ownerScope(v, f);
   return scope === null || scope.includes(d.userId ?? 0);
 };
+
+// Deleting cannot be undone, so sellers may only delete deals they own.
+export const canDeleteDeal = (v: Viewer, d: { userId: number | null }): boolean => isAdmin(v) || d.userId === v.id;

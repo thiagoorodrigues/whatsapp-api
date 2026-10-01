@@ -6,9 +6,10 @@ import {
   createStage, updateStage, deleteStage, reorderStages
 } from "../services/CrmServices/FunnelService";
 import {
-  listDeals, dealStats, createDeal, showDeal, updateDeal, moveDeal, listContactDeals
+  listDeals, dealStats, createDeal, showDeal, updateDeal, moveDeal, listContactDeals, deleteDeal
 } from "../services/CrmServices/DealService";
 import { listLossReasons, createLossReason, updateLossReason } from "../services/CrmServices/LossReasonService";
+import { listRules, createRule, updateRule, deleteRule } from "../services/CrmServices/FunnelRuleService";
 
 const viewer = (req: Request) => getViewer(req.user as any);
 const num = (value: unknown) => Number(value);
@@ -79,6 +80,11 @@ export const showDealHandler = async (req: Request, res: Response): Promise<Resp
 export const updateDealHandler = async (req: Request, res: Response): Promise<Response> =>
   res.json(await updateDeal(await viewer(req), num(req.params.dealId), req.body));
 
+export const deleteDealHandler = async (req: Request, res: Response): Promise<Response> => {
+  await deleteDeal(await viewer(req), num(req.params.dealId));
+  return res.status(204).send();
+};
+
 export const moveDealHandler = async (req: Request, res: Response): Promise<Response> =>
   res.json(await moveDeal(await viewer(req), num(req.params.dealId), req.body));
 
@@ -96,4 +102,25 @@ export const createLossReasonHandler = async (req: Request, res: Response): Prom
 export const updateLossReasonHandler = async (req: Request, res: Response): Promise<Response> => {
   admin(req);
   return res.json(await updateLossReason(req.user.companyId, num(req.params.id), req.body));
+};
+
+export const listRulesHandler = async (req: Request, res: Response): Promise<Response> => {
+  admin(req);
+  return res.json(await listRules(req.user.companyId));
+};
+
+export const createRuleHandler = async (req: Request, res: Response): Promise<Response> => {
+  admin(req);
+  return res.status(201).json(await createRule(req.user.companyId, req.body));
+};
+
+export const updateRuleHandler = async (req: Request, res: Response): Promise<Response> => {
+  admin(req);
+  return res.json(await updateRule(req.user.companyId, num(req.params.id), req.body));
+};
+
+export const deleteRuleHandler = async (req: Request, res: Response): Promise<Response> => {
+  admin(req);
+  await deleteRule(req.user.companyId, num(req.params.id));
+  return res.status(204).send();
 };

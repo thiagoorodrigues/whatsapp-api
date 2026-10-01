@@ -23,11 +23,17 @@ crmRoutes.get("/crm/funnels/:funnelId/stats", isAuth, crmInPlan, CrmController.d
 crmRoutes.post("/crm/deals", isAuth, crmInPlan, CrmController.createDealHandler);
 crmRoutes.get("/crm/deals/:dealId", isAuth, crmInPlan, CrmController.showDealHandler);
 crmRoutes.put("/crm/deals/:dealId", isAuth, crmInPlan, CrmController.updateDealHandler);
+crmRoutes.delete("/crm/deals/:dealId", isAuth, crmInPlan, CrmController.deleteDealHandler);
 crmRoutes.put("/crm/deals/:dealId/move", isAuth, crmInPlan, CrmController.moveDealHandler);
 crmRoutes.get("/crm/contacts/:contactId/deals", isAuth, crmInPlan, CrmController.contactDealsHandler);
 
 crmRoutes.get("/crm/loss-reasons", isAuth, crmInPlan, CrmController.listLossReasonsHandler);
 crmRoutes.post("/crm/loss-reasons", isAuth, crmInPlan, CrmController.createLossReasonHandler);
 crmRoutes.put("/crm/loss-reasons/:id", isAuth, crmInPlan, CrmController.updateLossReasonHandler);
+
+crmRoutes.get("/crm/rules", isAuth, crmInPlan, CrmController.listRulesHandler);
+crmRoutes.post("/crm/rules", isAuth, crmInPlan, CrmController.createRuleHandler);
+crmRoutes.put("/crm/rules/:id", isAuth, crmInPlan, CrmController.updateRuleHandler);
+crmRoutes.delete("/crm/rules/:id", isAuth, crmInPlan, CrmController.deleteRuleHandler);
 
 export default crmRoutes;

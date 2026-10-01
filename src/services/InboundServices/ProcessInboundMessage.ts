@@ -22,6 +22,7 @@ import ShowQueueIntegrationService from "../QueueIntegrationServices/ShowQueueIn
 import FindOrCreateATicketTrakingService from "../TicketServices/FindOrCreateATicketTrakingService";
 import FindOrCreateTicketService from "../TicketServices/FindOrCreateTicketService";
 import UpdateTicketService from "../TicketServices/UpdateTicketService";
+import ApplyFunnelRulesService from "../CrmServices/ApplyFunnelRulesService";
 import typebotListener from "../TypebotServices/typebotListener";
 import { provider } from "../WbotServices/providers";
 import SendWhatsAppMessage from "../WbotServices/SendWhatsAppMessage";
@@ -272,6 +273,9 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
       companyId,
       groupContact
     );
+
+    // CRM rules run alongside the message; the service logs its own failures.
+    if (!inbound.fromMe && !isGroup) void ApplyFunnelRulesService(ticket as any);
 
     if (!isGroup) await provider(ticket, inbound, companyId, contact);
 

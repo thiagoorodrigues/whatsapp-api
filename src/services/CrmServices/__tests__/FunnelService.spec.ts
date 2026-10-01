@@ -2,9 +2,11 @@ import Funnel from "../../../models/Funnel";
 import FunnelStage from "../../../models/FunnelStage";
 import Deal from "../../../models/Deal";
 import Company from "../../../models/Company";
-import { createFunnel, deleteStage, updateStage, listFunnels } from "../FunnelService";
+import { createFunnel, deleteStage, updateStage, listFunnels, emitFunnel } from "../FunnelService";
+import { invalidateRules } from "../ruleCache";
 
 jest.mock("../../../libs/socket", () => ({ getIO: () => ({ emit: jest.fn() }) }));
+jest.mock("../ruleCache", () => ({ invalidateRules: jest.fn() }));
 jest.mock("../../../models/Funnel", () => ({ __esModule: true, default: { count: jest.fn(), findOne: jest.fn(), findAll: jest.fn().mockResolvedValue([]), create: jest.fn(), sequelize: { transaction: (fn: any) => fn({}) } } }));
 jest.mock("../../../models/FunnelStage", () => ({ __esModule: true, default: { findOne: jest.fn(), bulkCreate: jest.fn(), findAll: jest.fn() } }));
 jest.mock("../../../models/FunnelQueue", () => ({ __esModule: true, default: { bulkCreate: jest.fn(), destroy: jest.fn() } }));
@@ -78,5 +80,12 @@ describe("listFunnels", () => {
   it("keeps them hidden for non-admins even when asked", async () => {
     await listFunnels(seller, { includeArchived: true });
     expect(stageWhere()).toEqual({ archived: false });
+  });
+});
+
+describe("emitFunnel", () => {
+  it("drops the cached rules, since archiving changes which rules fire", () => {
+    emitFunnel(4, 3);
+    expect(invalidateRules).toHaveBeenCalledWith(4);
   });
 });

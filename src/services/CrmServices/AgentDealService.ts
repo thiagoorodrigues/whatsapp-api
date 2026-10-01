@@ -6,6 +6,7 @@ import DealEvent from "../../models/DealEvent";
 import Funnel from "../../models/Funnel";
 import FunnelStage from "../../models/FunnelStage";
 import { emitDeal, loadCard, sanitizeDealInput, topPosition } from "./DealService";
+import { findOpenDeal, lockContactFunnel } from "./contactLock";
 import { logger } from "../../utils/logger";
 
 // Deal changes made by the AI agent: same CRM rules, no user (events show
@@ -80,21 +81,6 @@ const unavailable = async (companyId: number, funnelId: number | null, stageId: 
   return null;
 };
 
-const openDealOf = (companyId: number, funnelId: number, contactId: number, transaction?: any) =>
-  Deal.findOne({
-    where: { companyId, funnelId, contactId, status: "open" },
-    order: [["updatedAt", "DESC"]],
-    ...(transaction ? { transaction, lock: true } : {})
-  });
-
-// One registration at a time per contact and funnel, across tickets and
-// processes, so two quick messages cannot create two deals.
-const lockContactFunnel = (companyId: number, contactId: number, funnelId: number, transaction: any) =>
-  Deal.sequelize!.query("SELECT pg_advisory_xact_lock(:a, :b)", {
-    replacements: { a: companyId, b: (contactId * 1000003 + funnelId) % 2147483647 },
-    transaction
-  });
-
 // The board update is a courtesy: the deal is saved either way.
 const notify = async (companyId: number, action: "create" | "update", dealId: number) => {
   try {
@@ -145,7 +131,7 @@ export const registerContactDeal = async (params: {
   try {
     outcome = await Deal.sequelize!.transaction(async transaction => {
       await lockContactFunnel(companyId, contactId, funnelId as number, transaction);
-      const existing = await openDealOf(companyId, funnelId as number, contactId, transaction);
+      const existing = await findOpenDeal(companyId, funnelId as number, contactId, transaction);
       if (existing) {
         // Fill only what nobody set yet; people's edits win over the agent.
         const patch: Record<string, unknown> = {};
@@ -205,7 +191,7 @@ export const qualifyContactDeal = async (params: {
   const problem = await unavailable(companyId, funnelId, stageId);
   if (problem) return { ok: false, message: problem };
   try {
-    const deal = await openDealOf(companyId, funnelId as number, contactId);
+    const deal = await findOpenDeal(companyId, funnelId as number, contactId);
     if (!deal) return { ok: false, message: "Registre o negócio antes de marcar o lead como qualificado." };
     if (deal.stageId === stageId) return { ok: true, message: "O negócio já está na coluna de qualificado." };
     const [current, target] = await Promise.all([

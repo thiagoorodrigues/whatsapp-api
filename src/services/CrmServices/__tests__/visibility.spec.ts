@@ -1,4 +1,4 @@
-import { canSeeFunnel, ownerScope, canSeeDeal, Viewer } from "../visibility";
+import { canSeeFunnel, ownerScope, canSeeDeal, canDeleteDeal, Viewer } from "../visibility";
 
 const admin: Viewer = { id: 1, profile: "admin", companyId: 1, queueIds: [] };
 const seller: Viewer = { id: 2, profile: "user", companyId: 1, queueIds: [10] };
@@ -36,5 +36,15 @@ describe("ownerScope / canSeeDeal", () => {
     expect(canSeeDeal(seller, { ownDealsOnly: true }, { userId: null })).toBe(true);
     expect(canSeeDeal(seller, { ownDealsOnly: true }, { userId: 5 })).toBe(false);
     expect(canSeeDeal(seller, { ownDealsOnly: false }, { userId: 5 })).toBe(true);
+  });
+});
+
+describe("canDeleteDeal", () => {
+  it("lets admins delete any deal and others only their own", () => {
+    expect(canDeleteDeal(admin, { userId: null })).toBe(true);
+    expect(canDeleteDeal(admin, { userId: 9 })).toBe(true);
+    expect(canDeleteDeal(seller, { userId: 2 })).toBe(true);
+    expect(canDeleteDeal(seller, { userId: 9 })).toBe(false);
+    expect(canDeleteDeal(seller, { userId: null })).toBe(false);
   });
 });

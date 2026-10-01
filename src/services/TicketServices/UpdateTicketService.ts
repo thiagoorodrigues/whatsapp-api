@@ -18,6 +18,7 @@ import ShowUserService from "../UserServices/ShowUserService"; //NOVO PLW DESIGN
 import { isNil } from "lodash";
 import { logger } from "../../utils/logger";
 import Logs from "../../models/Logs";
+import ApplyFunnelRulesService, { queueEntered } from "../CrmServices/ApplyFunnelRulesService";
 
 interface TicketData {
   status?: string;
@@ -362,6 +363,8 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
     });
 
     await ticket.reload();
+
+    if (queueEntered(oldQueueId, ticket.queueId)) void ApplyFunnelRulesService(ticket as any);
 
     if (status !== undefined && ["pending"].indexOf(status) > -1 && !isTransfer) {
       // Back in the queue: reset the wait clock but keep who held it, so
