@@ -22,7 +22,9 @@ const ShowPlanCompanyService = async (id: string | number): Promise<Company> => 
                     "useKanban",
                     "useIntegrations",
                 "useFlowBuilder",
-                "useAiAgents"
+                "useAiAgents",
+                "useCrm",
+                "crmFunnels"
                 ]
             },
         ]
