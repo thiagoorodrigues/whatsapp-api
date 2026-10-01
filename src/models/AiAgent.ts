@@ -26,6 +26,8 @@ export interface AiAgentTools {
   close?: { enabled: boolean };
   http?: HttpTool[];
   mcp?: McpServer[];
+  // Lets the agent register and qualify the contact's deal in one funnel.
+  crm?: { enabled: boolean; funnelId: number | null; stageId: number | null; qualifiedStageId: number | null };
 }
 
 @Table({ tableName: "AiAgents" })

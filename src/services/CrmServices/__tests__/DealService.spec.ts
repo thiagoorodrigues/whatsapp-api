@@ -25,6 +25,12 @@ describe("sanitizeDealInput", () => {
       userId: 3
     });
   });
+  it("reads Brazilian money with thousands separators", () => {
+    expect(sanitizeDealInput({ value: "1.500,00" })).toEqual({ value: 1500 });
+    expect(sanitizeDealInput({ value: "3.500" })).toEqual({ value: 3500 });
+    expect(sanitizeDealInput({ value: "R$ 99,9" })).toEqual({ value: 99.9 });
+    expect(sanitizeDealInput({ value: "1200.50" })).toEqual({ value: 1200.5 });
+  });
   it("refuses negative or non-numeric values", () => {
     expect(() => sanitizeDealInput({ value: -1 })).toThrow("ERR_CRM_INVALID_VALUE");
     expect(() => sanitizeDealInput({ value: "abc" })).toThrow("ERR_CRM_INVALID_VALUE");

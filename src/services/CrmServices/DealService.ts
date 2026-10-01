@@ -47,6 +47,15 @@ const notFound = () => new AppError("ERR_CRM_NOT_FOUND", 404);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const blank = (s: unknown) => s === null || s === undefined || String(s).trim() === "";
 
+// pt-BR money: "1.500,00", "3.500" (dots grouping three digits are
+// thousands), "R$ 99,9"; plain "1200.50" stays a decimal point.
+const parseMoney = (text: string): number => {
+  const raw = text.replace(/R\$/g, "").trim();
+  const thousandsOnly = /^-?\d{1,3}(\.\d{3})+$/.test(raw);
+  const normalized = raw.includes(",") || thousandsOnly ? raw.replace(/\./g, "").replace(",", ".") : raw;
+  return /^-?\d+(\.\d+)?$/.test(normalized) ? Number(normalized) : NaN;
+};
+
 // Whitelists and normalises editable deal fields.
 export const sanitizeDealInput = (data: DealInput): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
@@ -55,7 +64,7 @@ export const sanitizeDealInput = (data: DealInput): Record<string, unknown> => {
     out.title = String(data.title).trim();
   }
   if (data.value !== undefined) {
-    const n = typeof data.value === "number" ? data.value : parseFloat(String(data.value).replace(",", "."));
+    const n = typeof data.value === "number" ? data.value : parseMoney(String(data.value));
     if (!Number.isFinite(n) || n < 0) throw new AppError("ERR_CRM_INVALID_VALUE", 400);
     out.value = Math.round(n * 100) / 100;
   }
@@ -110,7 +119,7 @@ const toCard = (d: Deal, unread: Map<number, number>): DealCard => ({
   unread: unread.get(d.contactId) || 0
 });
 
-const loadCard = async (companyId: number, id: number): Promise<DealCard> => {
+export const loadCard = async (companyId: number, id: number): Promise<DealCard> => {
   const deal = await Deal.findOne({ where: { id, companyId }, include: cardInclude });
   if (!deal) throw notFound();
   return toCard(deal, await unreadByContact(companyId, [deal.contactId]));
@@ -125,7 +134,7 @@ export const dealEventPayload = (action: "create" | "update" | "delete", deal: D
   stageId: deal.stageId
 });
 
-const emitDeal = (companyId: number, action: "create" | "update" | "delete", deal: DealCard) => {
+export const emitDeal = (companyId: number, action: "create" | "update" | "delete", deal: DealCard) => {
   getIO().emit(`company-${companyId}-deal`, dealEventPayload(action, deal));
 };
 
@@ -251,7 +260,7 @@ export const dealStats = async (v: Viewer, funnelId: number, q: DealQuery) => {
   return { stages };
 };
 
-const topPosition = async (companyId: number, stageId: number, transaction: any): Promise<number> => {
+export const topPosition = async (companyId: number, stageId: number, transaction: any): Promise<number> => {
   const first = await Deal.findOne({
     where: { companyId, stageId },
     order: [["position", "ASC"]],
