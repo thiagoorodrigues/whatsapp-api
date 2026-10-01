@@ -125,7 +125,7 @@ Todas com `isAuth` e `requirePlanFeature("useCrm")`. Configuração exige admin.
 | `PUT /crm/deals/:id` | editar campos |
 | `PUT /crm/deals/:id/move` | `{ stageId, beforeId?, afterId?, lossReasonId?, lossNote? }` |
 | `GET /crm/contacts/:contactId/deals` | negócios abertos do contato (selo no cabeçalho da conversa) |
-| `GET/POST/PUT /crm/rules[/:id]` | regras de criação automática (admin) |
+| `GET/POST/PUT/DELETE /crm/rules[/:id]` | regras de criação automática (admin) |
 | `GET/POST/PUT /crm/loss-reasons[/:id]` | motivos de perda (listar: todos; editar: admin) |
 
 **Tempo real:** evento `company-${companyId}-deal` com `{ action: "create" | "update" | "delete", dealId, funnelId, stageId }` (só ids: o socket chega a todos os clientes, então o conteúdo vem pela API com a visibilidade aplicada)
@@ -172,6 +172,7 @@ Só aparece com `useCrm` no plano.
 | `ERR_CRM_FUNNEL_LIMIT` (403) | limite de funis |
 | `ERR_CRM_LOSS_REASON_REQUIRED` (400) | mover para Perdido sem motivo |
 | `ERR_CRM_STAGE_NOT_EMPTY` (400) | apagar coluna com negócios |
+| `ERR_CRM_RULE_INVALID` (400) | regra com funil arquivado, coluna que não é aberta, ou conexão/fila de outra empresa |
 | `ERR_CRM_STAGE_LOCKED` (400) | apagar/arquivar/reordenar Ganho ou Perdido |
 | `ERR_CRM_RULE_EMPTY` (400) | regra sem conexão e sem fila |
 | `ERR_CRM_STAGE_ORDER` (400) | lista de reordenação não bate com as colunas abertas |
