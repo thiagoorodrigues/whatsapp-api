@@ -48,9 +48,15 @@ describe("createRule", () => {
   });
   it("refuses an archived funnel, a won/lost stage or a missing stage", async () => {
     (FunnelStage.findOne as jest.Mock).mockResolvedValue(null);
-    await expect(createRule(4, { funnelId: 5, stageId: 26 })).rejects.toMatchObject({ message: "ERR_CRM_RULE_INVALID" });
-    await expect(createRule(4, { funnelId: 5 } as any)).rejects.toMatchObject({ message: "ERR_CRM_RULE_INVALID" });
-    await expect(createRule(4, { funnelId: 5, stageId: -1 })).rejects.toMatchObject({ message: "ERR_CRM_RULE_INVALID" });
+    await expect(createRule(4, { funnelId: 5, stageId: 26, queueId: 3 })).rejects.toMatchObject({ message: "ERR_CRM_RULE_INVALID" });
+    await expect(createRule(4, { funnelId: 5, queueId: 3 } as any)).rejects.toMatchObject({ message: "ERR_CRM_RULE_INVALID" });
+    await expect(createRule(4, { funnelId: 5, stageId: -1, queueId: 3 })).rejects.toMatchObject({ message: "ERR_CRM_RULE_INVALID" });
+  });
+  it("refuses a rule with neither connection nor queue", async () => {
+    await expect(createRule(4, { funnelId: 5, stageId: 25, whatsappId: "" as any, queueId: null })).rejects.toMatchObject({
+      message: "ERR_CRM_RULE_EMPTY", statusCode: 400
+    });
+    expect(FunnelRule.create).not.toHaveBeenCalled();
   });
 });
 
@@ -58,17 +64,36 @@ describe("updateRule", () => {
   const saved = (data: any) => ({ id: 1, companyId: 4, funnelId: 5, stageId: 25, whatsappId: null, queueId: null, active: true, ...data, update: jest.fn(async function (this: any, patch: any) { return { ...this, ...patch }; }) });
 
   it("lets the admin turn off a rule whose funnel was archived", async () => {
-    const rule = saved({});
+    const rule = saved({ queueId: 3 });
     (FunnelRule.findOne as jest.Mock).mockResolvedValue(rule);
-    (Funnel.findOne as jest.Mock).mockResolvedValue(null);
+    (Funnel.findOne as jest.Mock).mockImplementation(async ({ where }: any) => (where.archived === false ? null : { id: 5 }));
     await updateRule(4, 1, { active: false });
     expect(rule.update).toHaveBeenCalledWith({ active: false });
     expect(emitFunnel).toHaveBeenCalledWith(4, 5);
   });
   it("validates the targets when the rule stays or turns active", async () => {
-    (FunnelRule.findOne as jest.Mock).mockResolvedValue(saved({ active: false }));
-    (Funnel.findOne as jest.Mock).mockResolvedValue(null);
+    (FunnelRule.findOne as jest.Mock).mockResolvedValue(saved({ active: false, queueId: 3 }));
+    (Funnel.findOne as jest.Mock).mockImplementation(async ({ where }: any) => (where.archived === false ? null : { id: 5 }));
     await expect(updateRule(4, 1, { active: true })).rejects.toMatchObject({ message: "ERR_CRM_RULE_INVALID" });
+  });
+  it("never stores another company's connection, even on a rule being turned off", async () => {
+    const rule = saved({ whatsappId: 2 });
+    (FunnelRule.findOne as jest.Mock).mockResolvedValue(rule);
+    (Whatsapp.findOne as jest.Mock).mockResolvedValue(null);
+    await expect(updateRule(4, 1, { active: false, whatsappId: 99 })).rejects.toMatchObject({ message: "ERR_CRM_RULE_INVALID" });
+    expect(rule.update).not.toHaveBeenCalled();
+  });
+  it("never stores a funnel of another company on a rule being turned off", async () => {
+    const rule = saved({ whatsappId: 2 });
+    (FunnelRule.findOne as jest.Mock).mockResolvedValue(rule);
+    (Funnel.findOne as jest.Mock).mockImplementation(async ({ where }: any) => (where.archived === undefined && where.id === 5 ? { id: 5 } : null));
+    await updateRule(4, 1, { active: false });
+    expect(rule.update).toHaveBeenCalledWith({ active: false });
+    await expect(updateRule(4, 1, { active: false, funnelId: 77 })).rejects.toMatchObject({ message: "ERR_CRM_RULE_INVALID" });
+  });
+  it("refuses clearing both connection and queue", async () => {
+    (FunnelRule.findOne as jest.Mock).mockResolvedValue(saved({ whatsappId: 2 }));
+    await expect(updateRule(4, 1, { whatsappId: null })).rejects.toMatchObject({ message: "ERR_CRM_RULE_EMPTY" });
   });
   it("only finds this company's rules", async () => {
     (FunnelRule.findOne as jest.Mock).mockResolvedValue(null);

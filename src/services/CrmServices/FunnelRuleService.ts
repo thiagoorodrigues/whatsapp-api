@@ -33,11 +33,15 @@ const requiredId = (value: unknown): number => {
 const optionalId = (value: unknown): number | null =>
   value === null || value === undefined || value === "" ? null : requiredId(value);
 
-// Funnel and stage must still take deals; connection and queue must be ours.
-const assertTargets = async (companyId: number, r: RuleTargets): Promise<void> => {
+// Ids must belong to this company. A rule that will fire also needs an
+// active funnel and an open stage; one being turned off does not.
+const assertTargets = async (companyId: number, r: RuleTargets, usable: boolean): Promise<void> => {
+  if (r.whatsappId === null && r.queueId === null) throw new AppError("ERR_CRM_RULE_EMPTY", 400);
   const [funnel, stage, whatsapp, queue] = await Promise.all([
-    Funnel.findOne({ where: { id: r.funnelId, companyId, archived: false } }),
-    FunnelStage.findOne({ where: { id: r.stageId, funnelId: r.funnelId, companyId, kind: "open", archived: false } }),
+    Funnel.findOne({ where: { id: r.funnelId, companyId, ...(usable ? { archived: false } : {}) } }),
+    FunnelStage.findOne({
+      where: { id: r.stageId, funnelId: r.funnelId, companyId, ...(usable ? { kind: "open", archived: false } : {}) }
+    }),
     r.whatsappId ? Whatsapp.findOne({ where: { id: r.whatsappId, companyId } }) : true,
     r.queueId ? Queue.findOne({ where: { id: r.queueId, companyId } }) : true
   ]);
@@ -54,7 +58,7 @@ export const createRule = async (companyId: number, data: RuleInput): Promise<Fu
     whatsappId: optionalId(data.whatsappId),
     queueId: optionalId(data.queueId)
   };
-  await assertTargets(companyId, targets);
+  await assertTargets(companyId, targets, true);
   const rule = await FunnelRule.create({ companyId, ...targets, active: data.active !== false } as any);
   emitFunnel(companyId, rule.funnelId);
   return rule;
@@ -81,7 +85,7 @@ export const updateRule = async (companyId: number, id: number, data: RuleInput)
     queueId: patch.queueId !== undefined ? patch.queueId : rule.queueId
   };
   // Turning a rule off must work even after its funnel was archived.
-  if (patch.active ?? rule.active) await assertTargets(companyId, next);
+  await assertTargets(companyId, next, patch.active ?? rule.active);
   const saved = await rule.update(patch);
   emitFunnel(companyId, next.funnelId);
   return saved;

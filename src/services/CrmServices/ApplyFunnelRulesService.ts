@@ -69,6 +69,9 @@ const ApplyFunnelRulesService = async (ticket: RuleTicket): Promise<number[]> =>
       if (funnels.has(rule.funnelId)) continue;
       funnels.add(rule.funnelId);
       try {
+        // Most messages come from contacts that already have a deal: check
+        // without a transaction first so they do not hold a pool connection.
+        if (await findOpenDeal(ticket.companyId, rule.funnelId, ticket.contactId)) continue;
         const dealId = await createFromRule(ticket, rule);
         if (dealId) created.push(dealId);
       } catch (err) {

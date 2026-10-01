@@ -69,11 +69,17 @@ describe("ApplyFunnelRulesService", () => {
     );
     expect(emitDeal).toHaveBeenCalledWith(4, "create", { id: 100, funnelId: 5, stageId: 25 });
   });
-  it("checks for an open deal inside the lock and skips when there is one", async () => {
+  it("skips the locked transaction when the contact already has an open deal", async () => {
     (findOpenDeal as jest.Mock).mockResolvedValue({ id: 50 });
     expect(await ApplyFunnelRulesService(ticket)).toEqual([]);
+    expect(findOpenDeal).toHaveBeenCalledWith(4, 5, 77);
+    expect(lockContactFunnel).not.toHaveBeenCalled();
+  });
+  it("re-checks inside the lock when the quick check found nothing", async () => {
+    (findOpenDeal as jest.Mock).mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 50 });
+    expect(await ApplyFunnelRulesService(ticket)).toEqual([]);
     expect(lockContactFunnel).toHaveBeenCalledWith(4, 77, 5, { id: "t" });
-    expect(findOpenDeal).toHaveBeenCalledWith(4, 5, 77, { id: "t" });
+    expect(findOpenDeal).toHaveBeenLastCalledWith(4, 5, 77, { id: "t" });
     expect(Deal.create).not.toHaveBeenCalled();
   });
   it("creates one deal per funnel when two of its rules match", async () => {
