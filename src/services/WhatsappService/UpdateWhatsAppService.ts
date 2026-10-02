@@ -54,7 +54,6 @@ const UpdateWhatsAppService = async ({ whatsappData, whatsappId, companyId }: Re
     name,
     status,
     isDefault,
-    session,
     greetingMessage,
     complationMessage,
     outOfHoursMessage,
@@ -121,10 +120,11 @@ const UpdateWhatsAppService = async ({ whatsappData, whatsappId, companyId }: Re
   //   expiresInactiveMessage
   // });
 
+  // Status and session belong to the WhatsApp session (wbot), never to the
+  // form: it was loaded earlier and saving it put back an old status
+  // (e.g. PENDING over a QR waiting to be read, hiding the QR button).
   await whatsapp.update({
     name,
-    status,
-    session,
     greetingMessage,
     complationMessage,
     outOfHoursMessage,
