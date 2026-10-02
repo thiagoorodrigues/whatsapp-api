@@ -6,6 +6,7 @@ import Whatsapp from "../../models/Whatsapp";
 import ShowWhatsAppService from "./ShowWhatsAppService";
 import AssociateWhatsappQueue from "./AssociateWhatsappQueue";
 import { logger } from "../../utils/logger";
+import { ApplyPresence } from "../../helpers/changePresenceOnline";
 
 interface WhatsappData {
   name?: string;
@@ -25,6 +26,7 @@ interface WhatsappData {
   expiresTicket?: number;
   expiresInactiveMessage?: string;
   importMessages?: boolean;
+  showOnline?: boolean;
   initialDate?: string;
   finalDate?: string;
 }
@@ -61,6 +63,7 @@ const UpdateWhatsAppService = async ({ whatsappData, whatsappId, companyId }: Re
     queueIds = [],
     token,
     importMessages = false,
+    showOnline,
     initialDate = null,
     finalDate = null,
     //timeSendQueue,
@@ -133,6 +136,7 @@ const UpdateWhatsAppService = async ({ whatsappData, whatsappId, companyId }: Re
     companyId,
     token,
     importMessages,
+    showOnline,
     initialDate,
     finalDate,
     //timeSendQueue,
@@ -144,6 +148,8 @@ const UpdateWhatsAppService = async ({ whatsappData, whatsappId, companyId }: Re
   });
 
   await AssociateWhatsappQueue(whatsapp, queueIds);
+
+  if (showOnline !== undefined) await ApplyPresence(whatsapp);
 
   return { whatsapp, oldDefaultWhatsapp };
 };

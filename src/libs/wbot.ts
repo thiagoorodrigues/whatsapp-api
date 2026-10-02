@@ -117,8 +117,6 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
     try {
       (async () => {
         const io = getIO();
-        const exibeStatusOnline = await CheckSettings("ExibeStatusOnline")
-
         const whatsappUpdate = await Whatsapp.findOne({
           where: { id: whatsapp.id }
         });
@@ -162,7 +160,7 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
           msgRetryCounterCache,
           generateHighQualityLinkPreview: true,
           shouldIgnoreJid: jid => isJidBroadcast(jid),
-          markOnlineOnConnect: exibeStatusOnline == "1" ? true : false,
+          markOnlineOnConnect: !!whatsappUpdate.showOnline,
           cachedGroupMetadata: cachedGroupMetadata(id),
           getMessage
         });
@@ -311,6 +309,14 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
               if (sessionIndex === -1) {
                 wsocket.id = whatsapp.id;
                 sessions.push(wsocket);
+              }
+
+              // Online no WeConex = celular sem notificação. Desfaz um
+              // "available" que tenha ficado de antes.
+              if (!whatsappUpdate.showOnline) {
+                wsocket.sendPresenceUpdate("unavailable").catch(err =>
+                  logger.warn(`Could not set ${name} unavailable: ${err}`)
+                );
               }
 
               resolve(wsocket);

@@ -28,6 +28,7 @@ interface Request {
   onlyFromMe: string;
   situacao: string;
   isGroup?: string;
+  unread?: string;
 }
 
 interface Response {
@@ -51,7 +52,8 @@ const ListTicketsService = async ({
   companyId,
   onlyFromMe,
   situacao,
-  isGroup
+  isGroup,
+  unread
 }: Request): Promise<Response> => {
 
   let whereCondition: Filterable["where"] = {
@@ -227,6 +229,11 @@ const ListTicketsService = async ({
 
   if (situacao) {
     whereCondition = { ...whereCondition, ...buildTicketFilters({ status: situacao }) };
+  }
+
+  // Não visualizadas: conversas com mensagem do cliente que ninguém abriu.
+  if (unread === "true") {
+    whereCondition = { ...whereCondition, unreadMessages: { [Op.gt]: 0 } };
   }
 
   const { count, rows: tickets } = await Ticket.findAndCountAll({

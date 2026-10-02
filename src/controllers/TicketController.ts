@@ -28,6 +28,7 @@ type IndexQuery = {
   onlyFromMe: string;
   situacao: string;
   isGroup?: string;
+  unread?: string;
 };
 
 type RelatorioQuery = {
@@ -68,7 +69,8 @@ export const index = async (req: Request, res: Response): Promise<Response> => {
     withUnreadMessages,
     onlyFromMe,
     situacao,
-    isGroup
+    isGroup,
+    unread
   } = req.query as IndexQuery;
 
   const userId = req.user.id;
@@ -105,7 +107,8 @@ export const index = async (req: Request, res: Response): Promise<Response> => {
     companyId,
     onlyFromMe,
     situacao,
-    isGroup
+    isGroup,
+    unread
   });
 
   return res.status(200).json({ tickets, count, hasMore });

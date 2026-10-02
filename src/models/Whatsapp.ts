@@ -90,6 +90,10 @@ class Whatsapp extends Model<Whatsapp> {
   @Column
   importMessages: boolean;
 
+  @Default(false)
+  @Column
+  showOnline: boolean;
+
   @Default("")
   @AllowNull
   @Column(DataType.DATEONLY)

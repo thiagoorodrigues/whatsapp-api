@@ -1,6 +1,5 @@
 import AppError from "../../errors/AppError";
 import GetDefaultWhatsApp from "../../helpers/GetDefaultWhatsApp";
-import ChangePresenceOnline from "../../helpers/changePresenceOnline";
 import Setting from "../../models/Setting";
 import { logger } from "../../utils/logger";
 
@@ -36,11 +35,6 @@ const UpdateSettingService = async ({
   }
 
   await setting.update({ value });
-
-  if (key == "ExibeStatusOnline") {
-    //Setar a presença de acordo com configuração do cliente
-    await ChangePresenceOnline(companyId);
-  }
 
   return setting;
 };

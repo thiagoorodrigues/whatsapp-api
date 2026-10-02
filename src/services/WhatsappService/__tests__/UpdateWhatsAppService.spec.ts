@@ -2,6 +2,7 @@ const update = jest.fn();
 
 jest.mock("../ShowWhatsAppService", () => ({ __esModule: true, default: async () => ({ id: 3, update }) }));
 jest.mock("../AssociateWhatsappQueue", () => ({ __esModule: true, default: jest.fn() }));
+jest.mock("../../../helpers/changePresenceOnline", () => ({ __esModule: true, ApplyPresence: jest.fn() }));
 jest.mock("../../../models/Whatsapp", () => ({ __esModule: true, default: { findOne: async () => null } }));
 
 // eslint-disable-next-line import/first

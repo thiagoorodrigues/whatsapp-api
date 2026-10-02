@@ -25,6 +25,7 @@ interface Request {
   expiresTicket?: number;
   expiresInactiveMessage?: string;
   importMessages?: boolean;
+  showOnline?: boolean;
   initialDate?: string;
   finalDate?: string;
 }
@@ -46,6 +47,7 @@ const CreateWhatsAppService = async ({
   companyId,
   token = "",
   importMessages = false,
+  showOnline = false,
   initialDate = null,
   finalDate = null,
   provider = "beta",
@@ -158,6 +160,7 @@ const CreateWhatsAppService = async ({
       token,
       provider,
       importMessages,
+      showOnline,
       initialDate,
       finalDate,
       //timeSendQueue,

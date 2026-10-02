@@ -28,6 +28,7 @@ interface WhatsappData {
   expiresTicket?: number;
   expiresInactiveMessage?: string;
   importMessages?: boolean;
+  showOnline?: boolean;
   initialDate?: string;
   finalDate?: string;
 }
@@ -55,6 +56,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     queueIds,
     token,
     importMessages = false,
+    showOnline = false,
     initialDate = null,
     finalDate = null,
     //timeSendQueue,
@@ -78,6 +80,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     companyId,
     token,
     importMessages,
+    showOnline,
     initialDate,
     finalDate,
     //timeSendQueue,
