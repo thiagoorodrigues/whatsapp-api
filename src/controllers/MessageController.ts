@@ -28,6 +28,7 @@ import fs from "fs";
 import Ticket from "../models/Ticket";
 import { SendMessage } from "../helpers/SendMessage";
 import CreateMensagemDisparoService from "../services/MessageServices/MensagensDisparosService";
+import { ticketRoom } from "../libs/socketRooms";
 
 type IndexQuery = {
   pageNumber: string;
@@ -135,7 +136,7 @@ export const remove = async (
   const message = await DeleteWhatsAppMessage(messageId);
 
   const io = getIO();
-  io.to(message.ticketId.toString()).emit(`company-${companyId}-appMessage`, {
+  io.to(ticketRoom(companyId, message.ticketId.toString())).emit(`company-${companyId}-appMessage`, {
     action: "update",
     message
   });

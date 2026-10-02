@@ -8,6 +8,7 @@ import { RefreshTokenService } from "../services/AuthServices/RefreshTokenServic
 import FindUserFromToken from "../services/AuthServices/FindUserFromToken";
 import User from "../models/User";
 import ChangePresenceOnline from "../helpers/changePresenceOnline";
+import { companyRoom } from "../libs/socketRooms";
 
 export const store = async (req: Request, res: Response): Promise<Response> => {
   const { email, password } = req.body;
@@ -20,7 +21,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   SendRefreshToken(res, refreshToken);
 
   const io = getIO();
-  io.emit(`company-${serializedUser.companyId}-auth`, {
+  io.to(companyRoom(serializedUser.companyId)).emit(`company-${serializedUser.companyId}-auth`, {
     action: "update",
     user: {
       id: serializedUser.id,

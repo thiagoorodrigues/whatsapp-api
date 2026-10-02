@@ -3,6 +3,7 @@ import { getIO } from "../libs/socket";
 import MoveKanbanTicketService from "../services/TagServices/MoveKanbanTicketService";
 import AddTicketTagService from "../services/TagServices/AddTicketTagService";
 import RemoveKanbanTicketTagsService from "../services/TagServices/RemoveKanbanTicketTagsService";
+import { companyRoom } from "../libs/socketRooms";
 
 export const store = async (req: Request, res: Response): Promise<Response> => {
   const { ticketId, tagId } = req.params;
@@ -29,7 +30,7 @@ export const moveKanban = async (req: Request, res: Response): Promise<Response>
 
   await MoveKanbanTicketService({ ticketId, tagId, companyId });
 
-  getIO().emit(`company-${companyId}-ticketTags`, { action: "update", ticketId: +ticketId });
+  getIO().to(companyRoom(companyId)).emit(`company-${companyId}-ticketTags`, { action: "update", ticketId: +ticketId });
 
   return res.status(200).json({ ticketId: +ticketId, tagId });
 };

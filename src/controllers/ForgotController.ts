@@ -1,38 +1,23 @@
-import { v4 as uuid } from "uuid";
 import { Request, Response } from "express";
-//import SendMail from "../services/ForgotPassWordServices/SendMail";
-import { SendMail } from "../services/ForgotPassWordServices/SendMail";
-import ResetPassword from "../services/ResetPasswordService/ResetPassword";
-import { logger } from "../utils/logger";
+import {
+  requestPasswordReset,
+  resetPassword
+} from "../services/PasswordResetServices/PasswordResetService";
+import sendResetMail from "../services/PasswordResetServices/sendResetMail";
 
-type IndexQuery = {
-  email?: string;
-  token?: string;
-  password?: string;
-};
-
+// E-mail, code and new password travel in the body: URLs end up in logs.
 export const store = async (req: Request, res: Response): Promise<Response> => {
-  const { email } = req.params as IndexQuery; // Use req.params para obter o email
-  const TokenSenha = uuid();
+  await requestPasswordReset(req.body?.email, sendResetMail);
 
-  const forgotPassword = await SendMail(email, TokenSenha);
-
-  if (!forgotPassword) {    
-    return res.status(404).json({ error: "E-mail não enviado" });
-  }
-
-  return res.json({ message: "E-mail enviado com sucesso" });
+  return res.json({
+    message: "Se o e-mail estiver cadastrado, você receberá o código de verificação."
+  });
 };
 
 export const resetPasswords = async (req: Request, res: Response): Promise<Response> => {
-  const { email, token, password } = req.params as IndexQuery; // Use req.params para obter o token e a nova senha
+  const { email, token, password } = req.body || {};
 
-  const resetPassword = await ResetPassword(email, token, password);  
-
-  if (!resetPassword) {
-    // Houve um erro, pois a função ResetPassword retornou undefined ou null
-    return res.status(404).json({ error: "Verifique o Token informado" });
-  }
+  await resetPassword(email, token, password);
 
   return res.json({ message: "Senha redefinida com sucesso" });
 };

@@ -1,10 +1,42 @@
-import { Server as SocketIO } from "socket.io";
+import { Server as SocketIO, Socket } from "socket.io";
 import { Server } from "http";
+import { verify } from "jsonwebtoken";
 import AppError from "../errors/AppError";
 import { logger } from "../utils/logger";
+import authConfig from "../config/auth";
 import User from "../models/User";
+import Ticket from "../models/Ticket";
+import {
+  companyRoom,
+  isTicketStatus,
+  notificationRoom,
+  statusRoom,
+  ticketRoom
+} from "./socketRooms";
 
 let io: SocketIO;
+
+export interface SocketUser {
+  id: number;
+  companyId: number;
+  profile: string;
+}
+
+// Reads the access token sent by the client in the handshake (auth.token).
+export const authenticateSocket = (token: unknown): SocketUser | null => {
+  if (typeof token !== "string" || !token) return null;
+  try {
+    const { id, companyId, profile } = verify(token, authConfig.secret, {
+      algorithms: ["HS256"]
+    }) as any;
+    if (!id || !companyId) return null;
+    return { id: Number(id), companyId: Number(companyId), profile };
+  } catch {
+    return null;
+  }
+};
+
+const userOf = (socket: Socket): SocketUser => (socket as any).user;
 
 export const initIO = (httpServer: Server): SocketIO => {
   io = new SocketIO(httpServer, {
@@ -13,32 +45,41 @@ export const initIO = (httpServer: Server): SocketIO => {
     }
   });
 
+  io.use((socket, next) => {
+    const user = authenticateSocket((socket.handshake as any).auth?.token);
+    if (!user) return next(new Error("ERR_SESSION_EXPIRED"));
+    (socket as any).user = user;
+    return next();
+  });
+
+  // Handlers are attached before any await: clients ask to join rooms right
+  // after connecting, and an event that arrives before its handler is lost.
   io.on("connection", async socket => {
+    const { id, companyId } = userOf(socket);
     logger.info("Client Connected");
-    const { userId } = socket.handshake.query;
+    socket.join(companyRoom(companyId));
 
-    if (userId && userId !== "undefined" && userId !== "null") {
-      const user = await User.findByPk(userId);
-      if (user) {
-        user.online = true;
-        await user.save();
-      }
-    }
-
-    socket.on("joinChatBox", (ticketId: string) => {
-      logger.info("A client joined a ticket channel");
-      socket.join(ticketId);
+    socket.on("joinChatBox", async (ticketId: string) => {
+      const ticket = await Ticket.findOne({
+        where: { id: Number(ticketId) || 0, companyId },
+        attributes: ["id"]
+      });
+      if (ticket) socket.join(ticketRoom(companyId, ticket.id));
     });
 
     socket.on("joinNotification", () => {
-      logger.info("A client joined notification channel");
-      socket.join("notification");
+      socket.join(notificationRoom(companyId));
     });
 
     socket.on("joinTickets", (status: string) => {
-      logger.info(`A client joined to ${status} tickets channel.`);
-      socket.join(status);
+      if (isTicketStatus(status)) socket.join(statusRoom(companyId, status));
     });
+
+    const user = await User.findOne({ where: { id, companyId } });
+    if (user && !user.online) {
+      user.online = true;
+      await user.save();
+    }
   });
   return io;
 };

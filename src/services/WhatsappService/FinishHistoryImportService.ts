@@ -2,6 +2,7 @@ import { getIO } from "../../libs/socket";
 import Whatsapp from "../../models/Whatsapp";
 import { logger } from "../../utils/logger";
 import ShowWhatsAppService from "./ShowWhatsAppService";
+import { companyRoom } from "../../libs/socketRooms";
 
 // Switches "Importar mensagens" off once the history import is over, so a
 // later connection of the same number does not import again.
@@ -14,7 +15,7 @@ const FinishHistoryImportService = async (whatsappId: number, companyId: number)
 
   logger.info(`Importação de mensagens da conexão ${whatsappId} concluída; opção desligada`);
   const whatsapp = await ShowWhatsAppService(whatsappId, companyId);
-  getIO().emit(`company-${companyId}-whatsapp`, { action: "update", whatsapp });
+  getIO().to(companyRoom(companyId)).emit(`company-${companyId}-whatsapp`, { action: "update", whatsapp });
 };
 
 export default FinishHistoryImportService;

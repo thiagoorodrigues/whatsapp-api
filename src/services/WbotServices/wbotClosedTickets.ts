@@ -9,6 +9,7 @@ import ShowTicketService from "../TicketServices/ShowTicketService";
 import TicketTraking from "../../models/TicketTraking";
 import { logger } from "../../utils/logger";
 import { expiringWhatsapps } from "./autoTicketRules";
+import { statusRoom } from "../../libs/socketRooms";
 
 export const ClosedAllOpenTickets = async (companyId: number): Promise<void> => {
 
@@ -121,7 +122,7 @@ export const ClosedAllOpenTickets = async (companyId: number): Promise<void> => 
               userId: ticket.userId,
             })
 
-            io.to("pending")
+            io.to(statusRoom(companyId, "pending"))
               .emit(`company-${companyId}-ticket`, {
                 action: "delete",
                 ticketId: showTicket.id

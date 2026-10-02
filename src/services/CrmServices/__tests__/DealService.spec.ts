@@ -1,7 +1,7 @@
 import { Op } from "sequelize";
 import { sanitizeDealInput, dealEventPayload, cursorCondition } from "../DealService";
 
-jest.mock("../../../libs/socket", () => ({ getIO: () => ({ emit: jest.fn() }) }));
+jest.mock("../../../libs/socket", () => ({ getIO: () => { const io: any = { emit: jest.fn() }; io.to = () => io; return io; } }));
 
 describe("sanitizeDealInput", () => {
   it("keeps only known fields and normalises them", () => {

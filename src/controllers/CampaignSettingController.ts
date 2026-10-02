@@ -3,6 +3,7 @@ import { getIO } from "../libs/socket";
 
 import ListService from "../services/CampaignSettingServices/ListService";
 import CreateService from "../services/CampaignSettingServices/CreateService";
+import { companyRoom } from "../libs/socketRooms";
 
 interface StoreData {
   settings: any;
@@ -25,7 +26,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   const record = await CreateService(data, companyId);
 
   const io = getIO();
-  io.emit(`company-${companyId}-campaignSettings`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-campaignSettings`, {
     action: "create",
     record
   });

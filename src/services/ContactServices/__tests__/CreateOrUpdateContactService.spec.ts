@@ -2,7 +2,7 @@ const findOne = jest.fn();
 const create = jest.fn();
 const emit = jest.fn();
 
-jest.mock("../../../libs/socket", () => ({ getIO: () => ({ emit }) }));
+jest.mock("../../../libs/socket", () => ({ getIO: () => { const io: any = { emit }; io.to = () => io; return io; } }));
 jest.mock("../../../models/Contact", () => ({
   __esModule: true,
   default: { findOne: (...a: any[]) => findOne(...a), create: (...a: any[]) => create(...a) }

@@ -5,7 +5,7 @@ import Company from "../../../models/Company";
 import { createFunnel, deleteStage, updateStage, listFunnels, emitFunnel } from "../FunnelService";
 import { invalidateRules } from "../ruleCache";
 
-jest.mock("../../../libs/socket", () => ({ getIO: () => ({ emit: jest.fn() }) }));
+jest.mock("../../../libs/socket", () => ({ getIO: () => { const io: any = { emit: jest.fn() }; io.to = () => io; return io; } }));
 jest.mock("../ruleCache", () => ({ invalidateRules: jest.fn() }));
 jest.mock("../../../models/Funnel", () => ({ __esModule: true, default: { count: jest.fn(), findOne: jest.fn(), findAll: jest.fn().mockResolvedValue([]), create: jest.fn(), sequelize: { transaction: (fn: any) => fn({}) } } }));
 jest.mock("../../../models/FunnelStage", () => ({ __esModule: true, default: { findOne: jest.fn(), bulkCreate: jest.fn(), findAll: jest.fn() } }));

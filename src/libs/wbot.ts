@@ -30,6 +30,7 @@ import NodeCache from 'node-cache';
 import { cachedGroupMetadata } from "./whatsappCache";
 import CheckSettings from "../helpers/CheckSettings";
 import FindNumberInUseService from "../services/WhatsappService/FindNumberInUseService";
+import { companyRoom } from "./socketRooms";
 
 const loggerBaileys = MAIN_LOGGER.child({});
 loggerBaileys.level = "error";
@@ -244,7 +245,7 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
                 await whatsapp.update({ status: "PENDING", session: "" });
                 await clearBaileysKeys(whatsapp.id);
                 await DeleteBaileysService(whatsapp.id);
-                io.emit(`company-${whatsapp.companyId}-whatsappSession`, {
+                io.to(companyRoom(whatsapp.companyId)).emit(`company-${whatsapp.companyId}-whatsappSession`, {
                   action: "update",
                   session: whatsapp
                 });
@@ -282,8 +283,8 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
                 await whatsapp.update({ status: "DISCONNECTED", session: "", qrcode: "" });
                 await clearBaileysKeys(whatsapp.id);
                 await DeleteBaileysService(whatsapp.id);
-                io.emit(`company-${whatsapp.companyId}-whatsappSession`, { action: "update", session: whatsapp });
-                io.emit(`company-${whatsapp.companyId}-whatsappSession`, {
+                io.to(companyRoom(whatsapp.companyId)).emit(`company-${whatsapp.companyId}-whatsappSession`, { action: "update", session: whatsapp });
+                io.to(companyRoom(whatsapp.companyId)).emit(`company-${whatsapp.companyId}-whatsappSession`, {
                   action: "numberInUse",
                   whatsappId: whatsapp.id,
                   message: `Este número já está conectado na conexão "${twin.name}". Desconecte-a antes de usar o número aqui.`
@@ -298,7 +299,7 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
                 ...(connectedNumber ? { number: connectedNumber } : {})
               });
 
-              io.emit(`company-${whatsapp.companyId}-whatsappSession`, {
+              io.to(companyRoom(whatsapp.companyId)).emit(`company-${whatsapp.companyId}-whatsappSession`, {
                 action: "update",
                 session: whatsapp
               });
@@ -329,7 +330,7 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
                   qrcode: ""
                 });
                 await DeleteBaileysService(whatsappUpdate.id);
-                io.emit(`company-${whatsapp.companyId}-whatsappSession`, {
+                io.to(companyRoom(whatsapp.companyId)).emit(`company-${whatsapp.companyId}-whatsappSession`, {
                   action: "update",
                   session: whatsappUpdate
                 });
@@ -360,7 +361,7 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
                   sessions.push(wsocket);
                 }
 
-                io.emit(`company-${whatsapp.companyId}-whatsappSession`, {
+                io.to(companyRoom(whatsapp.companyId)).emit(`company-${whatsapp.companyId}-whatsappSession`, {
                   action: "update",
                   session: whatsapp
                 });

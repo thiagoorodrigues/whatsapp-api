@@ -6,24 +6,20 @@ type TokenPayload = {
   token: string | undefined;
 };
 
+// Integration token for /auth/signup. Without ENV_TOKEN configured the route
+// is closed: an unset variable must never match a request without token.
 const envTokenAuth = (
   req: Request,
   res: Response,
   next: NextFunction
 ): void => {
-  try {
-    const { token: bodyToken } = req.body as TokenPayload;
-    const { token: queryToken } = req.query as TokenPayload;
+  const expected = process.env.ENV_TOKEN;
+  const { token: bodyToken } = (req.body || {}) as TokenPayload;
+  const { token: queryToken } = req.query as TokenPayload;
+  const given = bodyToken || queryToken;
 
-    if (queryToken === process.env.ENV_TOKEN) {
-      return next();
-    }
-
-    if (bodyToken === process.env.ENV_TOKEN) {
-      return next();
-    }
-  } catch (e) {
-    console.log(e);
+  if (expected && typeof given === "string" && given === expected) {
+    return next();
   }
 
   throw new AppError("Token inválido", 403);

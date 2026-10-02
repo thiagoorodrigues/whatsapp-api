@@ -3,12 +3,14 @@ import AppError from "../../errors/AppError";
 import Ticket from "../../models/Ticket";
 import UpdateDeletedUserOpenTicketsStatus from "../../helpers/UpdateDeletedUserOpenTicketsStatus";
 
+// anyCompany: the requester is super and may delete in any company.
 const DeleteUserService = async (
   id: string | number,
-  companyId: number
+  companyId: number,
+  anyCompany = false
 ): Promise<void> => {
   const user = await User.findOne({
-    where: { id }
+    where: anyCompany ? { id } : { id, companyId }
   });
 
   if (!user) {

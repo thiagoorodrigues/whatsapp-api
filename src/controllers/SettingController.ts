@@ -5,6 +5,7 @@ import AppError from "../errors/AppError";
 
 import UpdateSettingService from "../services/SettingServices/UpdateSettingService";
 import ListSettingsService from "../services/SettingServices/ListSettingsService";
+import { companyRoom } from "../libs/socketRooms";
 
 export const index = async (req: Request, res: Response): Promise<Response> => {
   const { companyId } = req.user;
@@ -36,7 +37,7 @@ export const update = async (
   });
 
   const io = getIO();
-  io.emit(`company-${companyId}-settings`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-settings`, {
     action: "update",
     setting
   });

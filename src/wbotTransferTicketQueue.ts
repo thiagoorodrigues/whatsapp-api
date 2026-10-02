@@ -8,6 +8,7 @@ import { getIO } from "./libs/socket";
 import { logger } from "./utils/logger";
 import ShowTicketService from "./services/TicketServices/ShowTicketService";
 import { transferringWhatsapps } from "./services/WbotServices/autoTicketRules";
+import { notificationRoom, statusRoom, ticketRoom } from "./libs/socketRooms";
 
 
 export const TransferTicketQueue = async (): Promise<void> => {
@@ -62,9 +63,9 @@ export const TransferTicketQueue = async (): Promise<void> => {
 
         const currentTicket = await ShowTicketService(ticket.id, ticket.companyId);
 
-        io.to(ticket.status)
-          .to("notification")
-          .to(ticket.id.toString())
+        io.to(statusRoom(ticket.companyId, ticket.status))
+          .to(notificationRoom(ticket.companyId))
+          .to(ticketRoom(ticket.companyId, ticket.id.toString()))
           .emit(`company-${ticket.companyId}-ticket`, {
             action: "update",
             ticket: currentTicket,

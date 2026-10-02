@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/node";
 import { getIO } from "../../libs/socket";
 import Message from "../../models/Message";
 import { logger } from "../../utils/logger";
+import { ticketRoom } from "../../libs/socketRooms";
 
 interface Request {
   companyId: number;
@@ -36,7 +37,7 @@ const ReactToMessageService = async ({ companyId, whatsappId, externalId, jid, f
     await message.update({ reactions: reactions.length ? reactions : null });
 
     getIO()
-      .to(message.ticketId.toString())
+      .to(ticketRoom(message.companyId, message.ticketId.toString()))
       .emit(`company-${message.companyId}-appMessage`, { action: "update", message });
   } catch (err) {
     Sentry.captureException(err);

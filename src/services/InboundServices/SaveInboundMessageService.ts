@@ -12,6 +12,7 @@ import User from "../../models/User";
 import { logger } from "../../utils/logger";
 import CreateMessageService from "../MessageServices/CreateMessageService";
 import UpdateMessageService from "../MessageServices/UpdateMessageService";
+import { statusRoom, ticketRoom } from "../../libs/socketRooms";
 
 // A customer writing again reopens a closed ticket as pending.
 const reopenIfClosed = async (ticket: Ticket) => {
@@ -25,9 +26,9 @@ const reopenIfClosed = async (ticket: Ticket) => {
       { model: Contact, as: "contact" }
     ]
   });
-  io.to("closed").emit(`company-${ticket.companyId}-ticket`, { action: "delete", ticket, ticketId: ticket.id });
-  io.to(ticket.status)
-    .to(ticket.id.toString())
+  io.to(statusRoom(ticket.companyId, "closed")).emit(`company-${ticket.companyId}-ticket`, { action: "delete", ticket, ticketId: ticket.id });
+  io.to(statusRoom(ticket.companyId, ticket.status))
+    .to(ticketRoom(ticket.companyId, ticket.id.toString()))
     .emit(`company-${ticket.companyId}-ticket`, { action: "update", ticket, ticketId: ticket.id });
 };
 

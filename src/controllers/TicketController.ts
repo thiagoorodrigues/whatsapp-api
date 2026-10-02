@@ -13,6 +13,7 @@ import ListTicketsServiceKanban from "../services/TicketServices/ListTicketsServ
 import ListTicketsRelatorioService from "../services/TicketServices/ListTicketsRelatorioService";
 import { logger } from "../utils/logger";
 import ListGroupParticipantsService from "../services/TicketServices/ListGroupParticipantsService";
+import { notificationRoom, statusRoom, ticketRoom } from "../libs/socketRooms";
 
 type IndexQuery = {
   searchParam: string;
@@ -128,7 +129,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   });
 
   const io = getIO();
-  io.to(ticket.status).emit(`company-${companyId}-ticket`, {
+  io.to(statusRoom(companyId, ticket.status)).emit(`company-${companyId}-ticket`, {
     action: "update",
     ticket
   });
@@ -249,9 +250,9 @@ export const remove = async (
   const ticket = await DeleteTicketService(ticketId);
 
   const io = getIO();
-  io.to(ticket.status)
-    .to(ticketId)
-    .to("notification")
+  io.to(statusRoom(companyId, ticket.status))
+    .to(ticketRoom(companyId, ticketId))
+    .to(notificationRoom(companyId))
     .emit(`company-${companyId}-ticket`, {
       action: "delete",
       ticketId: +ticketId

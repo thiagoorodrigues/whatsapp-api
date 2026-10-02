@@ -4,6 +4,7 @@ import AppError from "../../errors/AppError";
 import ShowUserService from "./ShowUserService";
 import Company from "../../models/Company";
 import User from "../../models/User";
+import { PROFILES, scopeUserLinks } from "./companyLinks";
 
 interface UserData {
   email?: string;
@@ -37,7 +38,20 @@ const UpdateUserService = async ({
   companyId,
   requestUserId
 }: Request): Promise<Response | undefined> => {
+  const requestUser = await User.findByPk(requestUserId, { attributes: ["id", "super"] });
+  const requestIsSuper = !!requestUser?.super;
+
   const user = await ShowUserService(userId);
+
+  // Outside super, only users of the requester's own company exist.
+  if (!requestIsSuper && user.companyId !== companyId) {
+    throw new AppError("ERR_NO_USER_FOUND", 404);
+  }
+
+  // Only a super user edits a super user (or the super user itself).
+  if (user.super && user.id !== requestUserId && !requestIsSuper) {
+    throw new AppError("ERR_CANNOT_EDIT_SUPER_USER");
+  }
 
   // Verificar se o usuário é um super administrador
   if (user.super && userData.profile === "user") {
@@ -49,28 +63,19 @@ const UpdateUserService = async ({
     throw new AppError("ERR_CANNOT_EDIT_SUPER_USER_PROFILE");
   }
 
-  // Verificar se o usuário é um super administrador e está tentando editar outro usuário
-  if (user.super && user.id !== requestUserId) {
-    const requestUser = await User.findByPk(requestUserId);
-    if (!requestUser || requestUser.super) {
-      throw new AppError("ERR_CANNOT_EDIT_SUPER_USER");
-    }
-  }
-
-  const requestUser = await User.findByPk(requestUserId);
-
-  if (requestUser.super === false && userData.companyId !== companyId) {
-    throw new AppError("O usuário não pertence a esta empresa");
-  }
-
   const schema = Yup.object().shape({
     name: Yup.string().min(2),
     email: Yup.string().email(),
-    profile: Yup.string(),
+    profile: Yup.string().oneOf(PROFILES),
     password: Yup.string()
   });
 
-  const { email, password, profile, name, queueIds = [], whatsappId, status, signMessage } = userData;
+  const { email, password, profile, name, status, signMessage } = userData;
+  const { queueIds, whatsappId } = await scopeUserLinks(
+    user.companyId,
+    userData.queueIds,
+    userData.whatsappId
+  );
 
   try {
     await schema.validate({ email, password, profile, name });
@@ -83,7 +88,7 @@ const UpdateUserService = async ({
     password,
     profile,
     name,
-    whatsappId: whatsappId || null,
+    whatsappId,
     status,
     ...(typeof signMessage === "boolean" ? { signMessage } : {})
   });

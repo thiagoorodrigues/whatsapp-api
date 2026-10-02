@@ -18,6 +18,7 @@ import SimpleListService, {
 } from "../services/ContactServices/SimpleListService";
 import ContactCustomField from "../models/ContactCustomField";
 import { logger } from "../utils/logger";
+import { companyRoom } from "../libs/socketRooms";
 
 type IndexQuery = {
   searchParam: string;
@@ -106,7 +107,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
 
   const io = getIO();
 
-  io.emit(`company-${companyId}-contact`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-contact`, {
     action: "create",
     contact
   });
@@ -161,7 +162,7 @@ export const update = async (
   });
 
   const io = getIO();
-  io.emit(`company-${companyId}-contact`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-contact`, {
     action: "update",
     contact
   });
@@ -181,7 +182,7 @@ export const remove = async (
   await DeleteContactService(contactId);
 
   const io = getIO();
-  io.emit(`company-${companyId}-contact`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-contact`, {
     action: "delete",
     contactId
   });

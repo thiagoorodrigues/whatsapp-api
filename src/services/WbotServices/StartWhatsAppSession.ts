@@ -7,6 +7,7 @@ import { logger } from "../../utils/logger";
 import * as Sentry from "@sentry/node";
 import SyncSessionContactsService from "../WhatsappContactServices/SyncSessionContactsService";
 import { readKeysOfType } from "../../models/BaileysKey";
+import { companyRoom } from "../../libs/socketRooms";
 
 export const StartWhatsAppSession = async (
   whatsapp: Whatsapp,
@@ -15,7 +16,7 @@ export const StartWhatsAppSession = async (
   await whatsapp.update({ status: "OPENING" });
 
   const io = getIO();
-  io.emit(`company-${companyId}-whatsappSession`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-whatsappSession`, {
     action: "update",
     session: whatsapp
   });

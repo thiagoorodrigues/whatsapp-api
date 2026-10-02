@@ -11,6 +11,7 @@ import DeleteService from "../services/TagServices/DeleteService";
 import SimpleListService from "../services/TagServices/SimpleListService";
 import SyncTagService from "../services/TagServices/SyncTagsService";
 import KanbanListService from "../services/TagServices/KanbanListService";
+import { companyRoom } from "../libs/socketRooms";
 
 type IndexQuery = {
   searchParam?: string;
@@ -43,7 +44,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   });
 
   const io = getIO();
-  io.emit(`company-${companyId}-tag`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-tag`, {
     action: "create",
     tag
   });
@@ -83,7 +84,7 @@ export const update = async (
   const tag = await UpdateService({ tagData, id: tagId, companyId });
 
   const io = getIO();
-  io.emit(`company-${companyId}-tag`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-tag`, {
     action: "update",
     tag
   });
@@ -101,7 +102,7 @@ export const remove = async (
   await DeleteService(tagId, companyId);
 
   const io = getIO();
-  io.emit(`company-${companyId}-tag`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-tag`, {
     action: "delete",
     tagId
   });
@@ -127,7 +128,7 @@ export const syncTags = async (
 
   const tags = await SyncTagService({ ticketId, tags: tagList, companyId });
 
-  getIO().emit(`company-${companyId}-ticketTags`, { action: "update", ticketId });
+  getIO().to(companyRoom(companyId)).emit(`company-${companyId}-ticketTags`, { action: "update", ticketId });
 
   return res.json(tags);
 };

@@ -13,6 +13,7 @@ import { POSITION_STEP } from "./position";
 import { canCreateFunnel, reorderOpen, sortStages } from "./stages";
 import { canSeeFunnel, isAdmin, Viewer } from "./visibility";
 import { invalidateRules } from "./ruleCache";
+import { companyRoom } from "../../libs/socketRooms";
 
 export interface FunnelView {
   id: number;
@@ -53,7 +54,7 @@ const toView = (f: Funnel): FunnelView => ({
 export const emitFunnel = (companyId: number, funnelId: number): void => {
   // Archiving a funnel or a stage changes which rules can still fire.
   invalidateRules(companyId);
-  getIO().emit(`company-${companyId}-funnel`, { action: "update", funnelId });
+  getIO().to(companyRoom(companyId)).emit(`company-${companyId}-funnel`, { action: "update", funnelId });
 };
 
 export const listFunnels = async (v: Viewer, opts: { includeArchived?: boolean } = {}): Promise<FunnelView[]> => {

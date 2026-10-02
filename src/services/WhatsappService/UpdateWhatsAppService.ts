@@ -134,7 +134,8 @@ const UpdateWhatsAppService = async ({ whatsappData, whatsappId, companyId }: Re
     ratingMessage,
     isDefault,
     companyId,
-    token,
+    // Absent = keep (non-admins never send it); empty = no API access.
+    ...(token !== undefined ? { token: token || null } : {}),
     importMessages,
     showOnline,
     initialDate,

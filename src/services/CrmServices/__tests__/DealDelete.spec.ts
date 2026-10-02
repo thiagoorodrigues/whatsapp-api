@@ -3,7 +3,7 @@ import { findVisibleFunnel } from "../FunnelService";
 import { deleteDeal } from "../DealService";
 
 const emit = jest.fn();
-jest.mock("../../../libs/socket", () => ({ getIO: () => ({ emit }) }));
+jest.mock("../../../libs/socket", () => ({ getIO: () => { const io: any = { emit }; io.to = () => io; return io; } }));
 jest.mock("../FunnelService", () => ({ findVisibleFunnel: jest.fn(), findVisibleStage: jest.fn() }));
 jest.mock("../../../models/Deal", () => ({ __esModule: true, default: { findOne: jest.fn() } }));
 

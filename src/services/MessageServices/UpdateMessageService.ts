@@ -4,6 +4,7 @@ import Ticket from "../../models/Ticket";
 import Whatsapp from "../../models/Whatsapp";
 import ResolveMentionsService from "./ResolveMentionsService";
 import { previewWithMentions } from "../../helpers/mentions";
+import { notificationRoom, statusRoom, ticketRoom } from "../../libs/socketRooms";
 
 interface MessageData {
     id: string;
@@ -68,9 +69,9 @@ const UpdateMessageService = async ({ messageData, companyId, whatsappId }: Requ
         if (preview) await message.ticket.update({ lastMessage: preview });
 
         const io = getIO();
-        io.to(message.ticketId.toString())
-            .to(message.ticket.status)
-            .to("notification")
+        io.to(ticketRoom(companyId, message.ticketId.toString()))
+            .to(statusRoom(companyId, message.ticket.status))
+            .to(notificationRoom(companyId))
             .emit(`company-${companyId}-appMessage`, {
                 action: "create",
                 message,

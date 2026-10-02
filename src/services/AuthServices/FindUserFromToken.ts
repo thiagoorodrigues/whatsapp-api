@@ -10,7 +10,7 @@ interface RefreshTokenPayload {
 }
 
 export default async function FindUserFromToken(token: string): Promise<User> {
-  const decoded = verify(token, authConfig.refreshSecret);
+  const decoded = verify(token, authConfig.refreshSecret, { algorithms: ["HS256"] });
   const { id } = decoded as RefreshTokenPayload;
 
   const user = await ShowUserService(id);

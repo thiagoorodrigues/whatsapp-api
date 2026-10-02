@@ -12,6 +12,7 @@ import Schedule from "../models/Schedule";
 import path from "path";
 import fs from "fs";
 import { head } from "lodash";
+import { companyRoom } from "../libs/socketRooms";
 
 type IndexQuery = {
   searchParam?: string;
@@ -55,7 +56,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   });
 
   const io = getIO();
-  io.emit("schedule", {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-schedule`, {
     action: "create",
     schedule
   });
@@ -87,7 +88,7 @@ export const update = async (
   const schedule = await UpdateService({ scheduleData, id: scheduleId, companyId });
 
   const io = getIO();
-  io.emit("schedule", {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-schedule`, {
     action: "update",
     schedule
   });
@@ -105,7 +106,7 @@ export const remove = async (
   await DeleteService(scheduleId, companyId);
 
   const io = getIO();
-  io.emit("schedule", {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-schedule`, {
     action: "delete",
     scheduleId
   });

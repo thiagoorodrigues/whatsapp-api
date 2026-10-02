@@ -171,6 +171,14 @@ class Whatsapp extends Model<Whatsapp> {
 
   @BelongsTo(() => AiAgent)
   aiAgent: AiAgent;
+
+  // Session holds the WhatsApp credentials and token the external API key:
+  // neither goes out in API responses or socket events. Admins read the
+  // token through WhatsAppController.show.
+  toJSON(): object {
+    const { session, token, ...rest } = super.toJSON() as any;
+    return rest;
+  }
 }
 
 export default Whatsapp;

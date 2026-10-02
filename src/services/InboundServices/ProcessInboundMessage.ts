@@ -31,6 +31,7 @@ import ShowWhatsAppService from "../WhatsappService/ShowWhatsAppService";
 import SaveInboundMessageService from "./SaveInboundMessageService";
 import VerifyContactService from "./VerifyContactService";
 import { logger } from "../../utils/logger";
+import { statusRoom, ticketRoom } from "../../libs/socketRooms";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const request = require("request");
@@ -137,14 +138,14 @@ export const handleRating = async (
     status: "closed",
   });
 
-  io.to("open").emit(`company-${ticket.companyId}-ticket`, {
+  io.to(statusRoom(ticket.companyId, "open")).emit(`company-${ticket.companyId}-ticket`, {
     action: "delete",
     ticket,
     ticketId: ticket.id,
   });
 
-  io.to(ticket.status)
-    .to(ticket.id.toString())
+  io.to(statusRoom(ticket.companyId, ticket.status))
+    .to(ticketRoom(ticket.companyId, ticket.id.toString()))
     .emit(`company-${ticket.companyId}-ticket`, {
       action: "update",
       ticket,

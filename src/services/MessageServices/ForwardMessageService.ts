@@ -12,6 +12,7 @@ import FindOrCreateTicketService from "../TicketServices/FindOrCreateTicketServi
 import SaveSentMessageService from "./SaveSentMessageService";
 import ShowTicketService from "../TicketServices/ShowTicketService";
 import { getIO } from "../../libs/socket";
+import { notificationRoom, statusRoom, ticketRoom } from "../../libs/socketRooms";
 
 export const MAX_FORWARD_CONTACTS = 5;
 
@@ -103,8 +104,8 @@ const ForwardMessageService = async ({ messageId, contactIds, companyId, userId 
         await ticket.update({ status: "open", userId });
         ticket = await ShowTicketService(ticket.id, companyId);
         const io = getIO();
-        io.to(oldStatus).emit(`company-${companyId}-ticket`, { action: "delete", ticketId: ticket.id });
-        io.to("open").to("notification").to(ticket.id.toString())
+        io.to(statusRoom(companyId, oldStatus)).emit(`company-${companyId}-ticket`, { action: "delete", ticketId: ticket.id });
+        io.to(statusRoom(companyId, "open")).to(notificationRoom(companyId)).to(ticketRoom(companyId, ticket.id.toString()))
           .emit(`company-${companyId}-ticket`, { action: "update", ticket });
       }
 

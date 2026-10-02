@@ -16,6 +16,7 @@ import fs from "fs";
 import path from "path";
 
 import AppError from "../errors/AppError";
+import { companyRoom } from "../libs/socketRooms";
 
 type IndexQuery = {
   searchParam: string;
@@ -70,7 +71,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   });
 
   const io = getIO();
-  io.emit(`company-${companyId}-quickmessage`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-quickmessage`, {
     action: "create",
     record
   });
@@ -113,7 +114,7 @@ export const update = async (
   });
 
   const io = getIO();
-  io.emit(`company-${companyId}-quickmessage`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-quickmessage`, {
     action: "update",
     record
   });
@@ -131,7 +132,7 @@ export const remove = async (
   await DeleteService(id);
 
   const io = getIO();
-  io.emit(`company-${companyId}-quickmessage`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-quickmessage`, {
     action: "delete",
     id
   });

@@ -15,6 +15,7 @@ import { findActiveLossReason } from "./LossReasonService";
 import { needsRenumber, positionBetween, renumber } from "./position";
 import { stageChange } from "./transition";
 import { canDeleteDeal, canSeeDeal, ownerScope, Viewer } from "./visibility";
+import { companyRoom } from "../../libs/socketRooms";
 
 export const PAGE_SIZE = 50;
 export const CLOSED_WINDOW_DAYS = 30;
@@ -136,7 +137,7 @@ export const dealEventPayload = (action: "create" | "update" | "delete", deal: D
 });
 
 export const emitDeal = (companyId: number, action: "create" | "update" | "delete", deal: DealCard) => {
-  getIO().emit(`company-${companyId}-deal`, dealEventPayload(action, deal));
+  getIO().to(companyRoom(companyId)).emit(`company-${companyId}-deal`, dealEventPayload(action, deal));
 };
 
 const ownerWhere = (v: Viewer, funnel: FunnelView): WhereOptions | undefined => {

@@ -6,6 +6,7 @@ import ListQueuesService from "../services/QueueService/ListQueuesService";
 import ShowQueueService from "../services/QueueService/ShowQueueService";
 import UpdateQueueService from "../services/QueueService/UpdateQueueService";
 import { isNil } from "lodash";
+import { companyRoom } from "../libs/socketRooms";
 
 type QueueFilter = {
   companyId: number;
@@ -41,7 +42,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   });
 
   const io = getIO();
-  io.emit(`company-${companyId}-queue`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-queue`, {
     action: "update",
     queue
   });
@@ -77,7 +78,7 @@ export const update = async (
   }, companyId);
 
   const io = getIO();
-  io.emit(`company-${companyId}-queue`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-queue`, {
     action: "update",
     queue
   });
@@ -95,7 +96,7 @@ export const remove = async (
   await DeleteQueueService(queueId, companyId);
 
   const io = getIO();
-  io.emit(`company-${companyId}-queue`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-queue`, {
     action: "delete",
     queueId: +queueId
   });

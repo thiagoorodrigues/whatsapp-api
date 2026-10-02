@@ -13,6 +13,7 @@ import FindAllInvoiceService from "../services/InvoicesService/FindAllInvoiceSer
 import ListInvoicesServices from "../services/InvoicesService/ListInvoicesServices";
 import ShowInvoceService from "../services/InvoicesService/ShowInvoiceService";
 import UpdateInvoiceService from "../services/InvoicesService/UpdateInvoiceService";
+import { userIsSuper } from "../middleware/isSuper";
 
 type IndexQuery = {
   searchParam: string;
@@ -48,6 +49,9 @@ export const show = async (req: Request, res: Response): Promise<Response> => {
   const { Invoiceid } = req.params;
 
   const invoice = await ShowInvoceService(Invoiceid);
+  if (invoice.companyId !== req.user.companyId && !(await userIsSuper(req.user.id))) {
+    throw new AppError("ERR_NO_PERMISSION", 403);
+  }
 
   return res.status(200).json(invoice);
 };
@@ -76,7 +80,8 @@ export const update = async (
     throw new AppError(err.message);
   }
 
-  const { id, status } = InvoiceData;
+  const { status } = InvoiceData;
+  const { id } = req.params;
 
   const plan = await UpdateInvoiceService({
     id,

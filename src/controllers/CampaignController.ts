@@ -22,6 +22,7 @@ import Ticket from "../models/Ticket";
 import Contact from "../models/Contact";
 import ContactList from "../models/ContactList";
 import ContactListItem from "../models/ContactListItem";
+import { companyRoom } from "../libs/socketRooms";
 
 type IndexQuery = {
   searchParam: string;
@@ -123,7 +124,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
           contactListId: contactListId,
         });
         const io = getIO();
-        io.emit(`company-${companyId}-campaign`, {
+        io.to(companyRoom(companyId)).emit(`company-${companyId}-campaign`, {
           action: "create",
           record
         });
@@ -143,7 +144,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     });
 
     const io = getIO();
-    io.emit(`company-${companyId}-campaign`, {
+    io.to(companyRoom(companyId)).emit(`company-${companyId}-campaign`, {
       action: "create",
       record
     });
@@ -185,7 +186,7 @@ export const update = async (
   });
 
   const io = getIO();
-  io.emit(`company-${companyId}-campaign`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-campaign`, {
     action: "update",
     record
   });
@@ -225,7 +226,7 @@ export const remove = async (
   await DeleteService(id);
 
   const io = getIO();
-  io.emit(`company-${companyId}-campaign`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-campaign`, {
     action: "delete",
     id
   });

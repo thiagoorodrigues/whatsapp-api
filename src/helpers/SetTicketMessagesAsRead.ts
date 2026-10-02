@@ -5,6 +5,7 @@ import Message from "../models/Message";
 import Ticket from "../models/Ticket";
 import { logger } from "../utils/logger";
 import { getTicketChannel, messageRef, ticketAddress } from "../channels";
+import { notificationRoom, statusRoom } from "../libs/socketRooms";
 
 const SetTicketMessagesAsRead = async (ticket: Ticket): Promise<void> => {
   await ticket.update({ unreadMessages: 0 });
@@ -47,7 +48,7 @@ const SetTicketMessagesAsRead = async (ticket: Ticket): Promise<void> => {
   }
 
   const io = getIO();
-  io.to(ticket.status).to("notification").emit(`company-${ticket.companyId}-ticket`, {
+  io.to(statusRoom(ticket.companyId, ticket.status)).to(notificationRoom(ticket.companyId)).emit(`company-${ticket.companyId}-ticket`, {
     action: "updateUnread",
     ticketId: ticket.id
   });

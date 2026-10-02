@@ -27,7 +27,7 @@ export const RefreshTokenService = async (
   token: string
 ): Promise<Response> => {
   try {
-    const decoded = verify(token, authConfig.refreshSecret);
+    const decoded = verify(token, authConfig.refreshSecret, { algorithms: ["HS256"] });
     const { id, tokenVersion, companyId } = decoded as RefreshTokenPayload;
 
     const user = await ShowUserService(id);

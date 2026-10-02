@@ -5,6 +5,7 @@ import Whatsapp from "../../models/Whatsapp";
 import User from "../../models/User";
 import ResolveMentionsService from "./ResolveMentionsService";
 import { previewWithMentions } from "../../helpers/mentions";
+import { notificationRoom, statusRoom, ticketRoom } from "../../libs/socketRooms";
 
 interface MessageData {
   id: string;
@@ -94,9 +95,9 @@ const CreateMessageService = async ({ messageData: data, companyId }: Request): 
   }
 
   const io = getIO();
-  io.to(message.ticketId.toString())
-    .to(message.ticket.status)
-    .to("notification")
+  io.to(ticketRoom(companyId, message.ticketId.toString()))
+    .to(statusRoom(companyId, message.ticket.status))
+    .to(notificationRoom(companyId))
     .emit(`company-${companyId}-appMessage`, {
       action: "create",
       message,

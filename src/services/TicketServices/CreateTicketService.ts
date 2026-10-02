@@ -7,6 +7,7 @@ import { getIO } from "../../libs/socket";
 import GetDefaultWhatsAppByUser from "../../helpers/GetDefaultWhatsAppByUser";
 import ShowWhatsAppService from "../WhatsappService/ShowWhatsAppService";
 import FindOrCreateATicketTrakingService from "./FindOrCreateATicketTrakingService";
+import { ticketRoom } from "../../libs/socketRooms";
 
 interface Request {
   contactId: number;
@@ -86,7 +87,7 @@ const CreateTicketService = async ({
 
   const io = getIO();
 
-  io.to(ticket.id.toString()).emit("ticket", {
+  io.to(ticketRoom(ticket.companyId, ticket.id)).emit("ticket", {
     action: "update",
     ticket
   });

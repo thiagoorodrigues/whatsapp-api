@@ -12,6 +12,8 @@ import DeleteUserService from "../services/UserServices/DeleteUserService";
 import UpdateUserPreferencesService from "../services/UserServices/UpdateUserPreferencesService";
 import SimpleListService, { ListServiceRelatorio } from "../services/UserServices/SimpleListService";
 import { logger } from "../utils/logger";
+import { companyRoom } from "../libs/socketRooms";
+import { userIsSuper } from "../middleware/isSuper";
 
 type IndexQuery = {
   searchParam: string;
@@ -65,19 +67,28 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     throw new AppError("ERR_NO_PERMISSION", 403);
   }
 
+  // The company comes from the token. Only /signup (ENV_TOKEN integration)
+  // and super users may pick another one.
+  const mayPickCompany =
+    req.url === "/signup" || (req.user && (await userIsSuper(req.user.id)));
+  const targetCompanyId = mayPickCompany ? bodyCompanyId || userCompanyId : userCompanyId;
+  if (!targetCompanyId) {
+    throw new AppError("ERR_NO_COMPANY_FOUND", 400);
+  }
+
   const user = await CreateUserService({
     email,
     password,
     name,
     profile,
-    companyId: bodyCompanyId || userCompanyId,
+    companyId: targetCompanyId,
     queueIds,
     whatsappId,
     status
   });
 
   const io = getIO();
-  io.emit(`company-${userCompanyId}-user`, {
+  io.to(companyRoom(targetCompanyId)).emit(`company-${targetCompanyId}-user`, {
     action: "create",
     user
   });
@@ -89,6 +100,9 @@ export const show = async (req: Request, res: Response): Promise<Response> => {
   const { userId } = req.params;
 
   const user = await ShowUserService(userId);
+  if (user.companyId !== req.user.companyId && !(await userIsSuper(req.user.id))) {
+    throw new AppError("ERR_NO_USER_FOUND", 404);
+  }
 
   return res.status(200).json(user);
 };
@@ -113,7 +127,7 @@ export const update = async (
   });
 
   const io = getIO();
-  io.emit(`company-${companyId}-user`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-user`, {
     action: "update",
     user
   });
@@ -133,7 +147,7 @@ export const updatePreferences = async (
   });
 
   const io = getIO();
-  io.emit(`company-${companyId}-user`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-user`, {
     action: "update",
     user
   });
@@ -152,10 +166,10 @@ export const remove = async (
     throw new AppError("ERR_NO_PERMISSION", 403);
   }
 
-  await DeleteUserService(userId, companyId);
+  await DeleteUserService(userId, companyId, await userIsSuper(req.user.id));
 
   const io = getIO();
-  io.emit(`company-${companyId}-user`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-user`, {
     action: "delete",
     userId
   });
@@ -167,15 +181,18 @@ export const list = async (req: Request, res: Response): Promise<Response> => {
   const { companyId } = req.query;
   const { companyId: userCompanyId } = req.user;
 
+  const pickCompany = companyId && (await userIsSuper(req.user.id));
   const users = await SimpleListService({
-    companyId: companyId ? +companyId : userCompanyId
+    companyId: pickCompany ? +companyId : userCompanyId
   });
 
   return res.status(200).json(users);
 };
 
 export const listRelatorio = async (req: Request, res: Response): Promise<Response> => {
-  const companyId: string = req.query.companyId as string;
+  const asked = req.query.companyId as string;
+  const companyId: string =
+    asked && (await userIsSuper(req.user.id)) ? asked : String(req.user.companyId);
   const dataInicial: string = req.query.dataInicial as string;
   const DataFinal: string = req.query.DataFinal as string;
   const User: string = req.query.nome as string;

@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/node";
 import { getIO } from "../../libs/socket";
 import Message from "../../models/Message";
 import { logger } from "../../utils/logger";
+import { ticketRoom } from "../../libs/socketRooms";
 
 /**
  * Delivery status of a message (1 sent, 2 server, 3 delivered, 4 read,
@@ -22,7 +23,7 @@ const UpdateMessageAckService = async (externalId: string, ack: number | null | 
     await message.update({ ack });
 
     getIO()
-      .to(message.ticketId.toString())
+      .to(ticketRoom(message.companyId, message.ticketId.toString()))
       .emit(`company-${message.companyId}-appMessage`, { action: "update", message });
   } catch (err) {
     Sentry.captureException(err);

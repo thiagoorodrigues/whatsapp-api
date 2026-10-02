@@ -19,6 +19,7 @@ import { isNil } from "lodash";
 import { logger } from "../../utils/logger";
 import Logs from "../../models/Logs";
 import ApplyFunnelRulesService, { queueEntered } from "../CrmServices/ApplyFunnelRulesService";
+import { notificationRoom, statusRoom, ticketRoom } from "../../libs/socketRooms";
 
 interface TicketData {
   status?: string;
@@ -97,7 +98,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
 
       //     await ticket.update({status: "closed"})
 
-      //     io.to(oldStatus).emit(`company-${companyId}-ticket`, {
+      //     io.to(statusRoom(companyId, oldStatus)).emit(`company-${companyId}-ticket`, {
       //       action: "delete",
       //       ticketId: ticket.id
       //     });
@@ -131,8 +132,8 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
             })
           });
 
-          io.to("open")
-            .to(ticketId.toString())
+          io.to(statusRoom(ticket.companyId, "open"))
+            .to(ticketRoom(ticket.companyId, ticketId.toString()))
             .emit(`company-${ticket.companyId}-ticket`, {
               action: "delete",
               ticketId: ticket.id
@@ -407,15 +408,15 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
 
     if (ticket.status !== oldStatus || ticket.user?.id !== oldUserId) {
 
-      io.to(oldStatus).emit(`company-${companyId}-ticket`, {
+      io.to(statusRoom(companyId, oldStatus)).emit(`company-${companyId}-ticket`, {
         action: "delete",
         ticketId: ticket.id
       });
     }
 
-    io.to(ticket.status)
-      .to("notification")
-      .to(ticketId.toString())
+    io.to(statusRoom(companyId, ticket.status))
+      .to(notificationRoom(companyId))
+      .to(ticketRoom(companyId, ticketId.toString()))
       .emit(`company-${companyId}-ticket`, {
         action: "update",
         ticket

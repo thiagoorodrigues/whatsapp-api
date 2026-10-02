@@ -12,7 +12,7 @@ import {
   qualifyContactDeal
 } from "../AgentDealService";
 
-jest.mock("../../../libs/socket", () => ({ getIO: () => ({ emit: jest.fn() }) }));
+jest.mock("../../../libs/socket", () => ({ getIO: () => { const io: any = { emit: jest.fn() }; io.to = () => io; return io; } }));
 jest.mock("../../../helpers/planFeature", () => ({ hasPlanFeature: jest.fn() }));
 jest.mock("../DealService", () => ({
   sanitizeDealInput: jest.requireActual("../DealService").sanitizeDealInput,

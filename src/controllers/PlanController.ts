@@ -117,7 +117,7 @@ export const update = async (
     throw new AppError(err.message);
   }
 
-  const plan = await UpdatePlanService(planData);
+  const plan = await UpdatePlanService({ ...planData, id: req.params.id } as UpdatePlanData);
 
   // const io = getIO();
   // io.emit("plan", {

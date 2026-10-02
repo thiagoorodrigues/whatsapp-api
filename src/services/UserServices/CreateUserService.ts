@@ -5,6 +5,7 @@ import { SerializeUser } from "../../helpers/SerializeUser";
 import User from "../../models/User";
 import Plan from "../../models/Plan";
 import Company from "../../models/Company";
+import { PROFILES, scopeUserLinks } from "./companyLinks";
 
 interface Request {
   email: string;
@@ -75,14 +76,17 @@ const CreateUserService = async ({
           return !emailExists;
         }
       ),
-    password: Yup.string().required().min(5)
+    password: Yup.string().required().min(5),
+    profile: Yup.string().oneOf(PROFILES)
   });
 
   try {
-    await schema.validate({ email, password, name });
+    await schema.validate({ email, password, name, profile });
   } catch (err) {
     throw new AppError(err.message);
   }
+
+  const links = await scopeUserLinks(companyId, queueIds, whatsappId);
 
   const user = await User.create(
     {
@@ -91,14 +95,14 @@ const CreateUserService = async ({
       name,
       companyId,
       profile,
-      whatsappId: whatsappId || null,
+      whatsappId: links.whatsappId,
       status,
       signMessage
     },
     { include: ["queues", "company"] }
   );
 
-  await user.$set("queues", queueIds);
+  await user.$set("queues", links.queueIds);
 
   await user.reload();
 

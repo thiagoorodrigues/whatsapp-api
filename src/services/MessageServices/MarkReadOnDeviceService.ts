@@ -5,6 +5,7 @@ import { getIO } from "../../libs/socket";
 import Message from "../../models/Message";
 import Ticket from "../../models/Ticket";
 import { logger } from "../../utils/logger";
+import { notificationRoom, statusRoom } from "../../libs/socketRooms";
 
 /**
  * Received messages read on the phone or another linked device: like on
@@ -41,7 +42,7 @@ const MarkReadOnDeviceService = async (externalIds: string[], companyId: number,
         await ticket.update({ unreadMessages: unread });
         await cacheLayer.set(unreadsKey(ticket.contactId, ticket.whatsappId), `${unread}`);
         if (unread === 0) {
-          getIO().to(ticket.status).to("notification").emit(`company-${companyId}-ticket`, {
+          getIO().to(statusRoom(companyId, ticket.status)).to(notificationRoom(companyId)).emit(`company-${companyId}-ticket`, {
             action: "updateUnread",
             ticketId: ticket.id
           });

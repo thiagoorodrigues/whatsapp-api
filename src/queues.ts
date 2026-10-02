@@ -28,6 +28,7 @@ import Ticket from "./models/Ticket";
 import { addSeconds, differenceInSeconds } from "date-fns";
 import formatBody from "./helpers/Mustache";
 import { ClosedAllOpenTickets } from "./services/WbotServices/wbotClosedTickets";
+import { companyRoom, notificationRoom, statusRoom, ticketRoom } from "./libs/socketRooms";
 
 
 const nodemailer = require('nodemailer');
@@ -165,16 +166,16 @@ async function handleSendMessage(job) {
                   await ticket.reload();
 
                   const io = getIO();
-                  io.to(ticket.status)
-                    .to("notification")
-                    .to(ticket.id.toString())
+                  io.to(statusRoom(companyId, ticket.status))
+                    .to(notificationRoom(companyId))
+                    .to(ticketRoom(companyId, ticket.id.toString()))
                     .emit(`company-${companyId}-ticket`, {
                       action: "update",
                       ticket,
                       ticketId: ticket.id
                     });
 
-                  // io.to("pending").emit(`company-${companyId}-ticket`, {
+                  // io.to(statusRoom(companyId, "pending")).emit(`company-${companyId}-ticket`, {
                   //   action: "update",
                   //   ticket,
                   // });
@@ -553,7 +554,7 @@ async function verifyAndFinalizeCampaign(campaign) {
   }
 
   const io = getIO();
-  io.emit(`company-${campaign.companyId}-campaign`, {
+  io.to(companyRoom(campaign.companyId)).emit(`company-${campaign.companyId}-campaign`, {
     action: "update",
     record: campaign
   });
@@ -759,7 +760,7 @@ async function handleDispatchCampaign(job) {
     await verifyAndFinalizeCampaign(campaign);
 
     const io = getIO();
-    io.emit(`company-${campaign.companyId}-campaign`, {
+    io.to(companyRoom(campaign.companyId)).emit(`company-${campaign.companyId}-campaign`, {
       action: "update",
       record: campaign
     });

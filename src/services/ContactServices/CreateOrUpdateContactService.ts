@@ -3,6 +3,7 @@ import Contact from "../../models/Contact";
 import ContactCustomField from "../../models/ContactCustomField";
 import { isNil } from "lodash";
 import { logger } from "../../utils/logger";
+import { companyRoom } from "../../libs/socketRooms";
 interface ExtraInfo extends ContactCustomField {
   name: string;
   value: string;
@@ -62,7 +63,7 @@ const CreateOrUpdateContactService = async ({
       });
     }
 
-    io.emit(`company-${companyId}-contact`, {
+    io.to(companyRoom(companyId)).emit(`company-${companyId}-contact`, {
       action: "update",
       contact
     });
@@ -79,7 +80,7 @@ const CreateOrUpdateContactService = async ({
       lid
     });
 
-    io.emit(`company-${companyId}-contact`, {
+    io.to(companyRoom(companyId)).emit(`company-${companyId}-contact`, {
       action: "create",
       contact
     });

@@ -16,6 +16,7 @@ import { verify } from "jsonwebtoken";
 import User from "../models/User";
 import ShowPlanCompanyService from "../services/CompanyService/ShowPlanCompanyService";
 import ListCompaniesPlanService from "../services/CompanyService/ListCompaniesPlanService";
+import { userIsSuper } from "../middleware/isSuper";
 
 type IndexQuery = {
   searchParam: string;
@@ -44,6 +45,14 @@ type CompanyData = {
 
 type SchedulesData = {
   schedules: [];
+};
+
+// Regular users only ever see their own company.
+const assertOwnCompanyOrSuper = async (req: Request, id: string): Promise<void> => {
+  if (String(req.user.companyId) === String(id)) return;
+  if (!(await userIsSuper(req.user.id))) {
+    throw new AppError("ERR_NO_PERMISSION", 403);
+  }
 };
 
 export const index = async (req: Request, res: Response): Promise<Response> => {
@@ -77,6 +86,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
 
 export const show = async (req: Request, res: Response): Promise<Response> => {
   const { id } = req.params;
+  await assertOwnCompanyOrSuper(req, id);
 
   const company = await ShowCompanyService(id);
 
@@ -118,6 +128,7 @@ export const updateSchedules = async (
 ): Promise<Response> => {
   const { schedules }: SchedulesData = req.body;
   const { id } = req.params;
+  await assertOwnCompanyOrSuper(req, id);
 
   const company = await UpdateSchedulesService({
     id,

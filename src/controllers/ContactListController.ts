@@ -14,6 +14,7 @@ import ContactList from "../models/ContactList";
 
 import AppError from "../errors/AppError";
 import { ImportContacts } from "../services/ContactListService/ImportContacts";
+import { companyRoom } from "../libs/socketRooms";
 
 type IndexQuery = {
   searchParam: string;
@@ -63,7 +64,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   });
 
   const io = getIO();
-  io.emit(`company-${companyId}-ContactList`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-ContactList`, {
     action: "create",
     record
   });
@@ -104,7 +105,7 @@ export const update = async (
   });
 
   const io = getIO();
-  io.emit(`company-${companyId}-ContactList`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-ContactList`, {
     action: "update",
     record
   });
@@ -122,7 +123,7 @@ export const remove = async (
   await DeleteService(id);
 
   const io = getIO();
-  io.emit(`company-${companyId}-ContactList`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-ContactList`, {
     action: "delete",
     id
   });
@@ -150,7 +151,7 @@ export const upload = async (req: Request, res: Response) => {
 
   const io = getIO();
 
-  io.emit(`company-${companyId}-ContactListItem-${+id}`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-ContactListItem-${+id}`, {
     action: "reload",
     records: response
   });

@@ -10,6 +10,7 @@ import Invoices from "../models/Invoices";
 import Subscriptions from "../models/Subscriptions";
 import { getIO } from "../libs/socket";
 import UpdateUserService from "../services/UserServices/UpdateUserService";
+import { companyRoom } from "../libs/socketRooms";
 
 const app = express();
 
@@ -183,7 +184,7 @@ export const webhook = async (
             }
           });
 
-          io.emit(`company-${companyId}-payment`, {
+          io.to(companyRoom(companyId)).emit(`company-${companyId}-payment`, {
             action: detahe.status,
             company: companyUpdate
           });

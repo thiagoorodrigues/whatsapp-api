@@ -9,6 +9,7 @@ import ListWhatsAppsService from "../services/WhatsappService/ListWhatsAppsServi
 import ShowWhatsAppService from "../services/WhatsappService/ShowWhatsAppService";
 import UpdateWhatsAppService from "../services/WhatsappService/UpdateWhatsAppService";
 import { logger } from "../utils/logger";
+import { companyRoom } from "../libs/socketRooms";
 
 interface WhatsappData {
   name: string;
@@ -78,7 +79,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     outOfHoursMessage,
     queueIds,
     companyId,
-    token,
+    token: req.user.profile === "admin" ? token : undefined,
     importMessages,
     showOnline,
     initialDate,
@@ -94,13 +95,13 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   StartWhatsAppSession(whatsapp, companyId);
 
   const io = getIO();
-  io.emit(`company-${companyId}-whatsapp`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-whatsapp`, {
     action: "update",
     whatsapp
   });
 
   if (oldDefaultWhatsapp) {
-    io.emit(`company-${companyId}-whatsapp`, {
+    io.to(companyRoom(companyId)).emit(`company-${companyId}-whatsapp`, {
       action: "update",
       whatsapp: oldDefaultWhatsapp
     });
@@ -116,6 +117,9 @@ export const show = async (req: Request, res: Response): Promise<Response> => {
 
   const whatsapp = await ShowWhatsAppService(whatsappId, companyId, session);
 
+  if (req.user.profile === "admin") {
+    return res.status(200).json({ ...whatsapp.toJSON(), token: whatsapp.token });
+  }
   return res.status(200).json(whatsapp);
 };
 
@@ -127,6 +131,9 @@ export const update = async (
   const whatsappData = req.body;
   const { companyId } = req.user;
 
+  // Only admins see the API token, so only they can change it.
+  if (req.user.profile !== "admin") delete whatsappData.token;
+
   const { whatsapp, oldDefaultWhatsapp } = await UpdateWhatsAppService({
     whatsappData,
     whatsappId,
@@ -134,13 +141,13 @@ export const update = async (
   });
 
   const io = getIO();
-  io.emit(`company-${companyId}-whatsapp`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-whatsapp`, {
     action: "update",
     whatsapp
   });
 
   if (oldDefaultWhatsapp) {
-    io.emit(`company-${companyId}-whatsapp`, {
+    io.to(companyRoom(companyId)).emit(`company-${companyId}-whatsapp`, {
       action: "update",
       whatsapp: oldDefaultWhatsapp
     });
@@ -162,7 +169,7 @@ export const remove = async (
   removeWbot(+whatsappId);
 
   const io = getIO();
-  io.emit(`company-${companyId}-whatsapp`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-whatsapp`, {
     action: "delete",
     whatsappId: +whatsappId
   });

@@ -9,6 +9,13 @@ import { TransferTicketQueue } from "./wbotTransferTicketQueue";
 import cron from "node-cron";
 import { resumeInterruptedIndexing } from "./services/AiAgentServices/knowledge/KnowledgeService";
 
+// Without these the code would sign tokens with a public default secret.
+const missing = ["JWT_SECRET", "JWT_REFRESH_SECRET"].filter(k => !process.env[k]);
+if (missing.length) {
+  console.error(`Missing required environment variables: ${missing.join(", ")}`);
+  process.exit(1);
+}
+
 const server = app.listen(process.env.PORT, async () => {
   const companies = await Company.findAll();
   const allPromises: any[] = [];
