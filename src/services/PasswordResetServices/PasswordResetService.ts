@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { QueryTypes, Sequelize } from "sequelize";
 import AppError from "../../errors/AppError";
 import User from "../../models/User";
+import { logger } from "../../utils/logger";
 
 // "Users"."resetPassword" is not mapped on the model on purpose, so it never
 // shows up in user payloads. It holds "<sha256 of the code>.<expiry ms>".
@@ -50,7 +51,11 @@ export const requestPasswordReset = async (
     `UPDATE "Users" SET "resetPassword" = :value WHERE id = :id`,
     { replacements: { value: makeResetValue(code, Date.now()), id: user.id }, type: QueryTypes.UPDATE }
   );
-  await send(user.email, code);
+  // Not awaited and never surfaced: a slow or failing SMTP must not tell a
+  // known e-mail apart from an unknown one.
+  Promise.resolve()
+    .then(() => send(user.email, code))
+    .catch(err => logger.error(`Password reset e-mail not sent: ${err?.message || err}`));
 };
 
 export const resetPassword = async (

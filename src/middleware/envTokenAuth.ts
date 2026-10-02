@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { Request, Response, NextFunction } from "express";
 
 import AppError from "../errors/AppError";
@@ -18,7 +19,11 @@ const envTokenAuth = (
   const { token: queryToken } = req.query as TokenPayload;
   const given = bodyToken || queryToken;
 
-  if (expected && typeof given === "string" && given === expected) {
+  const a = Buffer.from(typeof given === "string" ? given : "");
+  const b = Buffer.from(expected || "");
+  const same = !!expected && a.length === b.length && crypto.timingSafeEqual(a, b);
+
+  if (same) {
     return next();
   }
 

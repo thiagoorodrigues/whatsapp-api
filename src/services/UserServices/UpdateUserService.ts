@@ -27,6 +27,7 @@ interface Request {
 
 interface Response {
   id: number;
+  companyId: number;
   name: string;
   email: string;
   profile: string;

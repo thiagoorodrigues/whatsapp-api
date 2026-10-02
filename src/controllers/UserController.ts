@@ -59,18 +59,18 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   }
 
   if (
-    req.url === "/signup" &&
+    req.path === "/signup" &&
     (await CheckSettingsHelper("userCreation")) === "disabled"
   ) {
     throw new AppError("ERR_USER_CREATION_DISABLED", 403);
-  } else if (req.url !== "/signup" && req.user.profile !== "admin") {
+  } else if (req.path !== "/signup" && req.user.profile !== "admin") {
     throw new AppError("ERR_NO_PERMISSION", 403);
   }
 
   // The company comes from the token. Only /signup (ENV_TOKEN integration)
   // and super users may pick another one.
   const mayPickCompany =
-    req.url === "/signup" || (req.user && (await userIsSuper(req.user.id)));
+    req.path === "/signup" || (req.user && (await userIsSuper(req.user.id)));
   const targetCompanyId = mayPickCompany ? bodyCompanyId || userCompanyId : userCompanyId;
   if (!targetCompanyId) {
     throw new AppError("ERR_NO_COMPANY_FOUND", 400);
@@ -127,7 +127,8 @@ export const update = async (
   });
 
   const io = getIO();
-  io.to(companyRoom(companyId)).emit(`company-${companyId}-user`, {
+  // A super user may edit someone of another company: tell that company.
+  io.to(companyRoom(user.companyId)).emit(`company-${user.companyId}-user`, {
     action: "update",
     user
   });

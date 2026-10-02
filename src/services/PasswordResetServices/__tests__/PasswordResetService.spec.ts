@@ -9,6 +9,8 @@ jest.mock("../../../models/User", () => ({
   }
 }));
 
+jest.mock("../../../utils/logger", () => ({ logger: { error: jest.fn() } }));
+
 /* eslint-disable import/first */
 import {
   requestPasswordReset,
@@ -46,10 +48,19 @@ describe("requestPasswordReset", () => {
     expect(query).not.toHaveBeenCalled();
   });
 
+  it("answers the same when the e-mail cannot be sent", async () => {
+    findOne.mockResolvedValue({ id: 3, email: "a@x.com" });
+    const send = jest.fn().mockRejectedValue(new Error("smtp down"));
+    await expect(requestPasswordReset("a@x.com", send)).resolves.toBeUndefined();
+    await new Promise(r => setImmediate(r));
+    expect(send).toHaveBeenCalled();
+  });
+
   it("looks the user up through the model, never by string-built SQL", async () => {
     findOne.mockResolvedValue({ id: 3, email: "a@x.com" });
     const send = jest.fn();
     await requestPasswordReset(" A@X.com' OR 1=1 -- ", send);
+    await new Promise(r => setImmediate(r));
     expect(JSON.stringify(findOne.mock.calls[0][0])).toContain(`"logic":"a@x.com' or 1=1 --"`);
     const [sql, opts] = query.mock.calls[0];
     expect(sql).not.toContain("a@x.com");
