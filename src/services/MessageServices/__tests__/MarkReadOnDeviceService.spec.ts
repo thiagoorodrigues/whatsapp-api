@@ -20,7 +20,7 @@ jest.mock("../../../libs/socket", () => ({ getIO: () => ({ to: () => ({ to: () =
 // eslint-disable-next-line import/first
 import MarkReadOnDeviceService from "../MarkReadOnDeviceService";
 
-const ticket: any = { id: 5, contactId: 9, status: "open", unreadMessages: 12, update: jest.fn() };
+const ticket: any = { id: 5, contactId: 9, whatsappId: 3, status: "open", unreadMessages: 12, update: jest.fn() };
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -35,24 +35,25 @@ describe("MarkReadOnDeviceService", () => {
       { ticketId: 5, createdAt: upTo }
     ]);
     count.mockResolvedValue(0);
-    await MarkReadOnDeviceService(["A", "B"], 1);
+    await MarkReadOnDeviceService(["A", "B"], 1, 3);
+    expect(findAll.mock.calls[0][0].where).toEqual(expect.objectContaining({ companyId: 1, whatsappId: 3 }));
     expect(update.mock.calls[0][1].where.ticketId).toBe(5);
     expect(ticket.update).toHaveBeenCalledWith({ unreadMessages: 0 });
-    expect(cacheSet).toHaveBeenCalledWith("contacts:9:unreads", "0");
+    expect(cacheSet).toHaveBeenCalledWith("contacts:9:3:unreads", "0");
     expect(emit).toHaveBeenCalledWith("company-1-ticket", { action: "updateUnread", ticketId: 5 });
   });
 
   it("keeps the messages that arrived after the last one read", async () => {
     findAll.mockResolvedValue([{ ticketId: 5, createdAt: new Date() }]);
     count.mockResolvedValue(2);
-    await MarkReadOnDeviceService(["A"], 1);
+    await MarkReadOnDeviceService(["A"], 1, 3);
     expect(ticket.update).toHaveBeenCalledWith({ unreadMessages: 2 });
     expect(emit).not.toHaveBeenCalled();
   });
 
   it("ignores ids the system does not know", async () => {
     findAll.mockResolvedValue([]);
-    await MarkReadOnDeviceService(["X"], 1);
+    await MarkReadOnDeviceService(["X"], 1, 3);
     expect(findOne).not.toHaveBeenCalled();
   });
 });

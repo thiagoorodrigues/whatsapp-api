@@ -109,6 +109,12 @@ class Message extends Model<Message> {
 
   @BelongsTo(() => Queue)
   queue: Queue;
+
+  // Connection that received or sent it: the same number on two connections
+  // gets the same message ids, one copy each.
+  @ForeignKey(() => Whatsapp)
+  @Column
+  whatsappId: number;
   
   @Default(false)
   @Column

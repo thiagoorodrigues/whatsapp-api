@@ -29,6 +29,7 @@ import DeleteBaileysService from "../services/BaileysServices/DeleteBaileysServi
 import NodeCache from 'node-cache';
 import { cachedGroupMetadata } from "./whatsappCache";
 import CheckSettings from "../helpers/CheckSettings";
+import FindNumberInUseService from "../services/WhatsappService/FindNumberInUseService";
 
 const loggerBaileys = MAIN_LOGGER.child({});
 loggerBaileys.level = "error";
@@ -42,6 +43,9 @@ const sessions: Session[] = [];
 const retriesQrCodeMap = new Map<number, number>();
 // Quedas seguidas por conexão; zera quando a conexão abre.
 const reconnectAttempts = new Map<number, number>();
+// Conexões que mostraram QR e ainda não abriram. Depois da leitura o WhatsApp
+// derruba o socket (515) e a conexão abre num socket novo, já sem QR.
+const pairing = new Set<number>();
 
 export const getWbot = (whatsappId: number): Session => {
   const sessionIndex = sessions.findIndex(s => s.id === whatsappId);
@@ -169,7 +173,7 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
           // retries read the original content from the database.
           try {
             const stored = await Message.findOne({
-              where: { messagesWhatsappsId: key.id! },
+              where: { messagesWhatsappsId: key.id!, whatsappId: id },
               attributes: ["dataJson"]
             });
             if (stored?.dataJson) {
@@ -261,6 +265,34 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
               reconnectAttempts.delete(id);
               // user.id is "5531...:<device>@s.whatsapp.net"; keep the digits.
               const connectedNumber = toPhoneNumber(wsocket.user?.id);
+
+              // Número novo que já está conectado em outra conexão da empresa:
+              // recusado, senão cada conversa aparece duas vezes.
+              const freshPairing = pairing.delete(id);
+              const twin = freshPairing && connectedNumber
+                ? await FindNumberInUseService(whatsapp, connectedNumber, twinId => sessions.some(s => s.id === twinId))
+                : null;
+              if (twin) {
+                logger.warn(`Session ${name}: número ${connectedNumber} já conectado na conexão ${twin.id}; pareamento recusado`);
+                wsocket.ev.removeAllListeners("connection.update");
+                try {
+                  await wsocket.logout();
+                } catch (err) {
+                  logger.warn(`Could not log out refused session ${name}: ${err}`);
+                }
+                removeWbot(id, false);
+                await whatsapp.update({ status: "DISCONNECTED", session: "", qrcode: "" });
+                await clearBaileysKeys(whatsapp.id);
+                await DeleteBaileysService(whatsapp.id);
+                io.emit(`company-${whatsapp.companyId}-whatsappSession`, { action: "update", session: whatsapp });
+                io.emit(`company-${whatsapp.companyId}-whatsappSession`, {
+                  action: "numberInUse",
+                  whatsappId: whatsapp.id,
+                  message: `Este número já está conectado na conexão "${twin.name}". Desconecte-a antes de usar o número aqui.`
+                });
+                reject(new AppError("ERR_WAPP_NUMBER_IN_USE"));
+                return;
+              }
               await whatsapp.update({
                 status: "CONNECTED",
                 qrcode: "",
@@ -305,6 +337,7 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
                 reconnectAttempts.delete(id);
               } else {
                 logger.info(`Session QRCode Generate ${name}`);
+                pairing.add(id);
                 retriesQrCodeMap.set(id, (retriesQrCode += 1));
 
                 await whatsapp.update({

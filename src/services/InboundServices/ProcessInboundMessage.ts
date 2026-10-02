@@ -5,6 +5,7 @@ import { InboundMessage, normalizedForWebhook } from "../../channels/inbound";
 import formatBody from "../../helpers/Mustache";
 import { debounce } from "../../helpers/Debounce";
 import { cacheLayer } from "../../libs/cache";
+import { unreadsKey } from "../../helpers/unreadsKey";
 import { getIO } from "../../libs/socket";
 import Contact from "../../models/Contact";
 import Message from "../../models/Message";
@@ -237,13 +238,16 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
 
     let unreadMessages = 0;
 
-    if (inbound.fromMe) {
-      await cacheLayer.set(`contacts:${chatContact.id}:unreads`, "0");
+    // Old messages from the history import do not touch the unread counter.
+    if (inbound.history) {
+      // unreadMessages stays 0
+    } else if (inbound.fromMe) {
+      await cacheLayer.set(unreadsKey(chatContact.id, inbound.connectionId), "0");
     } else {
-      const unreads = await cacheLayer.get(`contacts:${chatContact.id}:unreads`);
+      const unreads = await cacheLayer.get(unreadsKey(chatContact.id, inbound.connectionId));
       unreadMessages = +unreads + 1;
       await cacheLayer.set(
-        `contacts:${chatContact.id}:unreads`,
+        unreadsKey(chatContact.id, inbound.connectionId),
         `${unreadMessages}`
       );
     }
@@ -258,6 +262,7 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
     });
 
     if (
+      !inbound.history &&
       unreadMessages === 0 &&
       whatsapp.complationMessage &&
       formatBody(whatsapp.complationMessage, contact).trim().toLowerCase() ===
@@ -271,13 +276,14 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
       inbound.connectionId,
       unreadMessages,
       companyId,
-      groupContact
+      groupContact,
+      inbound.history
     );
 
     // CRM rules run alongside the message; the service logs its own failures.
-    if (!inbound.fromMe && !isGroup) void ApplyFunnelRulesService(ticket as any);
+    if (!inbound.fromMe && !isGroup && !inbound.history) void ApplyFunnelRulesService(ticket as any);
 
-    if (!isGroup) await provider(ticket, inbound, companyId, contact);
+    if (!isGroup && !inbound.history) await provider(ticket, inbound, companyId, contact);
 
 
     const ticketTraking = await FindOrCreateATicketTrakingService({
@@ -287,7 +293,7 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
     });
 
     try {
-      if (!inbound.fromMe) {
+      if (!inbound.fromMe && !inbound.history) {
         /**
          * Tratamento para avaliação do atendente
          */
@@ -334,6 +340,10 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
     }
 
     await SaveInboundMessageService(inbound, ticket, contact);
+
+    // History import: answering hundreds of old conversations at once looks
+    // like spam to WhatsApp and gets the number blocked.
+    if (inbound.history) return;
 
     const currentSchedule = await VerifyCurrentSchedule(companyId);
     const scheduleType = await Setting.findOne({

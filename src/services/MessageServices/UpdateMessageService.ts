@@ -22,12 +22,14 @@ interface MessageData {
 interface Request {
     messageData: MessageData;
     companyId: number;
+    /** Connection that got the edit: each one keeps its own copy. */
+    whatsappId: number;
 }
 
-const UpdateMessageService = async ({ messageData, companyId }: Request): Promise<Message> => {
+const UpdateMessageService = async ({ messageData, companyId, whatsappId }: Request): Promise<Message> => {
 
     const messages = await Message.findAll({
-        where: { messagesWhatsappsId: messageData.messagesWhatsappsId },
+        where: { messagesWhatsappsId: messageData.messagesWhatsappsId, companyId, whatsappId },
         include: [
             "contact",
             {

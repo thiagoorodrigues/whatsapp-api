@@ -1,4 +1,5 @@
 import { cacheLayer } from "../libs/cache";
+import { unreadsKey } from "./unreadsKey";
 import { getIO } from "../libs/socket";
 import Message from "../models/Message";
 import Ticket from "../models/Ticket";
@@ -9,7 +10,7 @@ const SetTicketMessagesAsRead = async (ticket: Ticket): Promise<void> => {
   await ticket.update({ unreadMessages: 0 });
   // Incoming messages count from this cache; left as is, the next message
   // brings back every message already read.
-  await cacheLayer.set(`contacts:${ticket.contactId}:unreads`, "0");
+  await cacheLayer.set(unreadsKey(ticket.contactId, ticket.whatsappId), "0");
 
   const unread = await Message.findAll({
     where: {

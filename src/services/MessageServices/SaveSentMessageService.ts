@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/node";
 import { v4 as uuid } from "uuid";
 import { SentMessage } from "../../channels";
 import { cacheLayer } from "../../libs/cache";
+import { unreadsKey } from "../../helpers/unreadsKey";
 import Message from "../../models/Message";
 import Ticket from "../../models/Ticket";
 import { logger } from "../../utils/logger";
@@ -44,7 +45,7 @@ const SaveSentMessageService = async ({ ticket, sent, body, media, quotedMsgId, 
 
   const text = body || media?.fileName || mediaUrl || "";
   await ticket.update({ lastMessage: text, fromMe: true });
-  await cacheLayer.set(`contacts:${ticket.contactId}:unreads`, "0");
+  await cacheLayer.set(unreadsKey(ticket.contactId, ticket.whatsappId), "0");
 
   return CreateMessageService({
     companyId: ticket.companyId,
@@ -52,6 +53,7 @@ const SaveSentMessageService = async ({ ticket, sent, body, media, quotedMsgId, 
       id: uuid(),
       messagesWhatsappsId: sent.externalId || undefined,
       ticketId: ticket.id,
+      whatsappId: ticket.whatsappId,
       body: text,
       fromMe: true,
       read: true,

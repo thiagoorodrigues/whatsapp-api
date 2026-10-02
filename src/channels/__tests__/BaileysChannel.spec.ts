@@ -111,10 +111,13 @@ describe("BaileysChannel", () => {
     }));
     const channel = new BaileysChannel(7);
     const own = await channel.send({ number: "5511999999999" }, { type: "text", text: "oi" });
-    expect(wasSentByPlatform(own.externalId)).toBe(true);
+    expect(wasSentByPlatform(7, own.externalId)).toBe(true);
     const another = await channel.send({ number: "5511999999999" }, { type: "text", text: "oi" });
-    expect(wasSentByPlatform(another.externalId)).toBe(true);
-    expect(wasSentByPlatform("3EB0TYPEDONTHEPHONE")).toBe(false);
+    expect(wasSentByPlatform(7, another.externalId)).toBe(true);
+    expect(wasSentByPlatform(7, "3EB0TYPEDONTHEPHONE")).toBe(false);
+    // The same number paired on another connection (or another company)
+    // gets the echo too and must save it.
+    expect(wasSentByPlatform(8, own.externalId)).toBe(false);
     expect(newMessageId()).not.toBe(newMessageId());
   });
 

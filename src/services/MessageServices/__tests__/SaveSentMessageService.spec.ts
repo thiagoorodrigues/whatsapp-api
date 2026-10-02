@@ -12,7 +12,7 @@ jest.mock("../../../models/Ticket", () => ({}));
 // eslint-disable-next-line import/first
 import SaveSentMessageService from "../SaveSentMessageService";
 
-const ticket: any = { id: 5, companyId: 1, contactId: 9, update: jest.fn() };
+const ticket: any = { id: 5, companyId: 1, contactId: 9, whatsappId: 3, update: jest.fn() };
 const sent = { externalId: "3EB0ABC", chatJid: "123@lid", raw: { key: { id: "3EB0ABC" } } };
 
 beforeEach(() => {
@@ -39,7 +39,7 @@ describe("SaveSentMessageService", () => {
       })
     );
     expect(ticket.update).toHaveBeenCalledWith({ lastMessage: "Olá", fromMe: true });
-    expect(cacheSet).toHaveBeenCalledWith("contacts:9:unreads", "0");
+    expect(cacheSet).toHaveBeenCalledWith("contacts:9:3:unreads", "0");
   });
 
   it("stores sent media in the company folder", async () => {

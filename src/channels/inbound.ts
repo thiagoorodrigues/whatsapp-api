@@ -27,6 +27,11 @@ export interface InboundMessage {
   externalId: string;
   /** Sent by this account (from the phone or another linked device). */
   fromMe: boolean;
+  /**
+   * Old message imported from the chat history: it is only saved, nothing
+   * answers it (greeting, out of hours, AI agent, flow, integrations...).
+   */
+  history?: boolean;
   /** Epoch milliseconds. */
   timestamp: number;
   chat: {

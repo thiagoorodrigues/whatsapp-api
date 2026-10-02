@@ -5,7 +5,7 @@ const ticketUpdate = jest.fn();
 jest.mock("../../../libs/socket", () => ({
   getIO: () => ({ to: () => ({ to: () => ({ to: () => ({ emit }) }) }) })
 }));
-jest.mock("../../../models/Ticket", () => ({}));
+jest.mock("../../../models/Ticket", () => ({ __esModule: true, default: { findByPk: async () => ({ whatsappId: 2 }) } }));
 jest.mock("../../../models/Whatsapp", () => ({}));
 jest.mock("../../../models/User", () => ({}));
 jest.mock("../ResolveMentionsService", () => ({
@@ -19,7 +19,12 @@ jest.mock("../../../models/Message", () => ({
   __esModule: true,
   default: {
     findOne: async ({ where }: any) =>
-      rows.find(r => r.messagesWhatsappsId === where.messagesWhatsappsId && r.companyId === where.companyId) || null,
+      rows.find(
+        r =>
+          r.messagesWhatsappsId === where.messagesWhatsappsId &&
+          r.companyId === where.companyId &&
+          (r.whatsappId ?? null) === where.whatsappId
+      ) || null,
     upsert: async (values: any) => {
       const index = rows.findIndex(r => r.id === values.id);
       if (index >= 0) rows[index] = { ...rows[index], ...values };
@@ -68,6 +73,19 @@ describe("CreateMessageService", () => {
     await CreateMessageService({ companyId: 1, messageData: { ...base, id: "c" } });
     await CreateMessageService({ companyId: 1, messageData: { ...base, id: "d" } });
     expect(rows.map(r => r.id)).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("keeps one copy per connection of the same number", async () => {
+    await CreateMessageService({ companyId: 1, messageData: { ...base, id: "a", messagesWhatsappsId: "WA1", whatsappId: 3 } });
+    await CreateMessageService({ companyId: 1, messageData: { ...base, id: "b", messagesWhatsappsId: "WA1", whatsappId: 4 } });
+    await CreateMessageService({ companyId: 1, messageData: { ...base, id: "c", messagesWhatsappsId: "WA1", whatsappId: 4, ack: 3 } });
+    expect(rows.map(r => [r.id, r.whatsappId])).toEqual([["a", 3], ["b", 4]]);
+    expect(rows[1].ack).toBe(3);
+  });
+
+  it("takes the connection from the ticket when the caller does not say", async () => {
+    await CreateMessageService({ companyId: 1, messageData: { ...base, id: "a", messagesWhatsappsId: "WA1" } });
+    expect(rows[0].whatsappId).toBe(2);
   });
 
   it("does not change the ticket preview for an internal note, but still emits it", async () => {

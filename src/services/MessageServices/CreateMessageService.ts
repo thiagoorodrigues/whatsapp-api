@@ -27,6 +27,8 @@ interface MessageData {
   isForwarded?: boolean;
   isPrivate?: boolean;
   userId?: number;
+  /** Connection of the message; taken from the ticket when left out. */
+  whatsappId?: number;
 }
 interface Request {
   messageData: MessageData;
@@ -34,15 +36,18 @@ interface Request {
 }
 
 const CreateMessageService = async ({ messageData: data, companyId }: Request): Promise<Message> => {
+  const whatsappId = data.whatsappId ?? (await Ticket.findByPk(data.ticketId, { attributes: ["whatsappId"] }))?.whatsappId;
+
   // A message saved when sent and again from the WhatsApp echo keeps one
-  // row: the second save updates the first.
-  let messageData = data;
+  // row: the second save updates the first. Per connection: the same number
+  // on another connection keeps its own copy.
+  let messageData: MessageData = { ...data, whatsappId };
   if (data.messagesWhatsappsId) {
     const existing = await Message.findOne({
-      where: { messagesWhatsappsId: data.messagesWhatsappsId, companyId },
+      where: { messagesWhatsappsId: data.messagesWhatsappsId, companyId, whatsappId: whatsappId ?? null },
       attributes: ["id"]
     });
-    if (existing && existing.id !== data.id) messageData = { ...data, id: existing.id };
+    if (existing && existing.id !== data.id) messageData = { ...messageData, id: existing.id };
   }
 
   await Message.upsert({ ...messageData, companyId });

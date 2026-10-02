@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import { cacheLayer } from "../../libs/cache";
+import { unreadsKey } from "../../helpers/unreadsKey";
 import { getIO } from "../../libs/socket";
 import Message from "../../models/Message";
 import Ticket from "../../models/Ticket";
@@ -9,11 +10,11 @@ import { logger } from "../../utils/logger";
  * Received messages read on the phone or another linked device: like on
  * WhatsApp, everything up to the newest one read is read in the ticket too.
  */
-const MarkReadOnDeviceService = async (externalIds: string[], companyId: number): Promise<void> => {
+const MarkReadOnDeviceService = async (externalIds: string[], companyId: number, whatsappId: number): Promise<void> => {
   if (!externalIds.length) return;
   try {
     const read = await Message.findAll({
-      where: { messagesWhatsappsId: { [Op.in]: externalIds }, fromMe: false, companyId },
+      where: { messagesWhatsappsId: { [Op.in]: externalIds }, fromMe: false, companyId, whatsappId },
       attributes: ["ticketId", "createdAt"]
     });
 
@@ -38,7 +39,7 @@ const MarkReadOnDeviceService = async (externalIds: string[], companyId: number)
         if (unread >= ticket.unreadMessages) return;
 
         await ticket.update({ unreadMessages: unread });
-        await cacheLayer.set(`contacts:${ticket.contactId}:unreads`, `${unread}`);
+        await cacheLayer.set(unreadsKey(ticket.contactId, ticket.whatsappId), `${unread}`);
         if (unread === 0) {
           getIO().to(ticket.status).to("notification").emit(`company-${companyId}-ticket`, {
             action: "updateUnread",

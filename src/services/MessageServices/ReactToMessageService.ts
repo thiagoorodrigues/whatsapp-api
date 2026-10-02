@@ -5,6 +5,8 @@ import { logger } from "../../utils/logger";
 
 interface Request {
   companyId: number;
+  /** Connection that saw the reaction: each one keeps its own copy. */
+  whatsappId: number;
   /** Id on the channel of the message reacted to. */
   externalId: string;
   /** Who reacted ("me" for the connection's own account). */
@@ -19,12 +21,12 @@ interface Request {
  * A reaction goes on the message it reacts to, never as a new message. Each
  * person has at most one: a new emoji replaces theirs.
  */
-const ReactToMessageService = async ({ companyId, externalId, jid, fromMe, emoji, at }: Request): Promise<void> => {
+const ReactToMessageService = async ({ companyId, whatsappId, externalId, jid, fromMe, emoji, at }: Request): Promise<void> => {
   if (!externalId || !jid) return;
 
   try {
     const message = await Message.findOne({
-      where: { messagesWhatsappsId: externalId, companyId },
+      where: { messagesWhatsappsId: externalId, companyId, whatsappId },
       include: ["contact", { model: Message, as: "quotedMsg", include: ["contact"] }]
     });
     if (!message) return;

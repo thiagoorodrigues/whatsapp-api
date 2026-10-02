@@ -28,11 +28,14 @@ import ProcessInboundMessage from "../InboundServices/ProcessInboundMessage";
 import ReactToMessageService from "../MessageServices/ReactToMessageService";
 import UpdateMessageAckService from "../MessageServices/UpdateMessageAckService";
 import ShowWhatsAppService from "../WhatsappService/ShowWhatsAppService";
+import FinishHistoryImportService from "../WhatsappService/FinishHistoryImportService";
 import UpsertWhatsappContactsService, { SyncedContact } from "../WhatsappContactServices/UpsertWhatsappContactsService";
 
 // WhatsApp Web (Baileys) events of a connection. Messages are turned into the
 // channel-neutral InboundMessage (channels/baileys/toInbound) and handled by
 // services/InboundServices; nothing here knows about tickets or bots.
+
+const HISTORY_IMPORT_IDLE_MS = 10 * 60 * 1000;
 
 type Session = WASocket & {
   id?: number;
@@ -43,9 +46,9 @@ interface ImessageUpsert {
   type: string;
 }
 
-const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyId: number): Promise<void> => {
+const handleMessage = async (msg: proto.IWebMessageInfo, wbot: Session, companyId: number, history = false): Promise<void> => {
   const inbound = await toInbound(msg, wbot, companyId);
-  if (inbound) await ProcessInboundMessage(inbound);
+  if (inbound) await ProcessInboundMessage({ ...inbound, history });
 };
 
 const wbotMessageListener = async (wbot: Session, companyId: number): Promise<void> => {
@@ -74,8 +77,8 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
 
       messages.forEach((message: proto.IWebMessageInfo) => queue.push(async () => {
         // Sent through the channel: already saved by whoever sent it.
-        if (message.key.fromMe && wasSentByPlatform(message.key.id)) return;
-        const messageExists = await Message.count({ where: { messagesWhatsappsId: message.key.id!, companyId } });
+        if (message.key.fromMe && wasSentByPlatform(wbot.id, message.key.id)) return;
+        const messageExists = await Message.count({ where: { messagesWhatsappsId: message.key.id!, whatsappId: wbot.id } });
         if (messageExists) return;
 
         const inbound = await toInbound(message, wbot, companyId);
@@ -91,6 +94,7 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
       const from = reaction.key;
       await ReactToMessageService({
         companyId,
+        whatsappId: wbot.id,
         externalId: key?.id,
         jid: from?.fromMe ? "me" : from?.participant || from?.remoteJid,
         fromMe: !!from?.fromMe,
@@ -136,14 +140,14 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
       messageUpdate.forEach(async (message: WAMessageUpdate) => {
         // Delivery/read status of a message we sent.
         if (message.update.status) {
-          UpdateMessageAckService(message.key.id, message.update.status);
+          UpdateMessageAckService(message.key.id, message.update.status, wbot.id);
         }
       });
       // Received messages read on the phone ("read-self").
       const readOnPhone = messageUpdate
         .filter(m => m.key.fromMe === false && Number(m.update.status) >= 4 && m.key.id)
         .map(m => m.key.id!);
-      MarkReadOnDeviceService(readOnPhone, companyId);
+      MarkReadOnDeviceService(readOnPhone, companyId, wbot.id);
     });
 
     wbot.ev.on("message-receipt.update", async (messageUserReceiptUpdate: MessageUserReceiptUpdate[]) => {
@@ -151,14 +155,14 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
 
       try {
         messageUserReceiptUpdate.forEach(async (message: { key: WAMessageKey, receipt: MessageUserReceipt }) => {
-          const msg = await Message.findOne({ where: { messagesWhatsappsId: message.key?.id } });
+          const msg = await Message.findOne({ where: { messagesWhatsappsId: message.key?.id, whatsappId: wbot.id } });
           if (!isNil(msg)) {
             const ticket = await Ticket.findOne({ where: { id: msg.ticketId, companyId: companyId } });
 
             // Members only send receipts for our own messages, so a read
             // receipt for someone else's message means we read it.
             if (ticket && ticket.isGroup && !msg.fromMe) {
-              if (message.receipt.readTimestamp) MarkReadOnDeviceService([message.key.id!], companyId);
+              if (message.receipt.readTimestamp) MarkReadOnDeviceService([message.key.id!], companyId, wbot.id);
             } else if (ticket && ticket.isGroup) {
               // One receipt per member: delivered (3) once someone got it,
               // read (4) once someone read it, played (5) for voice notes.
@@ -166,7 +170,7 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
               const { receipt } = message;
               const reached = receipt.playedTimestamp ? 5 : receipt.readTimestamp ? 4 : receipt.receiptTimestamp ? 3 : 2;
               const status = Math.max(Number(msg.ack) || 0, reached);
-              if (status !== Number(msg.ack)) UpdateMessageAckService(message.key.id, status);
+              if (status !== Number(msg.ack)) UpdateMessageAckService(message.key.id, status, wbot.id);
             }
           }
         });
@@ -175,7 +179,22 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
       }
     });
 
-    wbot.ev.on('messaging-history.set', ({ chats, contacts, messages, isLatest }) => historyQueue.push(async () => {
+    // The history arrives in chunks right after the QR is read, and WhatsApp
+    // does not say when the last one came. Ten minutes without a new chunk
+    // (counted after the last one is processed) means the import is over.
+    let importIdleTimer: NodeJS.Timeout | undefined;
+    const finishImportWhenIdle = () => {
+      clearTimeout(importIdleTimer);
+      importIdleTimer = setTimeout(() => {
+        FinishHistoryImportService(wbot.id!, companyId)
+          .catch(err => logger.error(`finish history import (whatsapp ${wbot.id}): ${err?.message || err}`));
+      }, HISTORY_IMPORT_IDLE_MS);
+    };
+    wbot.ev.on("connection.update", ({ connection }) => {
+      if (connection === "close") clearTimeout(importIdleTimer);
+    });
+
+    const importHistory = async (contacts: unknown[], messages: WAMessage[]) => {
       await saveSyncedContacts(contacts as SyncedContact[]);
       logger.info("Chamado para serviço de importação de messages;");
 
@@ -199,24 +218,24 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
         if (initialDate && finalDate) {
           for (let message of messageList) {
             const messageTimestamp = Number(message.messageTimestamp) * 1000; // Assuming messageTimestamp is in seconds
-            const messageExists = await Message.count({ where: { messagesWhatsappsId: message.key.id!, companyId } });
+            const messageExists = await Message.count({ where: { messagesWhatsappsId: message.key.id!, whatsappId: wbot.id } });
 
             if (!messageExists && messageTimestamp > initialDate && messageTimestamp < finalDate) {
               // logger.info(message.key.remoteJid);
               // logger.info(timeConverter(Number(message.messageTimestamp)));
-              await handleMessage(message, wbot, companyId);
+              await handleMessage(message, wbot, companyId, true);
               await sleep(2000); // 2 seconds sleep
             }
           }
         } else if (initialDate && !finalDate) {
           for (let message of messageList) {
             const messageTimestamp = Number(message.messageTimestamp) * 1000; // Assuming messageTimestamp is in seconds
-            const messageExists = await Message.count({ where: { messagesWhatsappsId: message.key.id!, companyId } });
+            const messageExists = await Message.count({ where: { messagesWhatsappsId: message.key.id!, whatsappId: wbot.id } });
 
             if (!messageExists && messageTimestamp > initialDate) {
               // logger.info(message.key.remoteJid);
               // logger.info(timeConverter(Number(message.messageTimestamp)));
-              await handleMessage(message, wbot, companyId);
+              await handleMessage(message, wbot, companyId, true);
               await sleep(2000); // 2 seconds sleep
             }
           }
@@ -225,8 +244,14 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
         }
 
         //logger.info("Serviço de importação de messages finalizado;");
+        finishImportWhenIdle();
       }
-    }));
+    };
+
+    wbot.ev.on("messaging-history.set", ({ contacts, messages }) => {
+      clearTimeout(importIdleTimer);
+      historyQueue.push(() => importHistory(contacts, messages));
+    });
 
   } catch (error) {
     Sentry.captureException(error);

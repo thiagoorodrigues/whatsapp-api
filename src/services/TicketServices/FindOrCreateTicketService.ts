@@ -14,7 +14,10 @@ interface TicketData {
   unreadMessages?: number;
 }
 
-const FindOrCreateTicketService = async (contact: Contact, whatsappId: number, unreadMessages: number, companyId: number, groupContact?: Contact): Promise<Ticket> => {
+// history: message imported from the chat history. It does not change the
+// unread count, and a conversation known only from the history is filed as
+// closed instead of waiting for someone in the queue.
+const FindOrCreateTicketService = async (contact: Contact, whatsappId: number, unreadMessages: number, companyId: number, groupContact?: Contact, history = false): Promise<Ticket> => {
   let ticket = await Ticket.findOne({
     where: {
       status: {
@@ -27,11 +30,11 @@ const FindOrCreateTicketService = async (contact: Contact, whatsappId: number, u
     order: [["id", "DESC"]]
   });
 
-  if (!!ticket) {
+  if (!!ticket && !history) {
     await ticket.update({ unreadMessages, whatsappId });
   }
 
-  if (!!ticket && ticket?.status === "closed") {
+  if (!!ticket && ticket?.status === "closed" && !history) {
     await ticket.update({ queueId: null, userId: null });
   }
 
@@ -42,9 +45,9 @@ const FindOrCreateTicketService = async (contact: Contact, whatsappId: number, u
   if (!ticket) {
     ticket = await Ticket.create({
       contactId: !!groupContact ? groupContact.id : contact.id,
-      status: "pending",
+      status: history ? "closed" : "pending",
       isGroup: !!groupContact,
-      unreadMessages,
+      unreadMessages: history ? 0 : unreadMessages,
       whatsappId,
       whatsapp,
       companyId

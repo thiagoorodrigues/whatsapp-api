@@ -71,6 +71,8 @@ describe("SaveInboundMessageService", () => {
       })
     });
     expect(t.update).toHaveBeenCalledWith({ lastMessage: "Oi" });
+    // Same number on two connections: the quote is the copy of this one.
+    expect(findQuoted).toHaveBeenCalledWith({ where: { messagesWhatsappsId: "Q1", whatsappId: 2 } });
   });
 
   it("stores media in the company folder, named after the original file", async () => {
@@ -97,6 +99,7 @@ describe("SaveInboundMessageService", () => {
     expect(create).not.toHaveBeenCalled();
     expect(updateMessage).toHaveBeenCalledWith({
       companyId: 1,
+      whatsappId: 2,
       messageData: expect.objectContaining({ messagesWhatsappsId: "A1", body: "Oi!", isEdited: true })
     });
   });
@@ -109,5 +112,12 @@ describe("SaveInboundMessageService", () => {
     await SaveInboundMessageService(inbound({ fromMe: true }), ours, contact);
     expect(ours.status).toBe("closed");
     expect(create.mock.calls[1][0].messageData).toEqual(expect.objectContaining({ contactId: undefined, read: true, ack: 2 }));
+  });
+
+  it("saves history messages as read, without reopening the ticket", async () => {
+    const closed = ticket("closed");
+    await SaveInboundMessageService(inbound({ history: true, raw: { key: { id: "A1" }, status: null } }), closed, contact);
+    expect(closed.status).toBe("closed");
+    expect(create.mock.calls[0][0].messageData).toEqual(expect.objectContaining({ fromMe: false, read: true, ack: 0 }));
   });
 });

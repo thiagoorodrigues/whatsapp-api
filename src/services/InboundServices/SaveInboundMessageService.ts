@@ -53,7 +53,7 @@ const SaveInboundMessageService = async (
   contact: Contact
 ): Promise<Message> => {
   const quotedMsg = inbound.quotedExternalId
-    ? await Message.findOne({ where: { messagesWhatsappsId: inbound.quotedExternalId } })
+    ? await Message.findOne({ where: { messagesWhatsappsId: inbound.quotedExternalId, whatsappId: inbound.connectionId } })
     : null;
 
   const base = {
@@ -61,12 +61,15 @@ const SaveInboundMessageService = async (
     ticketId: ticket.id,
     contactId: inbound.fromMe ? undefined : contact.id,
     fromMe: inbound.fromMe,
-    read: inbound.fromMe,
+    // Old messages from the history import do not count as unread.
+    read: inbound.fromMe || !!inbound.history,
     quotedMsgId: quotedMsg?.id,
     isForwarded: !!inbound.forwarded,
     // Our own messages typed on the phone reached the server already.
-    ack: inbound.fromMe ? 2 : (inbound.raw as any)?.status,
+    // History messages come without a status; the column is not nullable.
+    ack: inbound.fromMe ? 2 : (inbound.raw as any)?.status ?? 0,
     remoteJid: inbound.chat.jid,
+    whatsappId: inbound.connectionId,
     participant: (inbound.raw as any)?.key?.participant,
     dataJson: JSON.stringify(inbound.raw),
     createdAt: new Date(inbound.timestamp).toISOString()
@@ -98,14 +101,14 @@ const SaveInboundMessageService = async (
     };
     await ticket.update({ lastMessage: inbound.text });
     if (inbound.editOf) {
-      await UpdateMessageService({ messageData, companyId: ticket.companyId });
+      await UpdateMessageService({ messageData, companyId: ticket.companyId, whatsappId: inbound.connectionId });
       saved = null;
     } else {
       saved = await CreateMessageService({ messageData, companyId: ticket.companyId });
     }
   }
 
-  if (!inbound.fromMe) await reopenIfClosed(ticket);
+  if (!inbound.fromMe && !inbound.history) await reopenIfClosed(ticket);
   return saved;
 };
 

@@ -59,7 +59,7 @@ describe("SetTicketMessagesAsRead", () => {
   it("resets the counter new messages are added to", async () => {
     findAll.mockResolvedValue([]);
     await SetTicketMessagesAsRead({ ...ticket, contactId: 7 });
-    expect(cacheSet).toHaveBeenCalledWith("contacts:7:unreads", "0");
+    expect(cacheSet).toHaveBeenCalledWith("contacts:7:3:unreads", "0");
   });
 
   it("does nothing on WhatsApp when nothing is unread", async () => {
