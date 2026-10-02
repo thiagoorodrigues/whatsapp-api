@@ -3,7 +3,6 @@ import { getWbot } from "../libs/wbot";
 import ShowWhatsAppService from "../services/WhatsappService/ShowWhatsAppService";
 import { clearBaileysKeys } from "../models/BaileysKey";
 import { StartWhatsAppSession } from "../services/WbotServices/StartWhatsAppSession";
-import UpdateWhatsAppService from "../services/WhatsappService/UpdateWhatsAppService";
 
 const store = async (req: Request, res: Response): Promise<Response> => {
   const { whatsappId } = req.params;
@@ -19,11 +18,10 @@ const update = async (req: Request, res: Response): Promise<Response> => {
   const { whatsappId } = req.params;
   const { companyId } = req.user;
 
-  const { whatsapp } = await UpdateWhatsAppService({
-    whatsappId,
-    companyId,
-    whatsappData: { session: "" }
-  });
+  // Only the session is reset. UpdateWhatsAppService fills every field left
+  // out with its default, which wiped the queues and the history import.
+  const whatsapp = await ShowWhatsAppService(whatsappId, companyId);
+  await whatsapp.update({ session: "" });
   await clearBaileysKeys(whatsapp.id);
 
   await StartWhatsAppSession(whatsapp, companyId);
