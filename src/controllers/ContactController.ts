@@ -154,7 +154,7 @@ export const findOrCreate = async (req: Request, res: Response): Promise<Respons
   });
 
   const io = getIO();
-  io.emit(`company-${companyId}-contact`, {
+  io.to(companyRoom(companyId)).emit(`company-${companyId}-contact`, {
     action: "create",
     contact
   });
