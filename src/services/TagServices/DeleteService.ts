@@ -1,9 +1,12 @@
 import Tag from "../../models/Tag";
 import AppError from "../../errors/AppError";
 
-const DeleteService = async (id: string | number): Promise<void> => {
+const DeleteService = async (
+  id: string | number,
+  companyId: number
+): Promise<void> => {
   const tag = await Tag.findOne({
-    where: { id }
+    where: { id, companyId }
   });
 
   if (!tag) {
