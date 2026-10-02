@@ -107,6 +107,27 @@ describe("toInbound", () => {
     expect(media.fileName).toMatch(/^\d+\.jpeg$/);
   });
 
+  it("lets Baileys ask the sender to reupload expired media (reused stickers)", async () => {
+    download.mockResolvedValue(Buffer.from("webp"));
+    const updateMediaMessage = jest.fn();
+    const inbound = await toInbound(
+      {
+        key: { id: "M3", fromMe: false, remoteJid: "5531991147761@s.whatsapp.net" },
+        message: { stickerMessage: { mimetype: "image/webp", contextInfo: { stanzaId: "Q1" } } } as any
+      },
+      { ...wbot, updateMediaMessage },
+      1
+    );
+    expect(inbound.text).toBe("sticker");
+    expect(inbound.quotedExternalId).toBe("Q1");
+    const media = await inbound.loadMedia();
+    expect(media.mimetype).toBe("image/webp");
+    const ctx = download.mock.calls[0][3];
+    expect(ctx.logger).toBeDefined();
+    await ctx.reuploadRequest({ key: { id: "M3" } });
+    expect(updateMediaMessage).toHaveBeenCalledWith({ key: { id: "M3" } });
+  });
+
   it("returns null when the file is gone and ignores status broadcasts", async () => {
     download.mockRejectedValue(new Error("410"));
     const inbound = await toInbound(

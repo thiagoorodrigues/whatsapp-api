@@ -6,7 +6,8 @@ import {
   normalizeMessageContent,
   proto,
   WAMessage,
-  WAMessageStubType
+  WAMessageStubType,
+  WASocket
 } from "@whiskeysockets/baileys";
 import { logger } from "../../utils/logger";
 
@@ -263,10 +264,21 @@ export const mediaInfo = (msg: proto.IWebMessageInfo): { mimetype: string; fileN
   return { mimetype: content.mimetype, fileName: original || `${Date.now()}.${ext}` };
 };
 
-/** Media bytes, or null when WhatsApp no longer has them. */
-export const downloadMedia = async (msg: proto.IWebMessageInfo): Promise<Buffer | null> => {
+/**
+ * Media bytes, or null when WhatsApp no longer has them. Stickers and
+ * forwarded files often point at an old upload the CDN already dropped
+ * (404/410); with the socket, Baileys asks the sender's phone to upload it
+ * again and retries.
+ */
+export const downloadMedia = async (
+  msg: proto.IWebMessageInfo,
+  wbot?: Pick<WASocket, "updateMediaMessage">
+): Promise<Buffer | null> => {
   try {
-    return (await downloadMediaMessage(msg as WAMessage, "buffer", {})) as Buffer;
+    const ctx = wbot?.updateMediaMessage
+      ? { logger: logger as any, reuploadRequest: (m: WAMessage) => wbot.updateMediaMessage(m) }
+      : undefined;
+    return (await downloadMediaMessage(msg as WAMessage, "buffer", {}, ctx)) as Buffer;
   } catch (err) {
     logger.warn(`Could not download media of message ${msg.key?.id}: ${err}`);
     return null;

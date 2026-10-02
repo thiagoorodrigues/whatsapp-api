@@ -120,7 +120,7 @@ const toInbound = async (msg: proto.IWebMessageInfo, wbot: Session, companyId: n
   const hasMedia = hasMediaContent(msg);
   const loadMedia = async () => {
     const info = mediaInfo(msg);
-    const data = info ? await downloadMedia(msg) : null;
+    const data = info ? await downloadMedia(msg, wbot) : null;
     return info && data ? { data, mimetype: info.mimetype, fileName: info.fileName } : null;
   };
 
