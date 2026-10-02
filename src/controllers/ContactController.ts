@@ -17,6 +17,10 @@ import SimpleListService, {
   SearchContactParams
 } from "../services/ContactServices/SimpleListService";
 import ContactCustomField from "../models/ContactCustomField";
+import Contact from "../models/Contact";
+import Ticket from "../models/Ticket";
+import User from "../models/User";
+import { Op } from "sequelize";
 import { logger } from "../utils/logger";
 
 type IndexQuery = {
@@ -112,6 +116,49 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   });
 
   return res.status(200).json(contact);
+};
+
+// Opens a chat with a contact shared as a vCard: returns the saved contact
+// for that number, or creates it. The number is matched as WhatsApp knows it,
+// so a vCard with the 9th digit finds a contact saved without it.
+export const findOrCreate = async (req: Request, res: Response): Promise<Response> => {
+  const { companyId } = req.user;
+  const name = String(req.body.name || "").trim();
+  let number = String(req.body.number || "").replace(/\D/g, "");
+
+  if (!number) throw new AppError("ERR_WAPP_INVALID_CONTACT");
+
+  number = await CheckIsValidContact(number, companyId);
+
+  const existing = await Contact.findOne({ where: { number, companyId } });
+  if (existing) {
+    // Lets the caller jump to a chat already in progress instead of failing
+    // on ERR_OTHER_OPEN_TICKET.
+    const ticket = await Ticket.findOne({
+      where: {
+        contactId: existing.id,
+        companyId,
+        status: { [Op.or]: ["open", "pending"] }
+      },
+      attributes: ["id", "uuid", "status", "userId"],
+      include: [{ model: User, as: "user", attributes: ["id", "name"] }]
+    });
+    return res.status(200).json({ contact: existing, ticket, created: false });
+  }
+
+  const contact = await CreateContactService({
+    name: name || number,
+    number,
+    companyId
+  });
+
+  const io = getIO();
+  io.emit(`company-${companyId}-contact`, {
+    action: "create",
+    contact
+  });
+
+  return res.status(200).json({ contact, ticket: null, created: true });
 };
 
 export const show = async (req: Request, res: Response): Promise<Response> => {
