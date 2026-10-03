@@ -4,6 +4,7 @@ import Company from "../../models/Company";
 import User from "../../models/User";
 import { seedLossReasons } from "../CrmServices/LossReasonService";
 import Setting from "../../models/Setting";
+import { assertStrongPassword } from "../../helpers/passwordPolicy";
 
 interface CompanyData {
   name: string;
@@ -50,6 +51,9 @@ const CreateCompanyService = async (
       )
   });
 
+  // The company admin is created with this password: no default anymore.
+  assertStrongPassword(password);
+
   try {
     await companySchema.validate({ name });
   } catch (err: any) {
@@ -71,7 +75,7 @@ const CreateCompanyService = async (
   const user = await User.create({
     name: company.name,
     email: company.email,
-    password: companyData.password || "mudar123",
+    password,
     profile: "admin",
     companyId: company.id
   });

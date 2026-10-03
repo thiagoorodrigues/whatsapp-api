@@ -6,6 +6,7 @@ import User from "../../models/User";
 import Plan from "../../models/Plan";
 import Company from "../../models/Company";
 import { PROFILES, scopeUserLinks } from "./companyLinks";
+import { assertStrongPassword } from "../../helpers/passwordPolicy";
 
 interface Request {
   email: string;
@@ -76,9 +77,11 @@ const CreateUserService = async ({
           return !emailExists;
         }
       ),
-    password: Yup.string().required().min(5),
+    password: Yup.string().required(),
     profile: Yup.string().oneOf(PROFILES)
   });
+
+  assertStrongPassword(password);
 
   try {
     await schema.validate({ email, password, name, profile });

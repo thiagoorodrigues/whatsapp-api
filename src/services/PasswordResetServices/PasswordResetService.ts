@@ -3,11 +3,11 @@ import { QueryTypes, Sequelize } from "sequelize";
 import AppError from "../../errors/AppError";
 import User from "../../models/User";
 import { logger } from "../../utils/logger";
+import { assertStrongPassword } from "../../helpers/passwordPolicy";
 
 // "Users"."resetPassword" is not mapped on the model on purpose, so it never
 // shows up in user payloads. It holds "<sha256 of the code>.<expiry ms>".
 const TTL_MS = 30 * 60 * 1000;
-const MIN_PASSWORD = 5;
 
 const sha256 = (value: string): string =>
   crypto.createHash("sha256").update(value).digest("hex");
@@ -63,9 +63,7 @@ export const resetPassword = async (
   code: unknown,
   password: unknown
 ): Promise<void> => {
-  if (typeof password !== "string" || password.length < MIN_PASSWORD) {
-    throw new AppError("ERR_PASSWORD_TOO_SHORT", 400);
-  }
+  assertStrongPassword(password);
   const invalid = new AppError("ERR_INVALID_RESET_TOKEN", 400);
 
   const user = await User.findOne(byEmail(email));

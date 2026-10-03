@@ -5,6 +5,7 @@ import ShowUserService from "./ShowUserService";
 import Company from "../../models/Company";
 import User from "../../models/User";
 import { PROFILES, scopeUserLinks } from "./companyLinks";
+import { assertStrongPassword } from "../../helpers/passwordPolicy";
 
 interface UserData {
   email?: string;
@@ -72,6 +73,8 @@ const UpdateUserService = async ({
   });
 
   const { email, password, profile, name, status, signMessage } = userData;
+  // Empty password = keep the current one.
+  if (password) assertStrongPassword(password);
   const { queueIds, whatsappId } = await scopeUserLinks(
     user.companyId,
     userData.queueIds,

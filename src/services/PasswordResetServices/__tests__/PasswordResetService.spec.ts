@@ -98,9 +98,9 @@ describe("resetPassword", () => {
     expect(opts.replacements).toEqual({ id: 3 });
   });
 
-  it("refuses a too short password", async () => {
-    await expect(resetPassword("a@x.com", "right", "123")).rejects.toMatchObject({
-      message: "ERR_PASSWORD_TOO_SHORT"
+  it("refuses a weak password", async () => {
+    await expect(resetPassword("a@x.com", "right", "novasenha1")).rejects.toMatchObject({
+      message: "ERR_WEAK_PASSWORD"
     });
     expect(findOne).not.toHaveBeenCalled();
   });
