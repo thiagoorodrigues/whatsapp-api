@@ -76,7 +76,8 @@ describe("createRule", () => {
       { name: "X", steps: [step({ body: "  " })] },
       { name: "X", aiAgentId: 5, steps: [step({ mode: "ai", aiInstruction: "" })] },
       { name: "X", steps: [step({ mode: "ai", aiInstruction: "Retome" })] },
-      { name: "X", steps: [step({ mode: "robot" })] }
+      { name: "X", steps: [step({ mode: "robot" })] },
+      { name: "X", steps: [null] }
     ];
     for (const input of bad) {
       // eslint-disable-next-line no-await-in-loop
@@ -113,5 +114,22 @@ describe("saveStepMedia", () => {
   it("stores the file in the company folder", async () => {
     const out = await saveStepMedia(4, { buffer: Buffer.from("x"), originalname: "foto.jpg", mimetype: "image/jpeg" } as any);
     expect(out).toEqual({ mediaPath: "company4/123_ab_foto.jpg", mediaName: "foto.jpg" });
+  });
+  it("accepts a pdf", async () => {
+    const out = await saveStepMedia(4, { buffer: Buffer.from("x"), originalname: "a.pdf", mimetype: "application/pdf" } as any);
+    expect(out.mediaName).toBe("a.pdf");
+  });
+  it("rejects html, svg and an allowed mimetype with a mismatched extension", async () => {
+    const files = [
+      { originalname: "a.html", mimetype: "text/html" },
+      { originalname: "a.svg", mimetype: "image/svg+xml" },
+      { originalname: "a.html", mimetype: "image/jpeg" }
+    ];
+    for (const f of files) {
+      // eslint-disable-next-line no-await-in-loop
+      await expect(saveStepMedia(4, { buffer: Buffer.from("x"), ...f } as any)).rejects.toMatchObject({
+        message: "ERR_FOLLOWUP_INVALID", statusCode: 400
+      });
+    }
   });
 });

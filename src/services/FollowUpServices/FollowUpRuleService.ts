@@ -49,6 +49,7 @@ const text = (value: unknown): string => (typeof value === "string" ? value.trim
 const cleanSteps = (companyId: number, steps: StepInput[] | undefined, hasAgent: boolean) => {
   if (!Array.isArray(steps) || steps.length === 0 || steps.length > MAX_STEPS) throw invalid();
   return steps.map((s, index) => {
+    if (!s || typeof s !== "object") throw invalid();
     const delayMinutes = Number(s.delayMinutes);
     if (!Number.isInteger(delayMinutes) || delayMinutes <= 0 || delayMinutes > MAX_DELAY_MINUTES) throw invalid();
     if (s.mode !== "text" && s.mode !== "ai") throw invalid();
@@ -179,8 +180,41 @@ export const ruleStats = async (companyId: number, id: number) => {
   };
 };
 
+// Files under /public are served by URL from the API origin: no html/svg or anything scriptable.
+const ALLOWED_MEDIA: Record<string, string[]> = {
+  "image/jpeg": ["jpg", "jpeg"],
+  "image/png": ["png"],
+  "image/gif": ["gif"],
+  "image/webp": ["webp"],
+  "video/mp4": ["mp4"],
+  "video/3gpp": ["3gp", "3gpp"],
+  "video/quicktime": ["mov"],
+  "audio/mpeg": ["mp3", "mpeg"],
+  "audio/mp4": ["m4a", "mp4"],
+  "audio/ogg": ["ogg", "oga", "opus"],
+  "audio/aac": ["aac"],
+  "audio/amr": ["amr"],
+  "application/pdf": ["pdf"],
+  "text/plain": ["txt"],
+  "text/csv": ["csv"],
+  "application/msword": ["doc"],
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ["docx"],
+  "application/vnd.ms-excel": ["xls"],
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ["xlsx"],
+  "application/vnd.ms-powerpoint": ["ppt"],
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": ["pptx"],
+  "application/zip": ["zip"]
+};
+
+const isAllowedMedia = (file: Express.Multer.File): boolean => {
+  const mime = String(file.mimetype || "").toLowerCase().split(";")[0].trim();
+  const name = String(file.originalname || "").toLowerCase();
+  const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1) : "";
+  return !!ALLOWED_MEDIA[mime]?.includes(ext);
+};
+
 export const saveStepMedia = async (companyId: number, file: Express.Multer.File) => {
-  if (!file?.buffer) throw invalid();
+  if (!file?.buffer || !isAllowedMedia(file)) throw invalid();
   const mediaPath = await saveCompanyMedia(companyId, file.buffer, file.originalname, file.mimetype);
   return { mediaPath, mediaName: file.originalname };
 };
