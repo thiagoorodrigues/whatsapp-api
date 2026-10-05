@@ -7,6 +7,8 @@ const provider = jest.fn();
 const funnelRules = jest.fn();
 const integration = jest.fn();
 const typebot = jest.fn();
+const followUpAgent = jest.fn();
+const followUpCustomer = jest.fn();
 
 const ticket: any = {
   id: 8,
@@ -35,6 +37,10 @@ const whatsapp: any = {
   flowId: null
 };
 
+jest.mock("../../FollowUpServices/hooks", () => ({
+  followUpOnAgentMessage: (...a: any[]) => followUpAgent(...a),
+  followUpOnCustomerMessage: (...a: any[]) => followUpCustomer(...a)
+}));
 jest.mock("../SaveInboundMessageService", () => ({ __esModule: true, default: (...a: any[]) => save(...a) }));
 jest.mock("../VerifyContactService", () => ({ __esModule: true, default: async () => ({ id: 3, name: "Thiago" }) }));
 jest.mock("../../MessageServices/SendTicketMessageService", () => ({ __esModule: true, default: (...a: any[]) => send(...a) }));
@@ -101,5 +107,31 @@ describe("ProcessInboundMessage", () => {
     expect(funnelRules).not.toHaveBeenCalled();
     expect(integration).not.toHaveBeenCalled();
     expect(typebot).not.toHaveBeenCalled();
+  });
+
+  describe("follow-up", () => {
+    it("a customer message stops the follow-up", async () => {
+      await ProcessInboundMessage(inbound({ fromMe: false }));
+
+      expect(followUpCustomer).toHaveBeenCalledWith(expect.objectContaining({ id: 8, companyId: 1 }));
+      expect(followUpAgent).not.toHaveBeenCalled();
+    });
+
+    it("a message typed on the phone starts the follow-up", async () => {
+      await ProcessInboundMessage(inbound({ fromMe: true }));
+
+      expect(followUpAgent).toHaveBeenCalledWith(ticket);
+      expect(followUpCustomer).not.toHaveBeenCalled();
+    });
+
+    it("history imports and groups never touch the follow-up", async () => {
+      await ProcessInboundMessage(inbound({ history: true }));
+      await ProcessInboundMessage(inbound({ chat: { jid: "120363@g.us", isGroup: true } }));
+      await ProcessInboundMessage(inbound({ fromMe: true, chat: { jid: "120363@g.us", isGroup: true } }));
+
+      expect(save).toHaveBeenCalledTimes(3);
+      expect(followUpAgent).not.toHaveBeenCalled();
+      expect(followUpCustomer).not.toHaveBeenCalled();
+    });
   });
 });

@@ -28,6 +28,7 @@ import typebotListener from "../TypebotServices/typebotListener";
 import { provider } from "../WbotServices/providers";
 import SendWhatsAppMessage from "../WbotServices/SendWhatsAppMessage";
 import ShowWhatsAppService from "../WhatsappService/ShowWhatsAppService";
+import { followUpOnAgentMessage, followUpOnCustomerMessage } from "../FollowUpServices/hooks";
 import SaveInboundMessageService from "./SaveInboundMessageService";
 import VerifyContactService from "./VerifyContactService";
 import { logger } from "../../utils/logger";
@@ -346,6 +347,12 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
     // like spam to WhatsApp and gets the number blocked.
     if (inbound.history) return;
 
+    // Follow-up: the customer answered, or we wrote from the phone.
+    if (!isGroup) {
+      if (inbound.fromMe) await followUpOnAgentMessage(ticket as any);
+      else await followUpOnCustomerMessage(ticket);
+    }
+
     const currentSchedule = await VerifyCurrentSchedule(companyId);
     const scheduleType = await Setting.findOne({
       where: {
@@ -452,7 +459,11 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
       const handledByAgent = await handleAiAgentMessage({
         ticket,
         whatsapp,
-        send: content => SendTicketMessageService(ticket, content)
+        send: async content => {
+          const sent = await SendTicketMessageService(ticket, content);
+          await followUpOnAgentMessage(ticket as any);
+          return sent;
+        }
       });
       if (handledByAgent) return;
     }

@@ -16,6 +16,7 @@ import SaveSentMessageService from "../MessageServices/SaveSentMessageService";
 import ListSettingsServiceOne from "../SettingServices/ListSettingsServiceOne"; //NOVO PLW DESIGN//
 import ShowUserService from "../UserServices/ShowUserService"; //NOVO PLW DESIGN//
 import { isNil } from "lodash";
+import { followUpOnTicketChanged } from "../FollowUpServices/hooks";
 import { logger } from "../../utils/logger";
 import Logs from "../../models/Logs";
 import ApplyFunnelRulesService, { queueEntered } from "../CrmServices/ApplyFunnelRulesService";
@@ -77,6 +78,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
     const oldStatus = ticket.status;
     const oldUserId = ticket.user?.id;
     const oldQueueId = ticket.queueId;
+    const oldWhatsappIdForFollowUp = ticket.whatsappId;
     let isTransfer = !!Transferido
 
     const ticketTraking = await FindOrCreateATicketTrakingService({
@@ -110,6 +112,9 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
     }
 
     if (status !== undefined && ["closed"].indexOf(status) > -1) {
+      // Before the rating/closing messages: nothing more goes to this customer.
+      await followUpOnTicketChanged(ticket, { closed: true, queueChanged: false });
+
       const { complationMessage, ratingMessage } = await ShowWhatsAppService(
         ticket.whatsappId,
         companyId
@@ -364,6 +369,10 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
     });
 
     await ticket.reload();
+
+    if (oldQueueId !== ticket.queueId || oldWhatsappIdForFollowUp !== ticket.whatsappId) {
+      await followUpOnTicketChanged(ticket, { closed: false, queueChanged: true });
+    }
 
     if (queueEntered(oldQueueId, ticket.queueId)) void ApplyFunnelRulesService(ticket as any);
 

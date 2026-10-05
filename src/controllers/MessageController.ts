@@ -24,6 +24,7 @@ import CheckIsValidContact from "../services/WbotServices/CheckIsValidContact";
 import GetProfilePicUrl from "../services/WbotServices/GetProfilePicUrl";
 import CreateOrUpdateContactService from "../services/ContactServices/CreateOrUpdateContactService";
 import path from "path";
+import { followUpOnAgentMessage } from "../services/FollowUpServices/hooks";
 import fs from "fs";
 import Ticket from "../models/Ticket";
 import { SendMessage } from "../helpers/SendMessage";
@@ -112,6 +113,9 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   } else {
     const send = await SendWhatsAppMessage({ body, ticket, quotedMsg, mentions });
   }
+
+  // The attendant wrote: wait for the customer (internal notes returned above).
+  await followUpOnAgentMessage(ticket as any);
 
   return res.send();
 };
