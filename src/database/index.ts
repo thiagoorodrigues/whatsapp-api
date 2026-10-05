@@ -47,6 +47,9 @@ import LossReason from "../models/LossReason";
 import Deal from "../models/Deal";
 import DealEvent from "../models/DealEvent";
 import FunnelRule from "../models/FunnelRule";
+import FollowUpRule from "../models/FollowUpRule";
+import FollowUpStep from "../models/FollowUpStep";
+import FollowUpEnrollment from "../models/FollowUpEnrollment";
 
 // eslint-disable-next-line
 const dbConfig = require("../config/database");
@@ -102,7 +105,10 @@ const models = [
   LossReason,
   Deal,
   DealEvent,
-  FunnelRule
+  FunnelRule,
+  FollowUpRule,
+  FollowUpStep,
+  FollowUpEnrollment
 ];
 
 sequelize.addModels(models);

@@ -144,6 +144,10 @@ class Message extends Model<Message> {
   /** Names of the people mentioned; filled by ResolveMentionsService. */
   @Column(DataType.VIRTUAL)
   mentions: { token: string; name: string | null; phone: string | null }[];
+
+  // Sent by a follow-up rule (see FollowUpServices).
+  @Column(DataType.INTEGER)
+  followUpEnrollmentId: number | null;
 }
 
 export default Message;
