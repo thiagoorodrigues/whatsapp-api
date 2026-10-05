@@ -11,6 +11,7 @@ ticketRoutes.get("/tickets", isAuth, TicketController.index);
 ticketRoutes.get("/tickets/:ticketId", isAuth, TicketController.show);
 
 ticketRoutes.get("/tickets/:ticketId/participants", isAuth, TicketController.participants);
+ticketRoutes.get("/tickets/:ticketId/group-info", isAuth, TicketController.groupInfo);
 
 ticketRoutes.get("/ticket/kanban", isAuth, requirePlanFeature("useKanban"), TicketController.kanban);
 

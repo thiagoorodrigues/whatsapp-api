@@ -68,6 +68,15 @@ export interface GroupParticipant {
   isMe: boolean;
 }
 
+/** A group's name, description and members, as the channel knows them. */
+export interface GroupInfo {
+  subject: string;
+  description: string | null;
+  /** When the group was created. */
+  createdAt: Date | null;
+  participants: GroupParticipant[];
+}
+
 export interface MessagingChannel {
   readonly kind: "baileys";
   readonly connectionId: number;
@@ -83,4 +92,5 @@ export interface MessagingChannel {
   checkNumber(number: string): Promise<NumberCheck>;
   profilePictureUrl(chat: ChatAddress): Promise<string | null>;
   groupParticipants(chat: ChatAddress): Promise<GroupParticipant[]>;
+  groupInfo(chat: ChatAddress): Promise<GroupInfo>;
 }
