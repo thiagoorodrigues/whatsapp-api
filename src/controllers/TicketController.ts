@@ -13,6 +13,7 @@ import ListTicketsServiceKanban from "../services/TicketServices/ListTicketsServ
 import ListTicketsRelatorioService from "../services/TicketServices/ListTicketsRelatorioService";
 import { logger } from "../utils/logger";
 import ListGroupParticipantsService from "../services/TicketServices/ListGroupParticipantsService";
+import ShowGroupInfoService from "../services/TicketServices/ShowGroupInfoService";
 import { notificationRoom, statusRoom, ticketRoom } from "../libs/socketRooms";
 
 type IndexQuery = {
@@ -203,6 +204,14 @@ export const participants = async (req: Request, res: Response): Promise<Respons
 
   const ticket = await ShowTicketService(ticketId, companyId);
   return res.status(200).json(await ListGroupParticipantsService(ticket));
+};
+
+export const groupInfo = async (req: Request, res: Response): Promise<Response> => {
+  const { ticketId } = req.params;
+  const { companyId } = req.user;
+
+  const ticket = await ShowTicketService(ticketId, companyId);
+  return res.status(200).json(await ShowGroupInfoService(ticket));
 };
 
 export const showFromUUID = async (

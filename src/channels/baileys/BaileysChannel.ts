@@ -7,6 +7,7 @@ import { logger } from "../../utils/logger";
 import { cachedProfilePicture, getGroupMetadata } from "../../libs/whatsappCache";
 import {
   ChatAddress,
+  GroupInfo,
   GroupParticipant,
   MediaSource,
   MessageRef,
@@ -199,13 +200,17 @@ class BaileysChannel implements MessagingChannel {
   }
 
   async groupParticipants(chat: ChatAddress): Promise<GroupParticipant[]> {
+    return (await this.groupInfo(chat)).participants;
+  }
+
+  async groupInfo(chat: ChatAddress): Promise<GroupInfo> {
     const socket = this.socket();
     const jid = chat.jid || (await this.groupJid(jidOf({ ...chat, isGroup: true })));
-    const { participants } = await getGroupMetadata(socket, jid);
+    const metadata = await getGroupMetadata(socket, jid);
     const myPhone = toPhoneNumber(socket.user?.id);
     const myLid = toUserLid((socket.user as any)?.lid);
 
-    return participants.map(p => {
+    const participants = metadata.participants.map(p => {
       const byLid = isLidJid(p.id);
       const lid = byLid ? toUserLid(p.id) : toUserLid(p.lid);
       const phone = toPhoneNumber(byLid ? p.phoneNumber : p.id);
@@ -217,6 +222,13 @@ class BaileysChannel implements MessagingChannel {
         isMe: (!!phone && phone === myPhone) || (!!lid && lid === myLid)
       };
     });
+
+    return {
+      subject: metadata.subject || "",
+      description: metadata.desc?.trim() || null,
+      createdAt: metadata.creation ? new Date(metadata.creation * 1000) : null,
+      participants
+    };
   }
 }
 

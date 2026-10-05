@@ -228,3 +228,24 @@ describe("groupParticipants", () => {
     ]);
   });
 });
+
+describe("groupInfo", () => {
+  it("returns the subject, the trimmed description, the creation date and the members", async () => {
+    socket.groupMetadata.mockResolvedValue({
+      id: "120363000@g.us",
+      subject: "Suporte",
+      desc: "  Regras do grupo \n",
+      creation: 1700000000,
+      participants: [{ id: "5521988887777@s.whatsapp.net", admin: "superadmin" }]
+    });
+
+    const info = await new BaileysChannel(7).groupInfo({ number: "120363000", isGroup: true, jid: "120363000@g.us" });
+
+    expect(info).toEqual({
+      subject: "Suporte",
+      description: "Regras do grupo",
+      createdAt: new Date(1700000000 * 1000),
+      participants: [{ jid: "5521988887777@s.whatsapp.net", phone: "5521988887777", isAdmin: true, isMe: false }]
+    });
+  });
+});
