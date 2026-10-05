@@ -90,11 +90,11 @@ const bodyOf = (content: OutgoingContent, media?: SentMedia): string | undefined
 const SendTicketMessageService = async (
   ticket: Ticket,
   content: OutgoingContent,
-  options: SendOptions & { quotedMsgId?: string } = {}
+  options: SendOptions & { quotedMsgId?: string; followUpEnrollmentId?: number } = {}
 ): Promise<Message> => {
   const channel = await getTicketChannel(ticket);
   const prepared = content.type === "text" ? { content } : await prepareMedia(content);
-  const { quotedMsgId, ...sendOptions } = options;
+  const { quotedMsgId, followUpEnrollmentId, ...sendOptions } = options;
 
   const sent = await channel.send(ticketAddress(ticket), prepared.content, sendOptions);
 
@@ -104,7 +104,8 @@ const SendTicketMessageService = async (
       sent,
       body: bodyOf(content, prepared.media),
       media: prepared.media,
-      quotedMsgId
+      quotedMsgId,
+      followUpEnrollmentId
     });
   } catch (err) {
     // Sent but not saved: log, the customer already has it.

@@ -30,6 +30,8 @@ interface MessageData {
   userId?: number;
   /** Connection of the message; taken from the ticket when left out. */
   whatsappId?: number;
+  /** Sent by a follow-up rule. */
+  followUpEnrollmentId?: number | null;
 }
 interface Request {
   messageData: MessageData;

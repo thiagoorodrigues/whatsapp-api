@@ -22,6 +22,11 @@ beforeEach(() => {
 });
 
 describe("SaveSentMessageService", () => {
+  it("marks a message sent by a follow-up", async () => {
+    const saved: any = await SaveSentMessageService({ ticket, sent, body: "Oi", followUpEnrollmentId: 77 });
+    expect(saved.followUpEnrollmentId).toBe(77);
+  });
+
   it("saves a sent text as the echo used to", async () => {
     const saved: any = await SaveSentMessageService({ ticket, sent, body: "Olá", quotedMsgId: "q1" });
     expect(saved).toEqual(

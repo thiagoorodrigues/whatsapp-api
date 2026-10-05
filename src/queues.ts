@@ -29,6 +29,7 @@ import { addSeconds, differenceInSeconds } from "date-fns";
 import formatBody from "./helpers/Mustache";
 import { ClosedAllOpenTickets } from "./services/WbotServices/wbotClosedTickets";
 import { companyRoom, notificationRoom, statusRoom, ticketRoom } from "./libs/socketRooms";
+import { processDueFollowUps } from "./services/FollowUpServices/FollowUpMonitor";
 
 
 const nodemailer = require('nodemailer');
@@ -74,6 +75,8 @@ export const sendScheduledMessages = new BullQueue(
 );
 
 export const campaignQueue = new BullQueue("CampaignQueue", connection);
+
+export const followUpMonitor = new BullQueue("FollowUpMonitor", connection);
 
 async function handleSendMessage(job) {
   try {
@@ -220,6 +223,16 @@ async function handleCloseTicketsAutomatic() {
     });
   });
   job.start()
+}
+
+async function handleVerifyFollowUps() {
+  try {
+    const sent = await processDueFollowUps();
+    if (sent > 0) logger.info(`Follow-ups processados: ${sent}`);
+  } catch (e: any) {
+    Sentry.captureException(e);
+    logger.error("FollowUpMonitor -> Verify: error", e.message);
+  }
 }
 
 async function handleVerifySchedules(job) {
@@ -890,6 +903,8 @@ export async function startQueueProcess() {
 
   userMonitor.process("VerifyLoginStatus", handleLoginStatus);
 
+  followUpMonitor.process("Verify", handleVerifyFollowUps);
+
   //queueMonitor.process("VerifyQueueStatus", handleVerifyQueue);
 
   scheduleMonitor.add(
@@ -915,6 +930,15 @@ export async function startQueueProcess() {
     {},
     {
       repeat: { cron: "* * * * *", key: "verify-login" },
+      removeOnComplete: true
+    }
+  );
+
+  followUpMonitor.add(
+    "Verify",
+    {},
+    {
+      repeat: { cron: "*/30 * * * * *", key: "verify-followups" },
       removeOnComplete: true
     }
   );
