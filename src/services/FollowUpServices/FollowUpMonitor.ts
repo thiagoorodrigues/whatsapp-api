@@ -54,6 +54,14 @@ export const runEnrollment = async (id: number, now: Date): Promise<void> => {
   const enrollment = await FollowUpEnrollment.findByPk(id);
   if (!enrollment || enrollment.status !== "active") return;
 
+  // The batch claim can expire while a long batch sends serially; claim this
+  // row again so a parallel run that took it meanwhile does not send it twice.
+  const [claimed] = await FollowUpEnrollment.update(
+    { nextRunAt: addMinutes(new Date(), CLAIM_MINUTES) },
+    { where: { id: enrollment.id, status: "active", currentStep: enrollment.currentStep, nextRunAt: enrollment.nextRunAt } }
+  );
+  if (claimed === 0) return;
+
   // Closed by rating or auto-close, or the customer wrote meanwhile.
   const ticket = await Ticket.findByPk(enrollment.ticketId, { include: ["contact"] });
   if (!ticket || !["open", "pending"].includes(ticket.status) || !(await lastMessageIsOurs(ticket.id))) {
@@ -105,6 +113,9 @@ export const runEnrollment = async (id: number, now: Date): Promise<void> => {
 /**
  * Sends the due steps. Rows are claimed (nextRunAt pushed ahead) inside a
  * SKIP LOCKED transaction, so a parallel run never sends the same step.
+ * If the process dies after the claim the row is due again in 5 minutes. A send
+ * that throws after delivery (e.g. timeout) is retried and may reach the
+ * customer twice: accepted.
  */
 export const processDueFollowUps = async (now: Date = new Date()): Promise<number> => {
   const due = await sequelize.transaction(async transaction => {
@@ -129,7 +140,7 @@ export const processDueFollowUps = async (now: Date = new Date()): Promise<numbe
   for (const row of due) {
     try {
       // eslint-disable-next-line no-await-in-loop
-      await runEnrollment(row.id, now);
+      await runEnrollment(row.id, new Date());
     } catch (err) {
       Sentry.captureException(err);
       logger.error(`Follow-up ${row.id} failed: ${err}`);

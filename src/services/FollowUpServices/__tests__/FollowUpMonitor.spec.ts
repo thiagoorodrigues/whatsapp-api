@@ -39,8 +39,9 @@ const ticket = { id: 50, companyId: 4, whatsappId: 7, queueId: 3, status: "open"
 
 beforeEach(() => {
   jest.clearAllMocks();
-  enrollment = { id: 77, companyId: 4, ticketId: 50, ruleId: 1, currentStep: 1, attempts: 0, status: "active", update: jest.fn() };
+  enrollment = { id: 77, companyId: 4, ticketId: 50, ruleId: 1, currentStep: 1, attempts: 0, status: "active", nextRunAt: new Date(2026, 9, 5, 9, 55), update: jest.fn() };
   (FollowUpEnrollment.findByPk as jest.Mock).mockResolvedValue(enrollment);
+  (FollowUpEnrollment.update as jest.Mock).mockResolvedValue([1]);
   (Ticket.findByPk as jest.Mock).mockResolvedValue(ticket);
   (Message.findOne as jest.Mock).mockResolvedValue({ fromMe: true });
   (FollowUpRule.findByPk as jest.Mock).mockResolvedValue({ id: 1, active: true, respectBusinessHours: true, finalActions: {}, steps });
@@ -120,6 +121,21 @@ describe("runEnrollment", () => {
     (SendTicketMessageService as jest.Mock).mockRejectedValueOnce(new Error("socket closed"));
     await runEnrollment(77, NOW);
     expect(enrollment.update).toHaveBeenCalledWith({ attempts: 1, nextRunAt: new Date(2026, 9, 5, 10, 15) });
+  });
+  it("claims the row with a conditional update before doing any work", async () => {
+    await runEnrollment(77, NOW);
+    expect(FollowUpEnrollment.update).toHaveBeenCalledWith(
+      { nextRunAt: expect.any(Date) },
+      { where: { id: 77, status: "active", currentStep: 1, nextRunAt: enrollment.nextRunAt } }
+    );
+  });
+  it("does nothing when another run already claimed the row", async () => {
+    (FollowUpEnrollment.update as jest.Mock).mockResolvedValue([0]);
+    await runEnrollment(77, NOW);
+    expect(Ticket.findByPk).not.toHaveBeenCalled();
+    expect(SendTicketMessageService).not.toHaveBeenCalled();
+    expect(stopEnrollment).not.toHaveBeenCalled();
+    expect(enrollment.update).not.toHaveBeenCalled();
   });
   it("does nothing for an enrollment that is no longer active", async () => {
     enrollment.status = "replied";
