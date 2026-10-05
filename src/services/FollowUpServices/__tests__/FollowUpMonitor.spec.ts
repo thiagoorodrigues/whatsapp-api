@@ -28,20 +28,31 @@ import Tag from "../../../models/Tag";
 import TicketTag from "../../../models/TicketTag";
 import SendTicketMessageService from "../../MessageServices/SendTicketMessageService";
 import UpdateTicketService from "../../TicketServices/UpdateTicketService";
-import { stopEnrollment } from "../EnrollmentService";
+import { emitFollowUp, scheduleFor, stopEnrollment } from "../EnrollmentService";
 import { processDueFollowUps, runEnrollment } from "../FollowUpMonitor";
 /* eslint-enable import/first */
 
 const NOW = new Date(2026, 9, 5, 10, 0);
 const steps = [{ id: 1, order: 1, delayMinutes: 60 }, { id: 2, order: 2, delayMinutes: 1440 }];
 let enrollment: any;
+let claimedAt: Date | undefined;
 const ticket = { id: 50, companyId: 4, whatsappId: 7, queueId: 3, status: "open", contact: { name: "Maria" } };
 
 beforeEach(() => {
   jest.clearAllMocks();
   enrollment = { id: 77, companyId: 4, ticketId: 50, ruleId: 1, currentStep: 1, attempts: 0, status: "active", nextRunAt: new Date(2026, 9, 5, 9, 55), update: jest.fn() };
-  (FollowUpEnrollment.findByPk as jest.Mock).mockResolvedValue(enrollment);
-  (FollowUpEnrollment.update as jest.Mock).mockResolvedValue([1]);
+  claimedAt = undefined;
+  (FollowUpEnrollment.update as jest.Mock).mockReset();
+  (FollowUpEnrollment.findByPk as jest.Mock).mockReset();
+  // The claim is the update that only moves nextRunAt; the re-read before
+  // sending (findByPk with attributes) sees the row as this run left it.
+  (FollowUpEnrollment.update as jest.Mock).mockImplementation(async (values: any) => {
+    if (Object.keys(values).length === 1 && values.nextRunAt) claimedAt = values.nextRunAt;
+    return [1];
+  });
+  (FollowUpEnrollment.findByPk as jest.Mock).mockImplementation(async (_id: number, opts?: any) =>
+    opts?.attributes ? { status: "active", currentStep: enrollment.currentStep, nextRunAt: claimedAt } : enrollment
+  );
   (Ticket.findByPk as jest.Mock).mockResolvedValue(ticket);
   (Message.findOne as jest.Mock).mockResolvedValue({ fromMe: true });
   (FollowUpRule.findByPk as jest.Mock).mockResolvedValue({ id: 1, active: true, respectBusinessHours: true, finalActions: {}, steps });
@@ -72,9 +83,35 @@ describe("runEnrollment", () => {
   it("sends the current step marked with the enrollment and schedules the next one", async () => {
     await runEnrollment(77, NOW);
     expect(SendTicketMessageService).toHaveBeenCalledWith(ticket, { type: "text", text: "Oi" }, { followUpEnrollmentId: 77 });
-    expect(enrollment.update).toHaveBeenCalledWith({
-      currentStep: 2, attempts: 0, lastSentAt: NOW, nextRunAt: new Date(2026, 9, 6, 10, 0)
-    });
+    expect(FollowUpEnrollment.update).toHaveBeenLastCalledWith(
+      { currentStep: 2, attempts: 0, lastSentAt: NOW, nextRunAt: new Date(2026, 9, 6, 10, 0) },
+      { where: { id: 77, status: "active", currentStep: 1, nextRunAt: claimedAt } }
+    );
+    expect(emitFollowUp).toHaveBeenCalledWith(4, 50);
+    expect(enrollment.update).not.toHaveBeenCalled();
+  });
+  it("does not overwrite a restart that happened while sending", async () => {
+    (FollowUpEnrollment.update as jest.Mock)
+      .mockImplementationOnce(async (values: any) => { claimedAt = values.nextRunAt; return [1]; })
+      .mockResolvedValueOnce([0]);
+    await runEnrollment(77, NOW);
+    expect(SendTicketMessageService).toHaveBeenCalled();
+    expect(emitFollowUp).not.toHaveBeenCalled();
+  });
+  it("sends nothing when the re-read before sending shows the customer replied", async () => {
+    (FollowUpEnrollment.findByPk as jest.Mock).mockImplementation(async (_id: number, opts?: any) =>
+      opts?.attributes ? { status: "replied", currentStep: 1, nextRunAt: claimedAt } : enrollment
+    );
+    await runEnrollment(77, NOW);
+    expect(SendTicketMessageService).not.toHaveBeenCalled();
+    expect(FollowUpEnrollment.update).toHaveBeenCalledTimes(1);
+  });
+  it("sends nothing when the attendant restarted the enrollment before sending", async () => {
+    (FollowUpEnrollment.findByPk as jest.Mock).mockImplementation(async (_id: number, opts?: any) =>
+      opts?.attributes ? { status: "active", currentStep: 1, nextRunAt: new Date(2026, 9, 5, 11, 0) } : enrollment
+    );
+    await runEnrollment(77, NOW);
+    expect(SendTicketMessageService).not.toHaveBeenCalled();
   });
   it("completes after the last step and runs the final actions", async () => {
     enrollment.currentStep = 2;
@@ -83,10 +120,28 @@ describe("runEnrollment", () => {
     });
     (Tag.findOne as jest.Mock).mockResolvedValue({ id: 12 });
     await runEnrollment(77, NOW);
-    expect(stopEnrollment).toHaveBeenCalledWith(enrollment, "completed", null, { lastSentAt: NOW });
+    expect(FollowUpEnrollment.update).toHaveBeenLastCalledWith(
+      { status: "completed", stopReason: null, lastSentAt: NOW },
+      { where: { id: 77, status: "active", currentStep: 2, nextRunAt: claimedAt } }
+    );
+    expect(emitFollowUp).toHaveBeenCalledWith(4, 50);
     expect(Tag.findOne).toHaveBeenCalledWith({ where: { id: 12, companyId: 4 } });
     expect(TicketTag.findOrCreate).toHaveBeenCalledWith({ where: { ticketId: 50, tagId: 12 } });
     expect(UpdateTicketService).toHaveBeenCalledWith({ ticketData: { status: "closed" }, ticketId: 50, companyId: 4 });
+  });
+  it("skips the final actions when the completion lost the race (customer replied meanwhile)", async () => {
+    enrollment.currentStep = 2;
+    (FollowUpRule.findByPk as jest.Mock).mockResolvedValue({
+      id: 1, active: true, respectBusinessHours: true, finalActions: { closeTicket: true, tagId: 12 }, steps
+    });
+    (Tag.findOne as jest.Mock).mockResolvedValue({ id: 12 });
+    (FollowUpEnrollment.update as jest.Mock)
+      .mockImplementationOnce(async (values: any) => { claimedAt = values.nextRunAt; return [1]; })
+      .mockResolvedValueOnce([0]);
+    await runEnrollment(77, NOW);
+    expect(TicketTag.findOrCreate).not.toHaveBeenCalled();
+    expect(UpdateTicketService).not.toHaveBeenCalled();
+    expect(emitFollowUp).not.toHaveBeenCalled();
   });
   it("cancels without sending when the ticket closed or the customer wrote last", async () => {
     (Ticket.findByPk as jest.Mock).mockResolvedValue({ ...ticket, status: "closed" });
@@ -109,24 +164,45 @@ describe("runEnrollment", () => {
     await runEnrollment(77, NOW);
     expect(stopEnrollment).toHaveBeenCalledWith(enrollment, "cancelled", "rule_inactive");
   });
-  it("retries in 15 minutes while the connection is down, and fails on the third try", async () => {
+  it("retries in 15 minutes (business hours respected) while the connection is down, and fails on the third try", async () => {
     (Whatsapp.findByPk as jest.Mock).mockResolvedValue({ status: "DISCONNECTED" });
     await runEnrollment(77, NOW);
-    expect(enrollment.update).toHaveBeenCalledWith({ attempts: 1, nextRunAt: new Date(2026, 9, 5, 10, 15) });
+    expect(scheduleFor).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), ticket, new Date(2026, 9, 5, 10, 15));
+    expect(FollowUpEnrollment.update).toHaveBeenLastCalledWith(
+      { attempts: 1, nextRunAt: new Date(2026, 9, 5, 10, 15) },
+      { where: { id: 77, status: "active", currentStep: 1, nextRunAt: claimedAt } }
+    );
     enrollment.attempts = 2;
     await runEnrollment(77, NOW);
-    expect(stopEnrollment).toHaveBeenCalledWith(enrollment, "failed", "whatsapp_disconnected", { attempts: 3 });
+    expect(FollowUpEnrollment.update).toHaveBeenLastCalledWith(
+      { status: "failed", stopReason: "whatsapp_disconnected", attempts: 3 },
+      { where: { id: 77, status: "active", currentStep: 1, nextRunAt: claimedAt } }
+    );
+    expect(emitFollowUp).toHaveBeenCalledTimes(2);
+    expect(enrollment.update).not.toHaveBeenCalled();
   });
-  it("retries when sending throws", async () => {
+  it("retries when sending throws, through the business-hours schedule", async () => {
     (SendTicketMessageService as jest.Mock).mockRejectedValueOnce(new Error("socket closed"));
+    (scheduleFor as jest.Mock).mockResolvedValueOnce(new Date(2026, 9, 6, 8, 0));
     await runEnrollment(77, NOW);
-    expect(enrollment.update).toHaveBeenCalledWith({ attempts: 1, nextRunAt: new Date(2026, 9, 5, 10, 15) });
+    expect(FollowUpEnrollment.update).toHaveBeenLastCalledWith(
+      { attempts: 1, nextRunAt: new Date(2026, 9, 6, 8, 0) },
+      { where: { id: 77, status: "active", currentStep: 1, nextRunAt: claimedAt } }
+    );
+  });
+  it("does not emit when the retry update lost the race", async () => {
+    (Whatsapp.findByPk as jest.Mock).mockResolvedValue({ status: "DISCONNECTED" });
+    (FollowUpEnrollment.update as jest.Mock)
+      .mockImplementationOnce(async (values: any) => { claimedAt = values.nextRunAt; return [1]; })
+      .mockResolvedValueOnce([0]);
+    await runEnrollment(77, NOW);
+    expect(emitFollowUp).not.toHaveBeenCalled();
   });
   it("claims the row with a conditional update before doing any work", async () => {
     await runEnrollment(77, NOW);
     expect(FollowUpEnrollment.update).toHaveBeenCalledWith(
       { nextRunAt: expect.any(Date) },
-      { where: { id: 77, status: "active", currentStep: 1, nextRunAt: enrollment.nextRunAt } }
+      { where: { id: 77, status: "active", currentStep: 1, nextRunAt: new Date(2026, 9, 5, 9, 55) } }
     );
   });
   it("does nothing when another run already claimed the row", async () => {

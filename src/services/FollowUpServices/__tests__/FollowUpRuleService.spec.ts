@@ -119,11 +119,16 @@ describe("saveStepMedia", () => {
     const out = await saveStepMedia(4, { buffer: Buffer.from("x"), originalname: "a.pdf", mimetype: "application/pdf" } as any);
     expect(out.mediaName).toBe("a.pdf");
   });
-  it("rejects html, svg and an allowed mimetype with a mismatched extension", async () => {
+  it("rejects html, svg, text, audio and an allowed mimetype with a mismatched extension", async () => {
     const files = [
       { originalname: "a.html", mimetype: "text/html" },
       { originalname: "a.svg", mimetype: "image/svg+xml" },
-      { originalname: "a.html", mimetype: "image/jpeg" }
+      { originalname: "a.html", mimetype: "image/jpeg" },
+      // channels/media.ts sends text/* as an image and audio as a voice note without caption.
+      { originalname: "a.txt", mimetype: "text/plain" },
+      { originalname: "a.csv", mimetype: "text/csv" },
+      { originalname: "a.mp3", mimetype: "audio/mpeg" },
+      { originalname: "a.ogg", mimetype: "audio/ogg" }
     ];
     for (const f of files) {
       // eslint-disable-next-line no-await-in-loop

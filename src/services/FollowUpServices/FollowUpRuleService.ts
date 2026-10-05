@@ -181,6 +181,8 @@ export const ruleStats = async (companyId: number, id: number) => {
 };
 
 // Files under /public are served by URL from the API origin: no html/svg or anything scriptable.
+// No text/* or audio: channels/media.ts would send text as an image and audio as a
+// voice note without caption or conversion.
 const ALLOWED_MEDIA: Record<string, string[]> = {
   "image/jpeg": ["jpg", "jpeg"],
   "image/png": ["png"],
@@ -189,14 +191,7 @@ const ALLOWED_MEDIA: Record<string, string[]> = {
   "video/mp4": ["mp4"],
   "video/3gpp": ["3gp", "3gpp"],
   "video/quicktime": ["mov"],
-  "audio/mpeg": ["mp3", "mpeg"],
-  "audio/mp4": ["m4a", "mp4"],
-  "audio/ogg": ["ogg", "oga", "opus"],
-  "audio/aac": ["aac"],
-  "audio/amr": ["amr"],
   "application/pdf": ["pdf"],
-  "text/plain": ["txt"],
-  "text/csv": ["csv"],
   "application/msword": ["doc"],
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ["docx"],
   "application/vnd.ms-excel": ["xls"],

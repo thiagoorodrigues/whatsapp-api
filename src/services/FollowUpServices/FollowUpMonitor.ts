@@ -30,13 +30,44 @@ const lastMessageIsOurs = async (ticketId: number): Promise<boolean> => {
   return !!last?.fromMe;
 };
 
-const retryLater = async (enrollment: FollowUpEnrollment, now: Date, reason: string): Promise<void> => {
+type Claim = { id: number; currentStep: number; claimedAt: Date };
+
+/**
+ * Writes only if nobody touched the row since our claim: a customer reply,
+ * a cancel or a restart by the attendant change status/currentStep/nextRunAt
+ * and must win over this run's stale view.
+ */
+const updateIfClaimed = async (claim: Claim, values: Record<string, unknown>): Promise<boolean> => {
+  const [affected] = await FollowUpEnrollment.update(values, {
+    where: { id: claim.id, status: "active", currentStep: claim.currentStep, nextRunAt: claim.claimedAt }
+  });
+  return affected > 0;
+};
+
+const retryLater = async (
+  enrollment: FollowUpEnrollment,
+  claim: Claim,
+  rule: FollowUpRule,
+  ticket: Ticket,
+  now: Date,
+  reason: string
+): Promise<void> => {
   const attempts = enrollment.attempts + 1;
-  if (attempts >= MAX_ATTEMPTS) {
-    await stopEnrollment(enrollment, "failed", reason, { attempts });
-    return;
-  }
-  await enrollment.update({ attempts, nextRunAt: addMinutes(now, RETRY_MINUTES) });
+  const values =
+    attempts >= MAX_ATTEMPTS
+      ? { status: "failed", stopReason: reason, attempts }
+      : { attempts, nextRunAt: await scheduleFor(rule, ticket, addMinutes(now, RETRY_MINUTES)) };
+  if (await updateIfClaimed(claim, values)) await emitFollowUp(enrollment.companyId, enrollment.ticketId);
+};
+
+const stillClaimed = async (claim: Claim): Promise<boolean> => {
+  const fresh = await FollowUpEnrollment.findByPk(claim.id, { attributes: ["id", "status", "currentStep", "nextRunAt"] });
+  return (
+    !!fresh &&
+    fresh.status === "active" &&
+    fresh.currentStep === claim.currentStep &&
+    new Date(fresh.nextRunAt).getTime() === claim.claimedAt.getTime()
+  );
 };
 
 const runFinalActions = async (rule: FollowUpRule, ticket: Ticket): Promise<void> => {
@@ -56,8 +87,9 @@ export const runEnrollment = async (id: number, now: Date): Promise<void> => {
 
   // The batch claim can expire while a long batch sends serially; claim this
   // row again so a parallel run that took it meanwhile does not send it twice.
+  const claim: Claim = { id: enrollment.id, currentStep: enrollment.currentStep, claimedAt: addMinutes(new Date(), CLAIM_MINUTES) };
   const [claimed] = await FollowUpEnrollment.update(
-    { nextRunAt: addMinutes(new Date(), CLAIM_MINUTES) },
+    { nextRunAt: claim.claimedAt },
     { where: { id: enrollment.id, status: "active", currentStep: enrollment.currentStep, nextRunAt: enrollment.nextRunAt } }
   );
   if (claimed === 0) return;
@@ -82,31 +114,36 @@ export const runEnrollment = async (id: number, now: Date): Promise<void> => {
 
   const whatsapp = await Whatsapp.findByPk(ticket.whatsappId, { attributes: ["id", "status"] });
   if (whatsapp?.status !== "CONNECTED") {
-    await retryLater(enrollment, now, "whatsapp_disconnected");
+    await retryLater(enrollment, claim, rule, ticket, now, "whatsapp_disconnected");
     return;
   }
 
   try {
     const content = await buildStepMessage(step, ticket, rule);
+    // The AI step can take a while: the customer may have replied or the
+    // attendant restarted/cancelled meanwhile.
+    if (!(await stillClaimed(claim))) return;
     await SendTicketMessageService(ticket, content, { followUpEnrollmentId: enrollment.id });
   } catch (err) {
     logger.warn(`Follow-up ${enrollment.id} could not send step ${enrollment.currentStep}: ${err}`);
-    await retryLater(enrollment, now, "send_error");
+    await retryLater(enrollment, claim, rule, ticket, now, "send_error");
     return;
   }
 
   const next = rule.steps[enrollment.currentStep];
   if (next) {
-    await enrollment.update({
+    const advanced = await updateIfClaimed(claim, {
       currentStep: enrollment.currentStep + 1,
       attempts: 0,
       lastSentAt: now,
       nextRunAt: await scheduleFor(rule, ticket, addMinutes(now, next.delayMinutes))
     });
-    await emitFollowUp(enrollment.companyId, enrollment.ticketId);
+    if (advanced) await emitFollowUp(enrollment.companyId, enrollment.ticketId);
     return;
   }
-  await stopEnrollment(enrollment, "completed", null, { lastSentAt: now });
+  const completed = await updateIfClaimed(claim, { status: "completed", stopReason: null, lastSentAt: now });
+  if (!completed) return;
+  await emitFollowUp(enrollment.companyId, enrollment.ticketId);
   await runFinalActions(rule, ticket);
 };
 

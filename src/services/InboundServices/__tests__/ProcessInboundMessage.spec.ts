@@ -9,6 +9,7 @@ const integration = jest.fn();
 const typebot = jest.fn();
 const followUpAgent = jest.fn();
 const followUpCustomer = jest.fn();
+const currentSchedule = jest.fn(async () => ({ inActivity: false }));
 
 const ticket: any = {
   id: 8,
@@ -55,7 +56,7 @@ jest.mock("../../WhatsappService/ShowWhatsAppService", () => ({ __esModule: true
 jest.mock("../../TicketServices/FindOrCreateTicketService", () => ({ __esModule: true, default: async () => ticket }));
 jest.mock("../../TicketServices/FindOrCreateATicketTrakingService", () => ({ __esModule: true, default: async () => traking }));
 jest.mock("../../TicketServices/UpdateTicketService", () => ({ __esModule: true, default: jest.fn() }));
-jest.mock("../../CompanyService/VerifyCurrentSchedule", () => ({ __esModule: true, default: async () => ({ inActivity: false }) }));
+jest.mock("../../CompanyService/VerifyCurrentSchedule", () => ({ __esModule: true, default: () => currentSchedule() }));
 jest.mock("../../../models/Setting", () => ({ __esModule: true, default: { findOne: async ({ where }: any) => (where.key === "scheduleType" ? { value: "company" } : null) } }));
 jest.mock("../../../models/Message", () => ({ __esModule: true, default: { findOne: async () => null } }));
 jest.mock("../../../models/UserRating", () => ({ __esModule: true, default: { create: jest.fn() } }));
@@ -132,6 +133,24 @@ describe("ProcessInboundMessage", () => {
       expect(save).toHaveBeenCalledTimes(3);
       expect(followUpAgent).not.toHaveBeenCalled();
       expect(followUpCustomer).not.toHaveBeenCalled();
+    });
+
+    it("an AI agent reply starts the follow-up after it is sent", async () => {
+      traking.ratingAt = null;
+      currentSchedule.mockResolvedValueOnce({ inActivity: true });
+      send.mockResolvedValueOnce({ id: 99 });
+      aiAgent.mockImplementationOnce(async ({ send: agentSend }: any) => {
+        expect(await agentSend({ type: "text", text: "Olá, sou o assistente" })).toEqual({ id: 99 });
+        return true;
+      });
+
+      await ProcessInboundMessage(inbound({ text: "Oi" }));
+      traking.ratingAt = new Date();
+
+      expect(aiAgent).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith(ticket, { type: "text", text: "Olá, sou o assistente" });
+      expect(followUpAgent).toHaveBeenCalledWith(ticket);
+      expect(send.mock.invocationCallOrder[0]).toBeLessThan(followUpAgent.mock.invocationCallOrder[0]);
     });
   });
 });
