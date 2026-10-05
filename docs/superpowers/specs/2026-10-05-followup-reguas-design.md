@@ -1,7 +1,7 @@
 # Follow-up: réguas de mensagens automáticas — núcleo + gatilho "sem resposta"
 
 Data: 2026-10-05
-Status: aguardando revisão
+Status: aprovado (revisado após leitura do código em 2026-10-05 — ver "Ajustes pós-leitura")
 
 ## Objetivo
 
@@ -45,6 +45,7 @@ atendimento), param quando o cliente responde e, ao final, executam as ações c
 | queueId | int FK Queues, null | null = todas as filas |
 | respectBusinessHours | boolean, default true | |
 | finalActions | JSONB, default `{}` | `{ closeTicket?: boolean, tagId?: number }` |
+| aiAgentId | int FK AiAgents ON DELETE SET NULL, null | agente cuja chave/modelo/prompt geram as etapas em modo IA; obrigatório se alguma etapa for `ai` |
 | createdAt / updatedAt | | |
 
 **Resolução de régua** (para um ticket com `whatsappId` W e `queueId` Q, considerando só `active = true` e `trigger = 'no_reply'`), da mais para a menos específica:
@@ -67,7 +68,7 @@ Empate no mesmo nível: menor `id`. A tela avisa quando se cria uma régua com a
 | mediaPath / mediaName | string, null | mídia opcional (só modo `text` e reserva) |
 | aiInstruction | text, null | obrigatória quando `mode = 'ai'` |
 
-Variáveis em `body`: `{{nome}}` (nome do contato), `{{primeiro_nome}}`, `{{atendente}}` (nome do usuário do ticket, vazio se não houver), `{{protocolo}}` (id do ticket). Variável desconhecida fica como está.
+Variáveis em `body`: as mesmas do resto do sistema, via `helpers/Mustache` (`{{firstName}}`, `{{name}}`, `{{ms}}`, `{{protocol}}`, `{{hora}}`), e o mesmo `MessageVariablesPicker` na tela.
 
 ### `FollowUpEnrollments`
 | campo | tipo | observação |
@@ -172,3 +173,16 @@ Homologação: régua com etapas de 1 minuto num WhatsApp real — cliente respo
 
 - Uma migration criando as três tabelas, índices e a coluna em `Messages`.
 - Deploy padrão (main → build → migrate → restart). Sem réguas cadastradas o comportamento atual não muda.
+
+## Ajustes pós-leitura do código (2026-10-05)
+
+1. **Quem inicia/reinicia a régua** — não é um gancho genérico em `CreateMessageService` (ele também recebe mensagens automáticas: transferência, avaliação, fora de horário, saudação, fluxo). A régua só inicia/reinicia com:
+   - mensagem do atendente pela plataforma (`MessageController.store`, texto e mídia, não nota interna);
+   - resposta do agente de IA (`handleAiAgentMessage` em `ProcessInboundMessage`);
+   - mensagem digitada no celular (`inbound.fromMe`, fora de histórico e de grupo).
+   Mensagens automáticas não iniciam nem param a régua. Mensagem do cliente (não histórico) para.
+2. **Troca de fila/conexão** apenas cancela; a régua da fila nova começa na próxima mensagem do atendente/IA (evita follow-up depois do aviso automático "aguarde, já vamos te atender").
+3. **Fechamento** cancela no início do ramo de fechamento de `UpdateTicketService` (antes da mensagem de avaliação/encerramento). Fechamentos que não passam por ele (avaliação, fechamento automático) são pegos pela revalidação do monitor.
+4. **Modo IA** usa o agente escolhido na régua (`aiAgentId`): `getProvider(agent.provider).runTurn` sem ferramentas, prompt do agente + instrução da etapa, últimas 20 mensagens.
+5. **Variáveis** são as já existentes (`helpers/Mustache`).
+6. Dia com `startTime`/`endTime` vazio conta como **fechado** para o follow-up (se todos os dias estiverem vazios, não há restrição). Difere da checagem de "fora de horário" atual, que trata dia vazio como sem restrição; para follow-up o erro seguro é não enviar no fim de semana.
