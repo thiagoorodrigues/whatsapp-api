@@ -12,6 +12,7 @@ import Whatsapp from "../models/Whatsapp";
 import formatBody from "../helpers/Mustache";
 import ListMessagesService from "../services/MessageServices/ListMessagesService";
 import ShowTicketService from "../services/TicketServices/ShowTicketService";
+import { sendAttendantTyping } from "../services/TicketServices/ContactTypingService";
 import FindOrCreateTicketService from "../services/TicketServices/FindOrCreateTicketService";
 import UpdateTicketService from "../services/TicketServices/UpdateTicketService";
 import DeleteWhatsAppMessage from "../services/WbotServices/DeleteWhatsAppMessage";
@@ -83,6 +84,13 @@ export const markRead = async (req: Request, res: Response): Promise<Response> =
   const { ticketId } = req.params;
   const ticket = await ShowTicketService(ticketId, req.user.companyId);
   await SetTicketMessagesAsRead(ticket);
+  return res.status(204).send();
+};
+
+// The attendant is typing (or recording audio) in the panel.
+export const typing = async (req: Request, res: Response): Promise<Response> => {
+  const ticket = await ShowTicketService(req.params.ticketId, req.user.companyId);
+  await sendAttendantTyping(ticket, req.body?.state);
   return res.status(204).send();
 };
 

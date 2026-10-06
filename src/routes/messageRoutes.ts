@@ -14,6 +14,7 @@ const upload = multer(uploadConfig);
 
 messageRoutes.get("/messages/:ticketId", isAuth, MessageController.index);
 messageRoutes.post("/messages/:ticketId/read", isAuth, MessageController.markRead);
+messageRoutes.post("/messages/:ticketId/typing", isAuth, MessageController.typing);
 messageRoutes.post("/messages/:ticketId", isAuth, memoryUpload.array("medias"), MessageController.store);
 messageRoutes.post("/messages/:messageId/forward", isAuth, MessageController.forward);
 messageRoutes.delete("/messages/:messageId", isAuth, MessageController.remove);

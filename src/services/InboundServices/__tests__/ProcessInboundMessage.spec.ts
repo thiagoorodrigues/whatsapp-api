@@ -61,6 +61,7 @@ jest.mock("../../../models/Setting", () => ({ __esModule: true, default: { findO
 jest.mock("../../../models/Message", () => ({ __esModule: true, default: { findOne: async () => null } }));
 jest.mock("../../../models/UserRating", () => ({ __esModule: true, default: { create: jest.fn() } }));
 jest.mock("../../../libs/cache", () => ({ cacheLayer: { get: async () => "0", set: async () => undefined } }));
+jest.mock("../../../channels", () => ({ getTicketChannel: jest.fn(), ticketAddress: jest.fn() }));
 jest.mock("../../../libs/socket", () => ({ getIO: () => ({ to: () => ({ emit: jest.fn(), to: () => ({ emit: jest.fn() }) }) }) }));
 jest.mock("../../../helpers/Debounce", () => ({ debounce: (fn: () => unknown) => fn }));
 ["Contact", "Queue", "QueueIntegrations", "Ticket", "TicketTraking"].forEach(m => jest.mock(`../../../models/${m}`, () => ({})));

@@ -15,6 +15,7 @@ import toInbound from "../../channels/baileys/toInbound";
 import { sleep } from "../../helpers/botUtils";
 import { SerialQueue, queueFor } from "../../helpers/serialQueue";
 import { toPhoneNumber, toUserLid } from "../../helpers/GetPhoneJid";
+import { handlePresenceUpdate } from "../TicketServices/ContactTypingService";
 import { forgetGroup } from "../../libs/whatsappCache";
 import Contact from "../../models/Contact";
 import Message from "../../models/Message";
@@ -134,6 +135,11 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
     // Group name, description or members changed: fetch them again.
     wbot.ev.on("groups.update", updates => updates.forEach(update => update.id && forgetGroup(wbot.id, update.id)));
     wbot.ev.on("group-participants.update", ({ id }) => forgetGroup(wbot.id, id));
+
+    // Contact typing or recording audio, for the open conversation.
+    wbot.ev.on("presence.update", update =>
+      handlePresenceUpdate(companyId, wbot.id, update).catch(err => logger.debug(`presence.update: ${err}`))
+    );
 
     wbot.ev.on("messages.update", (messageUpdate: WAMessageUpdate[]) => {
       if (messageUpdate.length === 0) return;

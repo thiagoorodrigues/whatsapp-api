@@ -88,7 +88,9 @@ export interface MessagingChannel {
   markRead(chat: ChatAddress, messages: MessageRef[]): Promise<void>;
   setPresence(presence: Presence): Promise<void>;
   /** "Digitando..." shown to the contact while a bot prepares a reply. */
-  sendTyping(chat: ChatAddress, typing: boolean): Promise<void>;
+  sendTyping(chat: ChatAddress, typing: boolean | "recording"): Promise<void>;
+  /** Asks to be told when the contact is typing (see ContactTypingService). */
+  watchPresence(chat: ChatAddress): Promise<void>;
   checkNumber(number: string): Promise<NumberCheck>;
   profilePictureUrl(chat: ChatAddress): Promise<string | null>;
   groupParticipants(chat: ChatAddress): Promise<GroupParticipant[]>;

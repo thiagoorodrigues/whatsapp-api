@@ -6,6 +6,7 @@ import { logger } from "../utils/logger";
 import authConfig from "../config/auth";
 import User from "../models/User";
 import Ticket from "../models/Ticket";
+import Contact from "../models/Contact";
 import {
   companyRoom,
   isTicketStatus,
@@ -62,9 +63,16 @@ export const initIO = (httpServer: Server): SocketIO => {
     socket.on("joinChatBox", async (ticketId: string) => {
       const ticket = await Ticket.findOne({
         where: { id: Number(ticketId) || 0, companyId },
-        attributes: ["id"]
+        attributes: ["id", "isGroup", "status", "whatsappId"],
+        include: [{ model: Contact, as: "contact", attributes: ["number", "lid"] }]
       });
-      if (ticket) socket.join(ticketRoom(companyId, ticket.id));
+      if (!ticket) return;
+      socket.join(ticketRoom(companyId, ticket.id));
+      // So the contact's "digitando..." reaches this conversation. Loaded on
+      // demand: the service needs the WhatsApp channel, which needs this file.
+      import("../services/TicketServices/ContactTypingService")
+        .then(({ watchTicketPresence }) => watchTicketPresence(ticket))
+        .catch(err => logger.debug(`watchTicketPresence: ${err}`));
     });
 
     socket.on("joinNotification", () => {

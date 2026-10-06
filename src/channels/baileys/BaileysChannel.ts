@@ -180,11 +180,15 @@ class BaileysChannel implements MessagingChannel {
     await socket.sendPresenceUpdate(presence, socket.user.id);
   }
 
-  async sendTyping(chat: ChatAddress, typing: boolean): Promise<void> {
+  async sendTyping(chat: ChatAddress, typing: boolean | "recording"): Promise<void> {
     const socket = this.socket();
     const jid = jidOf(chat);
     if (typing) await socket.presenceSubscribe(jid);
-    await socket.sendPresenceUpdate(typing ? "composing" : "paused", jid);
+    await socket.sendPresenceUpdate(typing === "recording" ? "recording" : typing ? "composing" : "paused", jid);
+  }
+
+  async watchPresence(chat: ChatAddress): Promise<void> {
+    await this.socket().presenceSubscribe(jidOf(chat));
   }
 
   async checkNumber(number: string): Promise<NumberCheck> {
