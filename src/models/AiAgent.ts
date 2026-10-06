@@ -31,6 +31,9 @@ export interface AiAgentTools {
   // Sends the reply as several short messages, with "typing..." before each
   // one for `delay` seconds (null: by the size of the text).
   split?: { enabled: boolean; delay: number | null };
+  // Waits this many seconds of silence from the customer before answering,
+  // so messages sent in a row are answered together.
+  wait?: { enabled: boolean; seconds: number };
 }
 
 @Table({ tableName: "AiAgents" })

@@ -26,8 +26,11 @@ type Sender = (content: OutgoingContent) => Promise<unknown>;
 type Typing = (typing: boolean) => Promise<void>;
 
 // Customers often send several short messages in a row: wait for a pause
-// and answer them together.
+// and answer them together. Agents may set their own wait (tools.wait).
 const DEBOUNCE_MS = Number(process.env.AI_AGENT_DEBOUNCE_MS) || 3000;
+
+export const debounceMs = (agent: Pick<AiAgent, "tools">): number =>
+  agent.tools?.wait?.enabled && agent.tools.wait.seconds ? agent.tools.wait.seconds * 1000 : DEBOUNCE_MS;
 
 // The agent reads the ticket's conversation. Very long tickets are cut to
 // their most recent part so the prompt stays within model limits and cost.
@@ -248,7 +251,7 @@ export const handleAiAgentMessage = async (params: {
 
   const agent = await AiAgent.findOne({
     where: { id: whatsapp.aiAgentId, companyId: ticket.companyId, status: "active" },
-    attributes: ["id"]
+    attributes: ["id", "tools"]
   });
   if (!agent) return false;
 
@@ -258,7 +261,7 @@ export const handleAiAgentMessage = async (params: {
     setTimeout(() => {
       timers.delete(ticket.id);
       runForTicket(ticket.id, agent.id, send, typing).catch(err => logger.error(`AI agent queue error: ${err}`));
-    }, DEBOUNCE_MS)
+    }, debounceMs(agent))
   );
   return true;
 };

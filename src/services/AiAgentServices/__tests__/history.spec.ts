@@ -14,7 +14,15 @@ jest.mock("../keys", () => ({ agentKey: jest.fn() }));
 jest.mock("../generateReply", () => jest.fn());
 
 // eslint-disable-next-line import/first
-import { agentMayAnswer, toHistory } from "../RunAiAgentService";
+import { agentMayAnswer, debounceMs, toHistory } from "../RunAiAgentService";
+
+describe("wait before answering", () => {
+  it("uses the agent's wait when the tool is on, else the default", () => {
+    expect(debounceMs({ tools: { wait: { enabled: true, seconds: 12 } } } as any)).toBe(12000);
+    expect(debounceMs({ tools: { wait: { enabled: false, seconds: 12 } } } as any)).toBe(3000);
+    expect(debounceMs({ tools: {} } as any)).toBe(3000);
+  });
+});
 
 describe("conversation history", () => {
   it("leaves internal notes out of the agent history", () => {

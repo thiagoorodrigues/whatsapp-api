@@ -1,4 +1,4 @@
-import { splitReply, splitToolConfig, typingDelay } from "../messageParts";
+import { splitReply, splitToolConfig, typingDelay, waitToolConfig } from "../messageParts";
 import { buildSystemPrompt, SPLIT_RULE } from "../prompt";
 
 describe("splitReply", () => {
@@ -65,5 +65,14 @@ describe("split rule in the prompt", () => {
   it("is added only when the agent splits its messages", () => {
     expect(buildSystemPrompt("Você é a Ana.")).not.toContain(SPLIT_RULE);
     expect(buildSystemPrompt("Você é a Ana.", undefined, true)).toContain(SPLIT_RULE);
+  });
+});
+
+describe("waitToolConfig", () => {
+  it("keeps the wait between 1 and 60 whole seconds", () => {
+    expect(waitToolConfig({ enabled: true, seconds: "10" })).toEqual({ enabled: true, seconds: 10 });
+    expect(waitToolConfig({ enabled: true, seconds: 600 })).toEqual({ enabled: true, seconds: 60 });
+    expect(waitToolConfig({ enabled: true, seconds: "" })).toEqual({ enabled: true, seconds: 3 });
+    expect(waitToolConfig(undefined)).toEqual({ enabled: false, seconds: 3 });
   });
 });

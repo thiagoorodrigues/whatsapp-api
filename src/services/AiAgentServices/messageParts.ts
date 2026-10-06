@@ -34,6 +34,17 @@ export const splitReply = (text: string, maxParts = MAX_PARTS): string[] => {
 };
 
 export const MAX_DELAY = 30;
+export const MAX_WAIT = 60;
+export const DEFAULT_WAIT = 3;
+
+// Seconds of silence to wait before answering: 1 to 60.
+export const waitToolConfig = (wait?: { enabled?: boolean; seconds?: unknown }) => {
+  const seconds = Math.round(Number(wait?.seconds));
+  return {
+    enabled: !!wait?.enabled,
+    seconds: Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds, MAX_WAIT) : DEFAULT_WAIT
+  };
+};
 
 // Saved settings: the pause is whole seconds, 1 to 30, or null (automatic).
 export const splitToolConfig = (split?: { enabled?: boolean; delay?: unknown }) => {
