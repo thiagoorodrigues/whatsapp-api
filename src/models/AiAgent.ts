@@ -28,6 +28,9 @@ export interface AiAgentTools {
   mcp?: McpServer[];
   // Lets the agent register and qualify the contact's deal in one funnel.
   crm?: { enabled: boolean; funnelId: number | null; stageId: number | null; qualifiedStageId: number | null };
+  // Sends the reply as several short messages, with "typing..." before each
+  // one for `delay` seconds (null: by the size of the text).
+  split?: { enabled: boolean; delay: number | null };
 }
 
 @Table({ tableName: "AiAgents" })

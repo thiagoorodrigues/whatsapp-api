@@ -11,6 +11,13 @@ export const GUARDRAILS = `
 - Nunca peça senhas, códigos de verificação ou dados completos de cartão.
 `.trim();
 
+// Added when the agent sends its reply as several messages (messageParts).
+export const SPLIT_RULE = `
+# Várias mensagens
+- Escreva como uma pessoa no WhatsApp: separe a resposta em mensagens curtas, uma ideia por mensagem, com uma linha em branco entre elas. Cada bloco separado por linha em branco é enviado como uma mensagem.
+- Use no máximo 4 mensagens. Respostas simples cabem numa só. Não separe itens de uma mesma lista.
+`.trim();
+
 export interface PromptKnowledge {
   alwaysIncluded: { title: string; description: string | null; content: string }[];
   searchable: boolean;
@@ -36,8 +43,10 @@ const knowledgeSection = (knowledge?: PromptKnowledge): string | null => {
   return parts.length ? `# Base de conhecimento\n${parts.join("\n\n")}` : null;
 };
 
-export const buildSystemPrompt = (agentPrompt: string, knowledge?: PromptKnowledge): string =>
-  [agentPrompt.trim(), GUARDRAILS, knowledgeSection(knowledge)].filter(Boolean).join("\n\n");
+export const buildSystemPrompt = (agentPrompt: string, knowledge?: PromptKnowledge, splitMessages = false): string =>
+  [agentPrompt.trim(), GUARDRAILS, splitMessages ? SPLIT_RULE : null, knowledgeSection(knowledge)]
+    .filter(Boolean)
+    .join("\n\n");
 
 export const buildContext = (facts: { companyName?: string; contactName?: string; now?: Date }): string => {
   const now = moment(facts.now || new Date());

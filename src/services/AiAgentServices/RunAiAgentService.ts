@@ -12,14 +12,18 @@ import Ticket from "../../models/Ticket";
 import Whatsapp from "../../models/Whatsapp";
 import UpdateTicketService from "../TicketServices/UpdateTicketService";
 import { hasPlanFeature } from "../../helpers/planFeature";
+import { sleep } from "../../helpers/botUtils";
 import { logger } from "../../utils/logger";
 import { agentKey } from "./keys";
 import generateReply from "./generateReply";
 import { ChatMessage } from "./types";
 import { DeferredAction } from "./tools";
+import { splitReply, typingDelay } from "./messageParts";
 
 // Sends to the ticket and saves the message (see SendTicketMessageService).
 type Sender = (content: OutgoingContent) => Promise<unknown>;
+// Shows or hides "typing..." to the contact.
+type Typing = (typing: boolean) => Promise<void>;
 
 // Customers often send several short messages in a row: wait for a pause
 // and answer them together.
@@ -117,7 +121,27 @@ const applyActions = async (ticket: Ticket, actions: DeferredAction[]) => {
   }
 };
 
-const turn = async (ticketId: number, agentId: number, send: Sender) => {
+// The reply in one message, or in parts with "typing..." before each one.
+// Stops if people take over the conversation between parts.
+const sendReply = async (ticket: Ticket, agent: AiAgent, reply: string, send: Sender, typing?: Typing) => {
+  const split = agent.tools?.split;
+  if (!split?.enabled) {
+    await send({ type: "text", text: reply });
+    return;
+  }
+  const parts = splitReply(reply);
+  for (let i = 0; i < parts.length; i += 1) {
+    if (i > 0) {
+      const current = await Ticket.findByPk(ticket.id);
+      if (!current || !agentMayAnswer(current)) return;
+    }
+    await typing?.(true).catch(() => undefined);
+    await sleep(typingDelay(parts[i], split.delay));
+    await send({ type: "text", text: parts[i] });
+  }
+};
+
+const turn = async (ticketId: number, agentId: number, send: Sender, typing?: Typing) => {
   const ticket = await Ticket.findByPk(ticketId, { include: [{ model: Contact, as: "contact" }] });
   if (!ticket || !agentMayAnswer(ticket)) return;
 
@@ -166,7 +190,7 @@ const turn = async (ticketId: number, agentId: number, send: Sender) => {
       crm: crmFor(agent, ticket)
     });
 
-    if (result.reply) await send({ type: "text", text: result.reply });
+    if (result.reply) await sendReply(ticket, agent, result.reply, send, typing);
     await applyActions(ticket, result.actions);
 
     await AiAgentRun.create({
@@ -191,7 +215,7 @@ const turn = async (ticketId: number, agentId: number, send: Sender) => {
 
 // One turn at a time per ticket; messages that arrive meanwhile trigger
 // one more turn when it ends.
-const runForTicket = async (ticketId: number, agentId: number, send: Sender) => {
+const runForTicket = async (ticketId: number, agentId: number, send: Sender, typing?: Typing) => {
   if (running.has(ticketId)) {
     pendingRerun.add(ticketId);
     return;
@@ -200,7 +224,7 @@ const runForTicket = async (ticketId: number, agentId: number, send: Sender) => 
   try {
     do {
       pendingRerun.delete(ticketId);
-      await turn(ticketId, agentId, send);
+      await turn(ticketId, agentId, send, typing);
     } while (pendingRerun.has(ticketId));
   } finally {
     running.delete(ticketId);
@@ -216,8 +240,9 @@ export const handleAiAgentMessage = async (params: {
   ticket: Ticket;
   whatsapp: Whatsapp;
   send: Sender;
+  typing?: Typing;
 }): Promise<boolean> => {
-  const { ticket, whatsapp, send } = params;
+  const { ticket, whatsapp, send, typing } = params;
   if (!whatsapp.aiAgentId || !agentMayAnswer(ticket)) return false;
   if (!(await hasPlanFeature(ticket.companyId, "useAiAgents"))) return false;
 
@@ -232,7 +257,7 @@ export const handleAiAgentMessage = async (params: {
     ticket.id,
     setTimeout(() => {
       timers.delete(ticket.id);
-      runForTicket(ticket.id, agent.id, send).catch(err => logger.error(`AI agent queue error: ${err}`));
+      runForTicket(ticket.id, agent.id, send, typing).catch(err => logger.error(`AI agent queue error: ${err}`));
     }, DEBOUNCE_MS)
   );
   return true;

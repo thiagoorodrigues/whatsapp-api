@@ -33,6 +33,7 @@ import SaveInboundMessageService from "./SaveInboundMessageService";
 import VerifyContactService from "./VerifyContactService";
 import { logger } from "../../utils/logger";
 import { statusRoom, ticketRoom } from "../../libs/socketRooms";
+import { getTicketChannel, ticketAddress } from "../../channels";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const request = require("request");
@@ -463,7 +464,8 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
           const sent = await SendTicketMessageService(ticket, content);
           await followUpOnAgentMessage(ticket as any);
           return sent;
-        }
+        },
+        typing: async on => (await getTicketChannel(ticket)).sendTyping(ticketAddress(ticket), on)
       });
       if (handledByAgent) return;
     }

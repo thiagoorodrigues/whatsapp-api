@@ -8,6 +8,7 @@ import { validateKey } from "./keys";
 import { sanitizeHttpTools, serializeHttpTools } from "./httpTools";
 import { sanitizeMcpServers, serializeMcpServers } from "./mcpTools";
 import { connectionStatuses, syncAgentConnections } from "./mcpOAuth";
+import { splitToolConfig } from "./messageParts";
 import { assertCrmToolConfig, crmConfigChanged, crmToolConfig } from "../CrmServices/AgentDealService";
 
 const EFFORTS = ["low", "medium", "high"];
@@ -66,7 +67,8 @@ const clean = (data: AgentData, partial: boolean, previous: AiAgentTools = {}) =
       close: { enabled: !!tools.close?.enabled },
       http: sanitizeHttpTools(tools.http, previous.http),
       mcp: sanitizeMcpServers(tools.mcp, previous.mcp),
-      crm: crmToolConfig(tools.crm)
+      crm: crmToolConfig(tools.crm),
+      split: splitToolConfig(tools.split)
     };
   }
   return out;

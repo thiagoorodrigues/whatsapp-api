@@ -55,7 +55,7 @@ const generateReply = async (params: {
     effort: agent.effort,
     maxTokens: agent.maxTokens,
     temperature: agent.temperature,
-    system: buildSystemPrompt(agent.prompt || "", knowledge),
+    system: buildSystemPrompt(agent.prompt || "", knowledge, !!agent.tools?.split?.enabled),
     systemContext: buildContext({ companyName: params.companyName, contactName: params.contactName }),
     history,
     tools: [...toolSet.definitions, ...mcp.definitions],

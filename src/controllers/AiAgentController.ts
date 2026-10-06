@@ -14,6 +14,7 @@ import {
 } from "../services/AiAgentServices/AgentService";
 import { agentKey, listModelsWithKey } from "../services/AiAgentServices/keys";
 import generateReply from "../services/AiAgentServices/generateReply";
+import { splitReply } from "../services/AiAgentServices/messageParts";
 import { ChatMessage } from "../services/AiAgentServices/types";
 import { callHttpTool, sanitizeHttpTools } from "../services/AiAgentServices/httpTools";
 import { McpOAuthRequired, probeMcpServer, sanitizeMcpServers } from "../services/AiAgentServices/mcpTools";
@@ -103,7 +104,8 @@ export const test = async (req: Request, res: Response): Promise<Response> => {
       companyName: company?.name,
       contactName: "Cliente de teste"
     });
-    return res.json(result);
+    // The console shows the messages as the customer would get them.
+    return res.json({ ...result, parts: agent.tools?.split?.enabled && result.reply ? splitReply(result.reply) : undefined });
   } catch (err) {
     throw new AppError(`ERR_AI_PROVIDER: ${String((err as Error)?.message || err).slice(0, 300)}`, 502);
   }
