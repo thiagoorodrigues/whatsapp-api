@@ -129,7 +129,7 @@ export const discover = async (serverUrl: string): Promise<Discovery | null> => 
       jsonrpc: "2.0",
       id: 1,
       method: "initialize",
-      params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "weconex-ai-agent", version: "1.0.0" } }
+      params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "wazzy-ai-agent", version: "1.0.0" } }
     })
   });
   if (probe.status !== 401 && probe.status !== 403) return null;
@@ -204,7 +204,7 @@ export const resolveClient = async (server: AuthServer, manual?: ClientCredentia
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({
-      client_name: "Weconex - Agentes de IA",
+      client_name: "Wazzy - Agentes de IA",
       redirect_uris: [redirect],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],

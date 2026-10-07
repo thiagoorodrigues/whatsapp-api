@@ -312,7 +312,7 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
                 sessions.push(wsocket);
               }
 
-              // Online no WeConex = celular sem notificação. Desfaz um
+              // Online no Wazzy = celular sem notificação. Desfaz um
               // "available" que tenha ficado de antes.
               if (!whatsappUpdate.showOnline) {
                 wsocket.sendPresenceUpdate("unavailable").catch(err =>

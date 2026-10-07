@@ -25,7 +25,7 @@ class Funnel extends Model<Funnel> {
   @Column
   name: string;
 
-  @Default("#2070F8")
+  @Default("#00804A")
   @Column
   color: string;
 

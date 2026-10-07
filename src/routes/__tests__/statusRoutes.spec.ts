@@ -12,7 +12,7 @@ describe("GET /", () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       version,
-      message: "API WeConex em funcionamento.",
+      message: "API Wazzy em funcionamento.",
       docs: "/api-docs"
     });
   });

@@ -218,7 +218,7 @@ export class McpClient {
     const result = await this.request("initialize", {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: {},
-      clientInfo: { name: "weconex-ai-agent", version: "1.0.0" }
+      clientInfo: { name: "wazzy-ai-agent", version: "1.0.0" }
     });
     if (result?.protocolVersion) this.protocol = result.protocolVersion;
     await this.post({ jsonrpc: "2.0", method: "notifications/initialized" }, CONNECT_TIMEOUT_MS);

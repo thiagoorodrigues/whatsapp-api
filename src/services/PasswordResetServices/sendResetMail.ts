@@ -23,7 +23,7 @@ const sendResetMail = async (email: string, code: string): Promise<void> => {
     from: MAIL_FROM,
     to: email,
     subject: "Redefinição de Senha",
-    text: `Olá,\n\nVocê solicitou a redefinição de senha da sua conta no WeConex. Use este Código de Verificação para concluir:\n\nCódigo de Verificação: ${code}\n\nO código vale por 30 minutos e só pode ser usado uma vez.\n\nSe você não pediu a redefinição, ignore este e-mail.\n\nAtenciosamente,\nEquipe WeConex`
+    text: `Olá,\n\nVocê solicitou a redefinição de senha da sua conta no Wazzy. Use este Código de Verificação para concluir:\n\nCódigo de Verificação: ${code}\n\nO código vale por 30 minutos e só pode ser usado uma vez.\n\nSe você não pediu a redefinição, ignore este e-mail.\n\nAtenciosamente,\nEquipe Wazzy`
   });
 };
 

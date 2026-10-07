@@ -2,7 +2,7 @@ import { logger } from "../utils/logger";
 import { getChannel } from "../channels";
 import Whatsapp from "../models/Whatsapp";
 
-// Enquanto o número aparece online no WeConex o WhatsApp não notifica o
+// Enquanto o número aparece online no Wazzy o WhatsApp não notifica o
 // celular. Só fica online a conexão que pediu e enquanto há alguém logado.
 export const ApplyPresence = async (whatsapp: Whatsapp, logout?: boolean): Promise<void> => {
     if (whatsapp.status !== "CONNECTED") return;

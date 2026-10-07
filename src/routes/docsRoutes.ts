@@ -11,7 +11,7 @@ docsRoutes.use(
   "/api-docs",
   swaggerUi.serve,
   swaggerUi.setup(openapi, {
-    customSiteTitle: "WeConex – API",
+    customSiteTitle: "Wazzy – API",
     swaggerOptions: { persistAuthorization: true }
   })
 );

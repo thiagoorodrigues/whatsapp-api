@@ -13,7 +13,7 @@ const statusRoutes = Router();
 statusRoutes.get("/", (_req, res) =>
   res.json({
     version,
-    message: "API WeConex em funcionamento.",
+    message: "API Wazzy em funcionamento.",
     docs: "/api-docs"
   })
 );

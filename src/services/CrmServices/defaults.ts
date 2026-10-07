@@ -2,7 +2,7 @@ import { StageKind } from "../../models/FunnelStage";
 
 export const DEFAULT_STAGES: { name: string; color: string; kind: StageKind }[] = [
   { name: "Lead", color: "#64748B", kind: "open" },
-  { name: "Qualificação", color: "#2070F8", kind: "open" },
+  { name: "Qualificação", color: "#00804A", kind: "open" },
   { name: "Proposta", color: "#8B5CF6", kind: "open" },
   { name: "Negociação", color: "#F59E0B", kind: "open" },
   { name: "Ganho", color: "#16A34A", kind: "won" },

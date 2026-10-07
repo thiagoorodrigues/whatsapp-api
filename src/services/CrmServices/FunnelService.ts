@@ -107,7 +107,7 @@ export const createFunnel = async (
       {
         companyId: v.companyId,
         name: data.name.trim(),
-        color: data.color || "#2070F8",
+        color: data.color || "#00804A",
         ownDealsOnly: !!data.ownDealsOnly,
         position: active
       } as any,
