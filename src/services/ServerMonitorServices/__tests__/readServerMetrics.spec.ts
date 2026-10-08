@@ -45,15 +45,16 @@ describe("readServerMetrics", () => {
     const snap = await readServerMetrics({
       sampleMs: 0,
       readFile: async p => (files[p] ? files[p]() : null),
-      statfs: async () => ({ bsize: 4096, blocks: 1000, bavail: 250 }),
+      // 50 blocos reservados ao root (bfree − bavail): como o df, não contam.
+      statfs: async () => ({ bsize: 4096, blocks: 1000, bfree: 300, bavail: 250 }),
       diskPath: "/x"
     });
     expect(snap.cpuPercent).toBe(25);
     expect(snap.memTotalBytes).toBe(8000000 * 1024);
     expect(snap.memUsedBytes).toBe(6000000 * 1024);
     expect(snap.apiMemBytes).toBe(300000000);
-    expect(snap.diskTotalBytes).toBe(4096 * 1000);
-    expect(snap.diskUsedBytes).toBe(4096 * 750);
+    expect(snap.diskUsedBytes).toBe(4096 * 700);
+    expect(snap.diskTotalBytes).toBe(4096 * 950);
     expect(snap.cpuCount).toBeGreaterThan(0);
     expect(typeof snap.load5).toBe("number");
   });

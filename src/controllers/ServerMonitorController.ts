@@ -12,7 +12,12 @@ export const history = async (req: Request, res: Response): Promise<Response> =>
   return res.json({ hours, points });
 };
 
+// O ponto do menu precisa acender justamente quando o monitor falha.
 export const alerts = async (_req: Request, res: Response): Promise<Response> => {
-  const monitor = await GetServerMonitorService();
-  return res.json(summarizeAlerts(monitor.alerts));
+  try {
+    const monitor = await GetServerMonitorService();
+    return res.json(summarizeAlerts(monitor.alerts));
+  } catch {
+    return res.json({ count: 1, level: "critical" });
+  }
 };

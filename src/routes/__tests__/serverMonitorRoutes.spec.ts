@@ -63,6 +63,14 @@ describe("super admin", () => {
     expect(getMetricsHistory).toHaveBeenCalledWith(24);
   });
 
+  it("reports critical when the monitor itself fails", async () => {
+    const Get = jest.requireMock("../../services/ServerMonitorServices/GetServerMonitorService").default;
+    Get.mockRejectedValueOnce(new Error("db down"));
+    const res = await request(app).get("/server-monitor/alerts").set(auth);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ count: 1, level: "critical" });
+  });
+
   it("returns only the alert summary", async () => {
     const res = await request(app).get("/server-monitor/alerts").set(auth);
     expect(res.body).toEqual({ count: 1, level: "warning" });

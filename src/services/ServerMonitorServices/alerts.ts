@@ -46,6 +46,7 @@ export interface ConnectionsStatus {
   total: number;
   connected: number;
   down: DownConnection[];
+  error?: string;
 }
 
 export const percentLevel = (p: number | null): AlertLevel | null => {

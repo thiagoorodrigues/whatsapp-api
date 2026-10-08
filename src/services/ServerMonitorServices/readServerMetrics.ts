@@ -27,7 +27,7 @@ export interface MetricsSnapshot {
 
 export interface ReadDeps {
   readFile?: (p: string) => Promise<string | null>;
-  statfs?: (p: string) => Promise<{ bsize: number; blocks: number; bavail: number }>;
+  statfs?: (p: string) => Promise<{ bsize: number; blocks: number; bfree: number; bavail: number }>;
   diskPath?: string;
   sampleMs?: number;
 }
@@ -117,8 +117,9 @@ export const readServerMetrics = async (deps: ReadDeps = {}): Promise<MetricsSna
   let diskTotalBytes: number | null = null;
   try {
     const s = await statfs(diskPath);
-    diskTotalBytes = s.blocks * s.bsize;
-    diskUsedBytes = (s.blocks - s.bavail) * s.bsize;
+    // Igual ao df: a reserva do root (bfree − bavail) fica fora do total.
+    diskUsedBytes = (s.blocks - s.bfree) * s.bsize;
+    diskTotalBytes = diskUsedBytes + s.bavail * s.bsize;
   } catch {
     // sem disco legível: fica null
   }

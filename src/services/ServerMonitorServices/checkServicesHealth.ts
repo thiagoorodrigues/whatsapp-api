@@ -37,16 +37,19 @@ const allQueues = (): any[] =>
   Object.values(queues).filter((q: any) => q && typeof q.getJobCounts === "function");
 
 const queueStatus = async (q: any, ms: number, now: Date): Promise<QueueStatus> => {
-  const counts = await withTimeout<any>(q.getJobCounts(), ms);
-  const failed = await withTimeout<any[]>(q.getFailed(0, 99), ms);
-  const since = now.getTime() - HOUR;
+  // O conjunto de falhas do Bull é ordenado pela hora da falha: ZCOUNT conta
+  // as da última hora sem carregar os jobs (as falhas nunca são removidas).
+  const [counts, failedLastHour] = await Promise.all([
+    withTimeout<any>(q.getJobCounts(), ms),
+    withTimeout<number>(q.client.zcount(q.toKey("failed"), now.getTime() - HOUR, "+inf"), ms)
+  ]);
   return {
     name: q.name,
     waiting: counts.waiting || 0,
     active: counts.active || 0,
     delayed: counts.delayed || 0,
     failed: counts.failed || 0,
-    failedLastHour: failed.filter(j => j && j.finishedOn >= since).length
+    failedLastHour: Number(failedLastHour) || 0
   };
 };
 

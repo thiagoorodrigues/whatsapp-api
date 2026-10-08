@@ -1,14 +1,14 @@
 const query = jest.fn();
 const ping = jest.fn();
 const getJobCounts = jest.fn();
-const getFailed = jest.fn();
+const zcount = jest.fn();
 const whatsappFindAll = jest.fn();
 
 const mockQueue = (name: string) => ({
   name,
-  client: { ping: () => ping() },
-  getJobCounts: () => getJobCounts(name),
-  getFailed: (s: number, e: number) => getFailed(name, s, e)
+  client: { ping: () => ping(), zcount: (...a: any[]) => zcount(...a) },
+  toKey: (k: string) => `bull:${name}:${k}`,
+  getJobCounts: () => getJobCounts(name)
 });
 
 jest.mock("../../../database", () => ({ __esModule: true, default: { query: (...a: any[]) => query(...a) } }));
@@ -35,10 +35,7 @@ beforeEach(() => {
   );
   ping.mockResolvedValue("PONG");
   getJobCounts.mockResolvedValue({ waiting: 1, active: 0, delayed: 2, failed: 5, completed: 9 });
-  getFailed.mockResolvedValue([
-    { finishedOn: NOW.getTime() - 10 * 60 * 1000 },
-    { finishedOn: NOW.getTime() - 3 * 3600 * 1000 }
-  ]);
+  zcount.mockResolvedValue(1);
 });
 
 it("rejects a promise that never settles after the timeout", async () => {
@@ -54,6 +51,8 @@ it("reports postgres, redis and every queue", async () => {
     { name: "UserMonitor", waiting: 1, active: 0, delayed: 2, failed: 5, failedLastHour: 1 },
     { name: "MessageQueue", waiting: 1, active: 0, delayed: 2, failed: 5, failedLastHour: 1 }
   ]);
+  // Conta pelo índice do Redis (score = hora da falha), sem carregar os jobs.
+  expect(zcount).toHaveBeenCalledWith("bull:MessageQueue:failed", NOW.getTime() - 3600 * 1000, "+inf");
 });
 
 it("turns hangs and errors into ok:false without throwing", async () => {
