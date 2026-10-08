@@ -47,7 +47,8 @@ ela volta `null` e a tela mostra "—".
   `/proc/stat` com 500 ms de intervalo). Puro, sem banco.
 - `CheckServicesHealth` — Postgres (`SELECT 1` com tempo, tamanho do banco via
   `pg_database_size`), Redis (`PING` com tempo), filas Bull de `src/queues.ts`
-  (`getJobCounts`: waiting, active, delayed, failed). Cada verificação com
+  (`getJobCounts`: waiting, active, delayed, failed; e falhas da última hora
+  por `getFailed`). O Redis é testado com `PING` no cliente da própria fila. Cada verificação com
   timeout de 3 s; falha vira `{ ok: false, error }`, não derruba a resposta.
 - `ListConnectionsStatus` — todas as `Whatsapps` de todas as empresas: nome,
   empresa, `status`, `updatedAt`. Agrupa em conectadas / outras.
@@ -63,7 +64,8 @@ ela volta `null` e a tela mostra "—".
   para um pico isolado não acender).
 - Load 5 min: aviso ≥ nº de vCPUs, crítico ≥ 2× nº de vCPUs.
 - Postgres ou Redis sem resposta: crítico.
-- Fila com `failed` > 0 nas últimas leituras: aviso.
+- Fila com job que falhou na última hora: aviso (falhas antigas guardadas pelo
+  Bull não acendem).
 - Conexão do WhatsApp que não está `CONNECTED`: aviso (lista quais).
 
 ### Cron (`src/server.ts`)
@@ -81,9 +83,11 @@ ela volta `null` e a tela mostra "—".
 
 ## Painel (whatsapp-app)
 
-- Página nova `src/pages/ServerMonitor/`, rota `/settings/monitor`, item
-  "Monitor do servidor" no submenu de Configurações em `MainListItems.js`, ao
-  lado de "Logs do sistema". Só super admin, como a de logs.
+- Componente novo `src/components/ServerMonitor/`, aberto como seção `monitor`
+  de `src/pages/SettingsCustom` (rota `/settings/monitor`, mesmo padrão de
+  `/settings/logs`, na lista `SUPER_ONLY`). Item "Monitor do servidor" no
+  submenu de Configurações em `MainListItems.js`, dentro do bloco
+  `user.super`, ao lado de "Logs do sistema". Só super admin.
 - **Topo:** faixa de alertas (vermelha se houver crítico, amarela se só aviso;
   some quando está tudo bem).
 - **Cartões:** CPU, Memória, Load, Disco — valor grande, barra colorida
