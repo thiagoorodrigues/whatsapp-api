@@ -138,7 +138,7 @@ O texto genérico atual deixa de existir.
 
 ### Traduções
 
-Adicionar em `backendErrors` (pt, en, es) os 24 códigos que hoje não têm texto
+Adicionar em `backendErrors` do pt.js (en e es já estão defasados e ficam como estão) os 24 códigos que hoje não têm texto
 (lista levantada em 2026-10-08: CONTACT_NOT_FIND, ERR_CANNOT_DELETE_COMPANY_SUPER,
 ERR_FLOW_INVALID_GRAPH, ERR_FLOW_INVALID_NODE, ERR_FLOW_NOT_FOUND, ERR_INVALID_DATE,
 ERR_NO_BAILEYS_DATA_FOUND, ERR_NO_CAMPAIGN_FOUND, ERR_NO_COMPANY_FOUND,
