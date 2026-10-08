@@ -1,19 +1,18 @@
 import "./bootstrap";
 import "reflect-metadata";
 import "express-async-errors";
-import express, { Request, Response, NextFunction } from "express";
-import multer from "multer";
+import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import * as Sentry from "@sentry/node";
 
 import "./database";
 import uploadConfig from "./config/upload";
-import AppError from "./errors/AppError";
 import routes from "./routes";
 import docsRoutes from "./routes/docsRoutes";
 import statusRoutes from "./routes/statusRoutes";
-import { logger } from "./utils/logger";
+import requestLog from "./middleware/requestLog";
+import errorHandler from "./middleware/errorHandler";
 import { messageQueue, sendScheduledMessages } from "./queues";
 
 Sentry.init({ dsn: process.env.SENTRY_DSN });
@@ -32,6 +31,7 @@ app.use(
   })
 );
 app.use(cookieParser());
+app.use(requestLog);
 //app.use(express.json());
 app.use(express.json({ limit: '10mb' }));
 app.use(Sentry.Handlers.requestHandler());
@@ -42,19 +42,6 @@ app.use(routes);
 
 app.use(Sentry.Handlers.errorHandler());
 
-app.use(async (err: Error, req: Request, res: Response, _: NextFunction) => {
-  if (err instanceof AppError) {
-    logger.warn(err);
-    return res.status(err.statusCode).json({ error: err.message });
-  }
-
-  if (err instanceof multer.MulterError) {
-    const code = err.code === "LIMIT_FILE_SIZE" ? "ERR_FILE_TOO_LARGE" : "ERR_UPLOAD_INVALID";
-    return res.status(400).json({ error: code });
-  }
-
-  logger.error(err);
-  return res.status(500).json({ error: "Internal server error" });
-});
+app.use(errorHandler);
 
 export default app;
