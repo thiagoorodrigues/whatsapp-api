@@ -9,6 +9,7 @@ import { TransferTicketQueue } from "./wbotTransferTicketQueue";
 import cron from "node-cron";
 import { resumeInterruptedIndexing } from "./services/AiAgentServices/knowledge/KnowledgeService";
 import { flushLogs } from "./libs/systemLog";
+import PurgeSystemLogsService from "./services/SystemLogServices/PurgeSystemLogsService";
 
 // Without these the code would sign tokens with a public default secret.
 const missing = ["JWT_SECRET", "JWT_REFRESH_SECRET"].filter(k => !process.env[k]);
@@ -21,10 +22,11 @@ if (missing.length) {
 process.on("unhandledRejection", reason => {
   logger.error({ err: reason instanceof Error ? reason : new Error(String(reason)) }, "unhandledRejection");
 });
-// Exceção sem tratamento: registra, grava e encerra (o container reinicia).
+// Exceção sem tratamento: registra, grava (espera no máximo 3 s, para um banco
+// travado não manter o processo quebrado vivo) e encerra (o container reinicia).
 process.on("uncaughtException", err => {
   logger.error({ err }, "uncaughtException");
-  flushLogs().finally(() => process.exit(1));
+  Promise.race([flushLogs(), new Promise(resolve => setTimeout(resolve, 3000))]).finally(() => process.exit(1));
 });
 
 const server = app.listen(process.env.PORT, async () => {
@@ -53,6 +55,15 @@ cron.schedule("* * * * *", async () => {
   }
   catch (error) {
     logger.error(error);
+  }
+});
+
+cron.schedule("30 3 * * *", async () => {
+  try {
+    const removed = await PurgeSystemLogsService();
+    logger.info(`Logs do sistema: ${removed} registros antigos apagados`);
+  } catch (error) {
+    logger.error({ err: error }, "Limpeza dos logs do sistema falhou");
   }
 });
 

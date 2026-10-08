@@ -16,8 +16,16 @@ export const validateKey = async (provider: string, apiKey: string) => {
   return { apiKeyEncrypted: encryptSecret(key), keyHint: secretHint(key) };
 };
 
-export const agentKey = (agent: { apiKeyEncrypted?: string | null }): string | null =>
-  agent.apiKeyEncrypted ? decryptSecret(agent.apiKeyEncrypted) : null;
+// Chave gravada com outra SECRETS_KEY/JWT_SECRET não decifra: o usuário
+// precisa informar a chave de novo.
+export const agentKey = (agent: { apiKeyEncrypted?: string | null }): string | null => {
+  if (!agent.apiKeyEncrypted) return null;
+  try {
+    return decryptSecret(agent.apiKeyEncrypted);
+  } catch (err) {
+    throw new AppError("ERR_AI_KEY_UNREADABLE");
+  }
+};
 
 export const listModelsWithKey = async (provider: string, apiKey: string) => {
   if (!isProviderName(provider)) throw new AppError("ERR_AI_PROVIDER_INVALID");
