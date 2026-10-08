@@ -10,6 +10,7 @@ import cron from "node-cron";
 import { resumeInterruptedIndexing } from "./services/AiAgentServices/knowledge/KnowledgeService";
 import { flushLogs } from "./libs/systemLog";
 import PurgeSystemLogsService from "./services/SystemLogServices/PurgeSystemLogsService";
+import { purgeServerMetrics, recordServerMetrics } from "./services/ServerMonitorServices/metricsHistory";
 
 // Without these the code would sign tokens with a public default secret.
 const missing = ["JWT_SECRET", "JWT_REFRESH_SECRET"].filter(k => !process.env[k]);
@@ -64,6 +65,23 @@ cron.schedule("30 3 * * *", async () => {
     logger.info(`Logs do sistema: ${removed} registros antigos apagados`);
   } catch (error) {
     logger.error({ err: error }, "Limpeza dos logs do sistema falhou");
+  }
+});
+
+cron.schedule("* * * * *", async () => {
+  try {
+    await recordServerMetrics();
+  } catch (error) {
+    logger.error({ err: error }, "Leitura do monitor do servidor falhou");
+  }
+});
+
+cron.schedule("45 3 * * *", async () => {
+  try {
+    const removed = await purgeServerMetrics();
+    logger.info(`Monitor do servidor: ${removed} leituras antigas apagadas`);
+  } catch (error) {
+    logger.error({ err: error }, "Limpeza do monitor do servidor falhou");
   }
 });
 
