@@ -26,6 +26,7 @@ import ticketTagRoutes from "./ticketTagRoutes";
 import queueIntegrationRoutes from "./queueIntegrationRoutes";
 import flowRoutes from "./flowRoutes";
 import aiAgentRoutes from "./aiAgentRoutes";
+import systemLogRoutes from "./systemLogRoutes";
 import emailRoute from "./emailRoute"; //Email
 import forgotsRoutes from "./forgotPasswordRoutes"; // Reset Passwd
 import crmRoutes from "./crmRoutes";
@@ -61,6 +62,7 @@ routes.use(flowRoutes);
 routes.use(aiAgentRoutes);
 routes.use(crmRoutes);
 routes.use(followUpRoutes);
+routes.use(systemLogRoutes);
 routes.use(emailRoute); //Email
 routes.use(forgotsRoutes);// Reset Passwd
 
