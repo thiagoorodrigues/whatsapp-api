@@ -1,3 +1,4 @@
+import { connectionColor } from "../../helpers/connectionColor";
 import * as Yup from "yup";
 import { Op } from "sequelize";
 
@@ -27,6 +28,7 @@ interface WhatsappData {
   expiresInactiveMessage?: string;
   importMessages?: boolean;
   showOnline?: boolean;
+  color?: string;
   initialDate?: string;
   finalDate?: string;
 }
@@ -64,6 +66,7 @@ const UpdateWhatsAppService = async ({ whatsappData, whatsappId, companyId }: Re
     token,
     importMessages = false,
     showOnline,
+    color,
     initialDate = null,
     finalDate = null,
     //timeSendQueue,
@@ -138,6 +141,7 @@ const UpdateWhatsAppService = async ({ whatsappData, whatsappId, companyId }: Re
     ...(token !== undefined ? { token: token || null } : {}),
     importMessages,
     showOnline,
+    ...(color !== undefined ? { color: connectionColor(color) } : {}),
     initialDate,
     finalDate,
     //timeSendQueue,

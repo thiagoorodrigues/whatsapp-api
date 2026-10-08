@@ -2,7 +2,7 @@ import { Op } from "sequelize";
 import Ticket from "../../models/Ticket"
 import Whatsapp from "../../models/Whatsapp"
 import { getIO } from "../../libs/socket"
-import formatBody from "../../helpers/Mustache";
+import { formatForTicket } from "../../helpers/Mustache";
 import SendWhatsAppMessage from "./SendWhatsAppMessage";
 import moment from "moment";
 import ShowTicketService from "../TicketServices/ShowTicketService";
@@ -100,7 +100,7 @@ export const ClosedAllOpenTickets = async (companyId: number): Promise<void> => 
         expiresTicket !== "0" && Number(expiresTicket) > 0) {
 
         //mensagem de encerramento por inatividade
-        const bodyExpiresMessageInactive = formatBody(expiresInactiveMessage, showTicket.contact);
+        const bodyExpiresMessageInactive = await formatForTicket(expiresInactiveMessage, showTicket);
 
         // let dataLimite = new Date();
         // dataLimite.setMinutes(dataLimite.getMinutes() - Number(expiresTicket));

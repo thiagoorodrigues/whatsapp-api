@@ -16,6 +16,7 @@ import SaveSentMessageService from "../MessageServices/SaveSentMessageService";
 import ListSettingsServiceOne from "../SettingServices/ListSettingsServiceOne"; //NOVO PLW DESIGN//
 import ShowUserService from "../UserServices/ShowUserService"; //NOVO PLW DESIGN//
 import { isNil } from "lodash";
+import { formatForTicket } from "../../helpers/Mustache";
 import { followUpOnTicketChanged } from "../FollowUpServices/hooks";
 import { logger } from "../../utils/logger";
 import Logs from "../../models/Logs";
@@ -123,7 +124,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
       if (setting?.value === "enabled" && !ticket.isGroup) {
         
         if (ticketTraking.ratingAt == null) {
-          const ratingTxt = ratingMessage || "";
+          const ratingTxt = await formatForTicket(ratingMessage || "", ticket);
           let bodyRatingMessage = `${ratingTxt}\n\n`;
           bodyRatingMessage += "Digite de 1 à 10 para qualificar nosso atendimento onde:\n*1* - _Muito Ruim_\n*10* - _Excelente_";
           await SendWhatsAppMessage({ body: bodyRatingMessage, ticket, ratingMsg: true });
@@ -151,7 +152,7 @@ const UpdateTicketService = async ({ ticketData, ticketId, companyId, userLogged
       }
 
       if (!isNil(complationMessage) && complationMessage !== "") {
-        const body = complationMessage;
+        const body = await formatForTicket(complationMessage, ticket);
         await SendWhatsAppMessage({ body, ticket });
       }
 

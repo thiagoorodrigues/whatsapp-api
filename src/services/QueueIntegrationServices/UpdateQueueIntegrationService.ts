@@ -21,6 +21,7 @@ interface IntegrationData {
 }
 
 interface Request {
+  webhookOptions?: Record<string, any>;
   integrationData: IntegrationData;
   integrationId: string;
   companyId: number;
@@ -29,7 +30,8 @@ interface Request {
 const UpdateQueueIntegrationService = async ({
   integrationData,
   integrationId,
-  companyId
+  companyId,
+  webhookOptions = {}
 }: Request): Promise<QueueIntegrations> => {
   const schema = Yup.object().shape({
     type: Yup.string().min(2),
@@ -74,7 +76,8 @@ const UpdateQueueIntegrationService = async ({
     typebotUnknownMessage,
     typebotDelayMessage,
     typebotKeywordRestart,
-    typebotRestartMessage 
+    typebotRestartMessage,
+    ...webhookOptions
   });
 
   return integration;

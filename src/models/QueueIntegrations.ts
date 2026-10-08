@@ -10,11 +10,14 @@ import {
     AutoIncrement,
     BelongsTo,
     ForeignKey,
-    Default
+    Default,
+    DefaultScope
 } from "sequelize-typescript";
 import Queue from "./Queue";
 import Company from "./Company";
 
+// The webhook token never leaves the API, even inside other models' includes.
+@DefaultScope(() => ({ attributes: { exclude: ["webhookToken"] } }))
 @Table
 class QueueIntegrations extends Model<QueueIntegrations> {
     @PrimaryKey
@@ -77,6 +80,35 @@ class QueueIntegrations extends Model<QueueIntegrations> {
 
     @Column
     typebotRestartMessage: string;
+
+    // Webhook options (services/QueueIntegrationServices/webhook.ts).
+    @Default(true)
+    @Column
+    webhookActive: boolean;
+
+    @Default(true)
+    @Column
+    webhookOnPending: boolean;
+
+    @Default(false)
+    @Column
+    webhookOnOpen: boolean;
+
+    @Default(false)
+    @Column
+    webhookSendTags: boolean;
+
+    @Default(false)
+    @Column
+    webhookSendQueue: boolean;
+
+    @Default(false)
+    @Column
+    webhookSendBotMessages: boolean;
+
+    // Encrypted; never sent to the panel (see publicIntegration).
+    @Column(DataType.TEXT)
+    webhookToken: string;
 }
 
 export default QueueIntegrations;

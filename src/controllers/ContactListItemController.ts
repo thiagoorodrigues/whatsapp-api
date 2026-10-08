@@ -6,7 +6,7 @@ import ListService from "../services/ContactListItemService/ListService";
 import CreateService from "../services/ContactListItemService/CreateService";
 import ShowService from "../services/ContactListItemService/ShowService";
 import UpdateService from "../services/ContactListItemService/UpdateService";
-import DeleteService from "../services/ContactListItemService/DeleteService";
+import DeleteService, { DeleteManyService } from "../services/ContactListItemService/DeleteService";
 import FindService from "../services/ContactListItemService/FindService";
 
 import ContactListItem from "../models/ContactListItem";
@@ -124,7 +124,7 @@ export const remove = async (
   const { id } = req.params;
   const { companyId } = req.user;
 
-  await DeleteService(id);
+  await DeleteService(id, companyId);
 
   const io = getIO();
   io.to(companyRoom(companyId)).emit(`company-${companyId}-ContactListItem`, {
@@ -133,6 +133,21 @@ export const remove = async (
   });
 
   return res.status(200).json({ message: "Contact deleted" });
+};
+
+export const removeMany = async (req: Request, res: Response): Promise<Response> => {
+  const { companyId } = req.user;
+  const ids = await DeleteManyService(req.body?.ids, companyId);
+
+  const io = getIO();
+  ids.forEach(id => {
+    io.to(companyRoom(companyId)).emit(`company-${companyId}-ContactListItem`, {
+      action: "delete",
+      id
+    });
+  });
+
+  return res.status(200).json({ deleted: ids.length, ids });
 };
 
 export const findList = async (

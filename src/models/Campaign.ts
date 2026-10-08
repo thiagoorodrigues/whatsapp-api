@@ -8,7 +8,9 @@ import {
   AutoIncrement,
   ForeignKey,
   BelongsTo,
-  HasMany
+  HasMany,
+  DataType,
+  Default
 } from "sequelize-typescript";
 import CampaignShipping from "./CampaignShipping";
 import Company from "./Company";
@@ -39,6 +41,26 @@ class Campaign extends Model<Campaign> {
 
   @Column({ defaultValue: "" })
   message5: string;
+
+  @Column({ type: DataType.TEXT, defaultValue: "" })
+  message6: string;
+
+  @Column({ type: DataType.TEXT, defaultValue: "" })
+  message7: string;
+
+  @Column({ type: DataType.TEXT, defaultValue: "" })
+  message8: string;
+
+  @Column({ type: DataType.TEXT, defaultValue: "" })
+  message9: string;
+
+  @Column({ type: DataType.TEXT, defaultValue: "" })
+  message10: string;
+
+  // On: each contact gets one message at random. Off: all, in order.
+  @Default(true)
+  @Column
+  randomizeMessages: boolean;
 
   @Column({ defaultValue: "" })
   confirmationMessage1: string;

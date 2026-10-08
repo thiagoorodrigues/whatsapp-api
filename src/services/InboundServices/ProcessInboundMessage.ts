@@ -1,8 +1,9 @@
 import * as Sentry from "@sentry/node";
 import { head, isNil } from "lodash";
 import moment from "moment";
-import { InboundMessage, normalizedForWebhook } from "../../channels/inbound";
-import formatBody from "../../helpers/Mustache";
+import { InboundMessage } from "../../channels/inbound";
+import { deliverWebhook, isWebhook } from "../QueueIntegrationServices/webhook";
+import { formatForTicket, matchesTemplate } from "../../helpers/Mustache";
 import { debounce } from "../../helpers/Debounce";
 import { cacheLayer } from "../../libs/cache";
 import { unreadsKey } from "../../helpers/unreadsKey";
@@ -36,7 +37,6 @@ import { statusRoom, ticketRoom } from "../../libs/socketRooms";
 import { getTicketChannel, ticketAddress } from "../../channels";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const request = require("request");
 
 // What happens when a message arrives on a connection, whatever the channel:
 // contact and ticket, rating, business hours, AI agent, chatbot flow, queue
@@ -79,7 +79,7 @@ const verifyQueue = async (inbound: InboundMessage, ticket: Ticket, contact: Con
 
   // Greets the customer on arrival in the queue.
   if (firstQueue?.greetingMessage && isNil(firstQueue?.integrationId)) {
-    await SendTicketMessageService(ticket, { type: "text", text: formatBody(firstQueue.greetingMessage, contact) });
+    await SendTicketMessageService(ticket, { type: "text", text: await formatForTicket(firstQueue.greetingMessage, ticket, contact) });
   }
 };
 
@@ -124,7 +124,7 @@ export const handleRating = async (
   });
 
   if (complationMessage) {
-    const body = formatBody(complationMessage, ticket.contact);
+    const body = await formatForTicket(complationMessage, ticket);
     await SendWhatsAppMessage({ body, ticket });
   }
 
@@ -160,32 +160,9 @@ export const handleMessageIntegration = async (
   queueIntegration: QueueIntegrations,
   ticket: Ticket
 ): Promise<void> => {
-  if (queueIntegration.type === "n8n" || queueIntegration.type === "webhook") {
-    if (queueIntegration?.urlN8N) {
-      const options = {
-        method: "POST",
-        url: queueIntegration?.urlN8N,
-        headers: {
-          "Content-Type": "application/json"
-        },
-        // The channel's own payload, as before, plus the channel-neutral
-        // view in `normalized`.
-        json: { ...(inbound.raw as object), normalized: normalizedForWebhook(inbound) }
-      };
-      try {
-        request(options, function (error, response) {
-          if (error) {
-            throw new Error(error);
-          }
-          else {
-            console.log(response.body);
-          }
-        });
-      } catch (error) {
-        throw new Error(error);
-      }
-    }
-
+  if (isWebhook(queueIntegration)) {
+    // Not awaited: the webhook's response time must not hold the message.
+    void deliverWebhook(queueIntegration, inbound, ticket);
   } else if (queueIntegration.type === "typebot") {
     // await typebots(ticket, msg, wbot, queueIntegration);
     await typebotListener({ ticket, inbound, typebot: queueIntegration });
@@ -193,6 +170,24 @@ export const handleMessageIntegration = async (
   }
 }
 
+
+// The webhook of the ticket (its integration, its sector's or its
+// connection's), for messages outside the bot phase.
+const notifyTicketWebhook = async (inbound: InboundMessage, ticket: Ticket, connectionIntegrationId?: number | null) => {
+  try {
+    let integrationId = ticket.integrationId;
+    if (!integrationId && ticket.queueId) {
+      const queue = await Queue.findByPk(ticket.queueId, { attributes: ["integrationId"] });
+      integrationId = queue?.integrationId;
+    }
+    integrationId = integrationId || connectionIntegrationId;
+    if (!integrationId) return;
+    const integration = await ShowQueueIntegrationService(`${integrationId}`, ticket.companyId);
+    if (isWebhook(integration)) await deliverWebhook(integration, inbound, ticket);
+  } catch (err) {
+    logger.warn(`Ticket ${ticket.id} webhook not sent: ${err}`);
+  }
+};
 
 const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => {
   const { companyId } = inbound;
@@ -268,8 +263,8 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
       !inbound.history &&
       unreadMessages === 0 &&
       whatsapp.complationMessage &&
-      formatBody(whatsapp.complationMessage, contact).trim().toLowerCase() ===
-      lastMessage?.body.trim().toLowerCase()
+      lastMessage &&
+      matchesTemplate(lastMessage.body.trim().toLowerCase(), whatsapp.complationMessage.trim().toLowerCase(), true)
     ) {
       return;
     }
@@ -348,6 +343,13 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
     // like spam to WhatsApp and gets the number blocked.
     if (inbound.history) return;
 
+    // Webhook options beyond the bot phase (handleMessageIntegration covers
+    // the customer's messages while the integration answers): messages from
+    // our own number and tickets with an attendant.
+    if (!isGroup && (inbound.fromMe || ticket.userId)) {
+      void notifyTicketWebhook(inbound, ticket, whatsapp?.integrationId);
+    }
+
     // Follow-up: the customer answered, or we wrote from the phone.
     if (!isGroup) {
       if (inbound.fromMe) await followUpOnAgentMessage(ticket as any);
@@ -373,7 +375,7 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
           !isNil(currentSchedule) &&
           (!currentSchedule || currentSchedule.inActivity === false)
         ) {
-          const body = formatBody(whatsapp.outOfHoursMessage, ticket.contact);
+          const body = await formatForTicket(whatsapp.outOfHoursMessage, ticket);
 
           const debouncedSentMessage = debounce(
             async () => {
@@ -420,7 +422,7 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
             const endTime = moment(schedule.endTime, "HH:mm");
 
             if (now.isBefore(startTime) || now.isAfter(endTime)) {
-              const body = `${queue.outOfHoursMessage}`;
+              const body = await formatForTicket(`${queue.outOfHoursMessage}`, ticket);
               const debouncedSentMessage = debounce(
                 async () => {
                   await SendTicketMessageService(ticket, { type: "text", text: body });
@@ -562,7 +564,7 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
           const endTime = moment(schedule.endTime, "HH:mm");
 
           if (now.isBefore(startTime) || now.isAfter(endTime)) {
-            const body = queue.outOfHoursMessage;
+            const body = await formatForTicket(queue.outOfHoursMessage, ticket);
             const debouncedSentMessage = debounce(
               async () => {
                 await SendTicketMessageService(ticket, { type: "text", text: body });
@@ -593,7 +595,7 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
         order: [["createdAt", "DESC"]]
       });
 
-      if (lastMessage && lastMessage.body.includes(whatsapp.greetingMessage)) {
+      if (lastMessage && matchesTemplate(lastMessage.body, whatsapp.greetingMessage)) {
         return;
       }
 
@@ -601,7 +603,7 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
 
         const debouncedSentMessage = debounce(
           async () => {
-            await SendTicketMessageService(ticket, { type: "text", text: whatsapp.greetingMessage });
+            await SendTicketMessageService(ticket, { type: "text", text: await formatForTicket(whatsapp.greetingMessage, ticket, contact) });
           },
           1000,
           ticket.id

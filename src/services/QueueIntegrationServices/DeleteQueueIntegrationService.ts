@@ -1,9 +1,10 @@
 import QueueIntegrations from "../../models/QueueIntegrations";
 import AppError from "../../errors/AppError";
 
-const DeleteQueueIntegrationService = async (id: string): Promise<void> => {
+// Only the company's own integration: another company's id is not found.
+const DeleteQueueIntegrationService = async (id: string, companyId: number): Promise<void> => {
   const dialogflow = await QueueIntegrations.findOne({
-    where: { id }
+    where: { id, companyId }
   });
 
   if (!dialogflow) {

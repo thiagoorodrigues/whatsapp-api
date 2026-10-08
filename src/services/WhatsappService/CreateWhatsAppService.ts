@@ -1,3 +1,4 @@
+import { connectionColor } from "../../helpers/connectionColor";
 import * as Yup from "yup";
 
 import AppError from "../../errors/AppError";
@@ -26,6 +27,7 @@ interface Request {
   expiresInactiveMessage?: string;
   importMessages?: boolean;
   showOnline?: boolean;
+  color?: string;
   initialDate?: string;
   finalDate?: string;
 }
@@ -48,6 +50,7 @@ const CreateWhatsAppService = async ({
   token = "",
   importMessages = false,
   showOnline = false,
+  color,
   initialDate = null,
   finalDate = null,
   provider = "beta",
@@ -161,6 +164,7 @@ const CreateWhatsAppService = async ({
       provider,
       importMessages,
       showOnline,
+      color: connectionColor(color),
       initialDate,
       finalDate,
       //timeSendQueue,

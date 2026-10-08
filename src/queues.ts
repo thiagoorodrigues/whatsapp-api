@@ -25,8 +25,8 @@ import User from "./models/User";
 import Company from "./models/Company";
 import Plan from "./models/Plan";
 import Ticket from "./models/Ticket";
-import { addSeconds, differenceInSeconds } from "date-fns";
-import formatBody from "./helpers/Mustache";
+import { sendTimes } from "./services/CampaignService/campaignSchedule";
+import formatBody, { formatForCampaign } from "./helpers/Mustache";
 import { ClosedAllOpenTickets } from "./services/WbotServices/wbotClosedTickets";
 import { companyRoom, notificationRoom, statusRoom, ticketRoom } from "./libs/socketRooms";
 import { processDueFollowUps } from "./services/FollowUpServices/FollowUpMonitor";
@@ -453,29 +453,13 @@ async function sleep(seconds) {
   });
 }
 
-function getCampaignValidMessages(campaign) {
+// Filled messages, in order (message1 to message10).
+export function getCampaignValidMessages(campaign) {
   const messages = [];
-
-  if (!isEmpty(campaign.message1) && !isNil(campaign.message1)) {
-    messages.push(campaign.message1);
+  for (let i = 1; i <= 10; i += 1) {
+    const message = campaign[`message${i}`];
+    if (!isNil(message) && !isEmpty(`${message}`.trim())) messages.push(message);
   }
-
-  if (!isEmpty(campaign.message2) && !isNil(campaign.message2)) {
-    messages.push(campaign.message2);
-  }
-
-  if (!isEmpty(campaign.message3) && !isNil(campaign.message3)) {
-    messages.push(campaign.message3);
-  }
-
-  if (!isEmpty(campaign.message4) && !isNil(campaign.message4)) {
-    messages.push(campaign.message4);
-  }
-
-  if (!isEmpty(campaign.message5) && !isNil(campaign.message5)) {
-    messages.push(campaign.message5);
-  }
-
   return messages;
 }
 
@@ -535,10 +519,11 @@ function getProcessedMessage(msg: string, variables: any[], contact: any) {
     finalMessage = finalMessage.replace(/{numero}/g, contact.number);
   }
 
-  variables.forEach(variable => {
-    if (finalMessage.includes(`{${variable.key}}`)) {
-      const regex = new RegExp(`{${variable.key}}`, "g");
-      finalMessage = finalMessage.replace(regex, variable.value);
+  // Plain text replace: a shortcut with "(" or "*" must not become a regex.
+  (variables || []).forEach(variable => {
+    const tag = `{${variable?.key}}`;
+    if (variable?.key && finalMessage.includes(tag)) {
+      finalMessage = finalMessage.split(tag).join(`${variable.value ?? ""}`);
     }
   });
 
@@ -573,15 +558,6 @@ async function verifyAndFinalizeCampaign(campaign) {
   });
 }
 
-function calculateDelay(index, baseDelay, longerIntervalAfter, greaterInterval, messageInterval) {
-  const diffSeconds = differenceInSeconds(baseDelay, new Date());
-  if (index > longerIntervalAfter) {
-    return diffSeconds * 1000 + greaterInterval
-  } else {
-    return diffSeconds * 1000 + messageInterval
-  }
-}
-
 async function handleProcessCampaign(job) {
   try {
     const { id }: ProcessCampaignData = job.data;
@@ -596,19 +572,13 @@ async function handleProcessCampaign(job) {
           variables: settings.variables,
         }));
 
-        // const baseDelay = job.data.delay || 0;
-        const longerIntervalAfter = parseToMilliseconds(settings.longerIntervalAfter);
-        const greaterInterval = parseToMilliseconds(settings.greaterInterval);
-        const messageInterval = settings.messageInterval;
-
-        let baseDelay = campaign.scheduledAt;
+        // Intervals in seconds; the longer one after N messages (0 = never).
+        const times = sendTimes(campaign.scheduledAt, contactData.length, settings);
 
         const queuePromises = [];
         for (let i = 0; i < contactData.length; i++) {
-          baseDelay = addSeconds(baseDelay, i > longerIntervalAfter ? greaterInterval : messageInterval);
-
           const { contactId, campaignId, variables } = contactData[i];
-          const delay = calculateDelay(i, baseDelay, longerIntervalAfter, greaterInterval, messageInterval);
+          const delay = Math.max(0, times[i].getTime() - Date.now());
           const queuePromise = campaignQueue.add(
             "PrepareContact",
             { contactId, campaignId, variables, delay },
@@ -639,7 +609,10 @@ async function handlePrepareContact(job) {
     campaignShipping.campaignId = campaignId;
 
     const messages = getCampaignValidMessages(campaign);
-    if (messages.length) {
+    if (messages.length && campaign.randomizeMessages === false) {
+      // In order: all go at dispatch; this copy is what the report shows.
+      campaignShipping.message = messages.map(m => getProcessedMessage(m, variables, contact)).join("\n\n");
+    } else if (messages.length) {
       const radomIndex = randomValue(0, messages.length);
       const message = getProcessedMessage(
         messages[radomIndex],
@@ -738,37 +711,62 @@ async function handleDispatchCampaign(job) {
     const to = await numberAddress(campaignShipping.number, campaign.companyId);
 
     const askingConfirmation = campaign.confirmation && campaignShipping.confirmation === null;
-    const body = campaignText(askingConfirmation ? campaignShipping.confirmationMessage : campaignShipping.message);
 
-    let sent;
-    let media;
-    if (campaign.mediaPath) {
-      const publicFolder = path.resolve(__dirname, "..", "public");
-      const filePath = path.join(publicFolder, campaign.mediaPath);
-
-      sent = await channel.send(to, contentFromFile(campaign.mediaName, filePath, body));
-      media = { path: filePath, fileName: campaign.mediaName, mimetype: `${mime.lookup(filePath) || "application/octet-stream"}` };
-    } else {
-      sent = await channel.send(to, { type: "text", text: body });
-      if (askingConfirmation) await campaignShipping.update({ confirmationRequestedAt: moment() });
+    // The confirmation question goes alone. Otherwise one message (picked at
+    // prepare time) or, with randomizeMessages off, every message in order.
+    let texts: string[] = [askingConfirmation ? campaignShipping.confirmationMessage : campaignShipping.message];
+    if (!askingConfirmation && campaign.randomizeMessages === false) {
+      const { variables } = await getSettings(campaign);
+      const ordered = getCampaignValidMessages(campaign).map(m => getProcessedMessage(m, variables, campaignShipping.contact));
+      if (ordered.length) texts = ordered;
     }
+    // {{variables}} are filled here, at sending time, so dates are right.
+    const bodies = await Promise.all(
+      texts.map(text =>
+        formatForCampaign(campaignText(text), {
+          contact: campaignShipping.contact,
+          companyId: campaign.companyId,
+          connectionName: campaign.whatsapp.name
+        })
+      )
+    );
+
+    for (let i = 0; i < bodies.length; i += 1) {
+      const body = bodies[i];
+      let sent;
+      let media;
+      // The file goes with the first message, as its caption.
+      if (i === 0 && campaign.mediaPath) {
+        const publicFolder = path.resolve(__dirname, "..", "public");
+        const filePath = path.join(publicFolder, campaign.mediaPath);
+
+        sent = await channel.send(to, contentFromFile(campaign.mediaName, filePath, body));
+        media = { path: filePath, fileName: campaign.mediaName, mimetype: `${mime.lookup(filePath) || "application/octet-stream"}` };
+      } else {
+        sent = await channel.send(to, { type: "text", text: body });
+      }
+
+      // The echo is ignored: the message gets into the contact's history here.
+      try {
+        await SaveCampaignMessageService({
+          companyId: campaign.companyId,
+          whatsappId: campaign.whatsapp.id,
+          number: campaignShipping.number,
+          name: campaignShipping.contact?.name || campaignShipping.number,
+          sent,
+          body,
+          media
+        });
+      } catch (err: any) {
+        Sentry.captureException(err);
+        logger.error(`Campaign message sent but not saved: Campanha=${campaignId};Registro=${campaignShippingId}: ${err.message}`);
+      }
+
+      // A short pause keeps the messages in order on the phone.
+      if (i < bodies.length - 1) await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+    if (askingConfirmation && !campaign.mediaPath) await campaignShipping.update({ confirmationRequestedAt: moment() });
     await campaignShipping.update({ deliveredAt: moment() });
-
-    // The echo is ignored: the message gets into the contact's history here.
-    try {
-      await SaveCampaignMessageService({
-        companyId: campaign.companyId,
-        whatsappId: campaign.whatsapp.id,
-        number: campaignShipping.number,
-        name: campaignShipping.contact?.name || campaignShipping.number,
-        sent,
-        body,
-        media
-      });
-    } catch (err: any) {
-      Sentry.captureException(err);
-      logger.error(`Campaign message sent but not saved: Campanha=${campaignId};Registro=${campaignShippingId}: ${err.message}`);
-    }
 
     await verifyAndFinalizeCampaign(campaign);
 

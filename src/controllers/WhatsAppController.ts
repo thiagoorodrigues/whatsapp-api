@@ -30,6 +30,7 @@ interface WhatsappData {
   expiresInactiveMessage?: string;
   importMessages?: boolean;
   showOnline?: boolean;
+  color?: string;
   initialDate?: string;
   finalDate?: string;
 }
@@ -58,6 +59,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     token,
     importMessages = false,
     showOnline = false,
+    color,
     initialDate = null,
     finalDate = null,
     //timeSendQueue,
@@ -82,6 +84,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     token: req.user.profile === "admin" ? token : undefined,
     importMessages,
     showOnline,
+    color,
     initialDate,
     finalDate,
     //timeSendQueue,

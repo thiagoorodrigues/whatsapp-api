@@ -23,6 +23,8 @@ routes.post("/contact-list-items", isAuth, campaignsInPlan, ContactListItemContr
 
 routes.put("/contact-list-items/:id", isAuth, campaignsInPlan, ContactListItemController.update);
 
+routes.post("/contact-list-items/delete-many", isAuth, campaignsInPlan, ContactListItemController.removeMany);
+
 routes.delete(
   "/contact-list-items/:id",
   isAuth, campaignsInPlan,

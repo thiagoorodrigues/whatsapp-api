@@ -16,6 +16,12 @@ interface Data {
   message3?: string;
   message4?: string;
   message5?: string;
+  message6?: string;
+  message7?: string;
+  message8?: string;
+  message9?: string;
+  message10?: string;
+  randomizeMessages?: boolean;
   confirmationMessage1?: string;
   confirmationMessage2?: string;
   confirmationMessage3?: string;
