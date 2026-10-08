@@ -1,7 +1,6 @@
 import * as Sentry from "@sentry/node";
 import { v4 as uuid } from "uuid";
 import { InboundMessage } from "../../channels/inbound";
-import formatBody from "../../helpers/Mustache";
 import { saveCompanyMedia } from "../../helpers/mediaStorage";
 import { getIO } from "../../libs/socket";
 import Contact from "../../models/Contact";
@@ -80,7 +79,7 @@ const SaveInboundMessageService = async (
   if (inbound.hasMedia) {
     const { media, path } = await storeMedia(inbound, ticket);
     const fileName = media?.fileName || (path ? path.split("/").pop() : "");
-    const body = inbound.text ? formatBody(inbound.text, ticket.contact) : fileName;
+    const body = inbound.text || fileName;
     await ticket.update({ lastMessage: body || fileName });
     saved = await CreateMessageService({
       companyId: ticket.companyId,

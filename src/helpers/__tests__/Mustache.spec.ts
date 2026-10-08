@@ -24,6 +24,17 @@ describe("formatBody", () => {
   it("leaves text without tags alone", () => {
     expect(formatBody("Olá, tudo bem?", contact)).toBe("Olá, tudo bem?");
   });
+
+  it("accepts spaces and triple braces around a variable", () => {
+    expect(formatBody("{{ firstName }} {{{firstName}}}", contact)).toBe("Ana Ana");
+  });
+
+  // Attendants paste code: Mustache threw on sections and blanked unknown tags.
+  it("keeps code and unknown tags as typed", () => {
+    const code = "{{#each items}}<b>{{this}}</b>{{/each}} {{ item.name }} {{/if}} {{! x <div style={{color: 1}}> {{nome}}";
+    expect(formatBody(code, contact)).toBe(code);
+    expect(formatBody("{{{ a }} {{=<% %>=}} {{> parcial}}", contact)).toBe("{{{ a }} {{=<% %>=}} {{> parcial}}");
+  });
 });
 
 describe("matchesTemplate", () => {

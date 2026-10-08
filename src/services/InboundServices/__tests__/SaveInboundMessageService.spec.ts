@@ -94,6 +94,16 @@ describe("SaveInboundMessageService", () => {
     expect(create.mock.calls[0][0].messageData).toEqual(expect.objectContaining({ body: "foto", mediaUrl: undefined, mediaType: "image" }));
   });
 
+  it("saves a caption as the customer wrote it, without filling variables", async () => {
+    const caption = "Oi {{name}} {{#each x}}";
+    await SaveInboundMessageService(
+      inbound({ hasMedia: true, kind: "image", text: caption, loadMedia: async () => null }),
+      ticket(),
+      contact
+    );
+    expect(create.mock.calls[0][0].messageData).toEqual(expect.objectContaining({ body: caption }));
+  });
+
   it("applies edits to the original message", async () => {
     await SaveInboundMessageService(inbound({ externalId: "E1", editOf: "A1", text: "Oi!" }), ticket(), contact);
     expect(create).not.toHaveBeenCalled();

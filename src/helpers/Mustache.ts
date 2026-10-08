@@ -1,4 +1,3 @@
-import Mustache from "mustache";
 import Contact from "../models/Contact";
 import Ticket from "../models/Ticket";
 import User from "../models/User";
@@ -101,9 +100,17 @@ const baseView = (contact?: Contact, now = new Date()): View => {
   };
 };
 
-// WhatsApp is plain text: no HTML escaping ("D'Ávila" would go as "D&#39;Ávila").
+// Only the known variables ({{name}}, {{ name }}, {{{name}}}) are filled; any
+// other braces stay as typed. Mustache.render threw on code with "{{#each}}"
+// or "{{/if}}" and blanked "{{ item.name }}" in texts attendants paste.
+// No HTML escaping: WhatsApp is plain text.
+const TAG = /\{\{\{\s*(\w+)\s*\}\}\}|\{\{\s*(\w+)\s*\}\}/g;
+
 const render = (body: string, view: View): string =>
-  Mustache.render(body, view, {}, { escape: (value: string) => value });
+  body.replace(TAG, (tag: string, triple?: string, plain?: string) => {
+    const key = triple || plain;
+    return Object.prototype.hasOwnProperty.call(view, key) ? String(view[key]) : tag;
+  });
 
 export default (body: string, contact: Contact, extra: View = {}): string =>
   render(body, { ...baseView(contact), ...extra });
