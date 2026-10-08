@@ -885,6 +885,13 @@ handleCloseTicketsAutomatic()
 export async function startQueueProcess() {
   logger.info("Iniciando processamento de filas");
 
+  // Job que falhou (depois das tentativas) aparece nos logs do sistema.
+  [messageQueue, scheduleMonitor, sendScheduledMessages, campaignQueue, userMonitor, followUpMonitor, queueMonitor].forEach(queue =>
+    queue.on("failed", (job, err) =>
+      logger.error({ err }, `Fila ${queue.name} job ${job?.id} (${job?.name}) falhou`)
+    )
+  );
+
   messageQueue.process("SendMessage", handleSendMessage);
 
   scheduleMonitor.process("Verify", handleVerifySchedules);

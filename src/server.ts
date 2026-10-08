@@ -8,6 +8,7 @@ import { startQueueProcess } from "./queues";
 import { TransferTicketQueue } from "./wbotTransferTicketQueue";
 import cron from "node-cron";
 import { resumeInterruptedIndexing } from "./services/AiAgentServices/knowledge/KnowledgeService";
+import { flushLogs } from "./libs/systemLog";
 
 // Without these the code would sign tokens with a public default secret.
 const missing = ["JWT_SECRET", "JWT_REFRESH_SECRET"].filter(k => !process.env[k]);
@@ -15,6 +16,16 @@ if (missing.length) {
   console.error(`Missing required environment variables: ${missing.join(", ")}`);
   process.exit(1);
 }
+
+// Promessa sem catch: registra e segue (antes derrubava o processo).
+process.on("unhandledRejection", reason => {
+  logger.error({ err: reason instanceof Error ? reason : new Error(String(reason)) }, "unhandledRejection");
+});
+// Exceção sem tratamento: registra, grava e encerra (o container reinicia).
+process.on("uncaughtException", err => {
+  logger.error({ err }, "uncaughtException");
+  flushLogs().finally(() => process.exit(1));
+});
 
 const server = app.listen(process.env.PORT, async () => {
   const companies = await Company.findAll();
@@ -46,4 +57,4 @@ cron.schedule("* * * * *", async () => {
 });
 
 initIO(server);
-gracefulShutdown(server);
+gracefulShutdown(server, { onShutdown: () => flushLogs() });
