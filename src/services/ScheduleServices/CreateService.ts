@@ -2,6 +2,7 @@ import * as Yup from "yup";
 
 import AppError from "../../errors/AppError";
 import Schedule from "../../models/Schedule";
+import ShowService from "./ShowService";
 
 interface Request {
   body: string;
@@ -44,9 +45,9 @@ const CreateService = async ({
     }
   );
 
-  await schedule.reload();
-
-  return schedule;
+  // With contact and user: the agenda page shows schedule.contact.name from
+  // the socket event.
+  return ShowService(schedule.id, Number(companyId));
 };
 
 export default CreateService;
