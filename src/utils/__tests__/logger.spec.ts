@@ -34,6 +34,14 @@ describe("logger", () => {
     requestContext.run({ req, res: {} as any }, () => logger.error("algo"));
     expect(recordLog.mock.calls[0][0]).toMatchObject({ source: "api", companyId: 4, userId: 9, method: "POST", route: "/ai-agents/3/test" });
   });
+  it("ignores the request once its response has ended (long-lived sockets/timers)", () => {
+    const req: any = { method: "POST", originalUrl: "/whatsappsession/1", user: { companyId: 4, id: "9" } };
+    requestContext.run({ req, res: { writableEnded: true } as any }, () => logger.warn("socket caiu"));
+    const entry = recordLog.mock.calls[0][0];
+    expect(entry.source).toBe("job");
+    expect(entry.route).toBeUndefined();
+    expect(entry.companyId).toBeUndefined();
+  });
   it("rawLogger never records", () => {
     rawLogger.error(new Error("x"));
     expect(recordLog).not.toHaveBeenCalled();

@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { getWbot } from "../libs/wbot";
 import ShowWhatsAppService from "../services/WhatsappService/ShowWhatsAppService";
 import { clearBaileysKeys } from "../models/BaileysKey";
+import { requestContext } from "../libs/requestContext";
 import { StartWhatsAppSession } from "../services/WbotServices/StartWhatsAppSession";
 
 const store = async (req: Request, res: Response): Promise<Response> => {
@@ -9,7 +10,7 @@ const store = async (req: Request, res: Response): Promise<Response> => {
   const { companyId } = req.user;
 
   const whatsapp = await ShowWhatsAppService(whatsappId, companyId);
-  await StartWhatsAppSession(whatsapp, companyId);
+  await requestContext.exit(() => StartWhatsAppSession(whatsapp, companyId));
 
   return res.status(200).json({ message: "Starting session." });
 };
@@ -24,7 +25,7 @@ const update = async (req: Request, res: Response): Promise<Response> => {
   await whatsapp.update({ session: "" });
   await clearBaileysKeys(whatsapp.id);
 
-  await StartWhatsAppSession(whatsapp, companyId);
+  await requestContext.exit(() => StartWhatsAppSession(whatsapp, companyId));
 
   return res.status(200).json({ message: "Starting session." });
 };

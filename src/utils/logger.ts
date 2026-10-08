@@ -39,8 +39,10 @@ export const logEntryFromArgs = (level: "warn" | "error", args: unknown[]): LogE
   }
   const text = textParts.join(" ");
   const message = error ? (text ? `${text}: ${error.message}` : error.message) : text;
+  // O contexto só vale enquanto a resposta está aberta: sockets e timers criados
+  // durante a requisição herdam o store, mas não são mais "a requisição".
   const ctx = requestContext.getStore();
-  const req = ctx?.req as any;
+  const req = (ctx && !ctx.res?.writableEnded ? ctx.req : undefined) as any;
   return {
     level,
     source: req ? "api" : "job",

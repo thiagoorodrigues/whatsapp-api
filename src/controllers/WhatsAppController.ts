@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { getIO } from "../libs/socket";
 import { removeWbot } from "../libs/wbot";
+import { requestContext } from "../libs/requestContext";
 import { StartWhatsAppSession } from "../services/WbotServices/StartWhatsAppSession";
 
 import CreateWhatsAppService from "../services/WhatsappService/CreateWhatsAppService";
@@ -95,7 +96,8 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     expiresInactiveMessage
   });
 
-  StartWhatsAppSession(whatsapp, companyId);
+  // Fora do contexto da requisição: a sessão vive além dela.
+  requestContext.exit(() => StartWhatsAppSession(whatsapp, companyId));
 
   const io = getIO();
   io.to(companyRoom(companyId)).emit(`company-${companyId}-whatsapp`, {

@@ -1,5 +1,6 @@
 import AppError from "../../errors/AppError";
 import { decryptSecret, encryptSecret, secretHint } from "../../helpers/secretBox";
+import { logger } from "../../utils/logger";
 import { getProvider, isProviderName } from "./providers";
 
 // Confirms a key with the provider (listing models) and returns what the
@@ -23,6 +24,7 @@ export const agentKey = (agent: { apiKeyEncrypted?: string | null }): string | n
   try {
     return decryptSecret(agent.apiKeyEncrypted);
   } catch (err) {
+    logger.warn({ err }, "agentKey: chave do agente ilegível");
     throw new AppError("ERR_AI_KEY_UNREADABLE");
   }
 };

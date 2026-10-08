@@ -9,6 +9,8 @@ jest.mock("../../libs/wbot", () => ({ getWbot: jest.fn() }));
 
 // eslint-disable-next-line import/first
 import WhatsAppSessionController from "../WhatsAppSessionController";
+// eslint-disable-next-line import/first
+import { requestContext } from "../../libs/requestContext";
 
 describe("WhatsAppSessionController.update (Novo QR Code)", () => {
   it("resets only the session, keeping queues and the history import", async () => {
@@ -17,5 +19,14 @@ describe("WhatsAppSessionController.update (Novo QR Code)", () => {
     expect(whatsapp.update).toHaveBeenCalledWith({ session: "" });
     expect(clearKeys).toHaveBeenCalledWith(3);
     expect(start).toHaveBeenCalledWith(whatsapp, 1);
+  });
+
+  it("starts the session outside the request context", async () => {
+    const stores: any[] = [];
+    start.mockImplementationOnce(() => stores.push(requestContext.getStore()));
+    const res: any = { status: () => ({ json: jest.fn() }) };
+    const req: any = { params: { whatsappId: "3" }, user: { companyId: 1 } };
+    await requestContext.run({ req, res }, () => WhatsAppSessionController.store(req, res));
+    expect(stores).toEqual([undefined]);
   });
 });
