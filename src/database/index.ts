@@ -50,6 +50,7 @@ import FunnelRule from "../models/FunnelRule";
 import FollowUpRule from "../models/FollowUpRule";
 import FollowUpStep from "../models/FollowUpStep";
 import FollowUpEnrollment from "../models/FollowUpEnrollment";
+import SystemLog from "../models/SystemLog";
 
 // eslint-disable-next-line
 const dbConfig = require("../config/database");
@@ -108,7 +109,8 @@ const models = [
   FunnelRule,
   FollowUpRule,
   FollowUpStep,
-  FollowUpEnrollment
+  FollowUpEnrollment,
+  SystemLog
 ];
 
 sequelize.addModels(models);
