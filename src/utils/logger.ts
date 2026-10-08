@@ -20,15 +20,25 @@ const describe = (value: unknown): string => {
 
 // warn/error do código viram registros em SystemLogs.
 export const logEntryFromArgs = (level: "warn" | "error", args: unknown[]): LogEntry => {
-  const [first, ...rest] = args;
-  const objectErr = first && typeof first === "object" && !(first instanceof Error) ? (first as any).err : undefined;
-  const error = first instanceof Error ? first : objectErr instanceof Error ? objectErr : undefined;
-  const textParts = (objectErr !== undefined ? rest : args)
-    .filter(a => !(a instanceof Error) || a !== error)
-    .map(describe)
-    .filter(Boolean);
+  let error: Error | undefined;
+  const textParts: string[] = [];
+  const context: Record<string, unknown> = {};
+  for (const arg of args) {
+    if (arg instanceof Error) {
+      if (!error) error = arg;
+      else textParts.push(arg.message);
+    } else if (arg && typeof arg === "object") {
+      const { err, ...rest } = arg as Record<string, unknown>;
+      if (err instanceof Error && !error) error = err;
+      else if (err !== undefined) textParts.push(describe(err));
+      Object.assign(context, rest);
+    } else {
+      const text = describe(arg);
+      if (text) textParts.push(text);
+    }
+  }
   const text = textParts.join(" ");
-  const message = error ? (text ? `${text}: ${error.message}` : error.message) : text || describe(objectErr);
+  const message = error ? (text ? `${text}: ${error.message}` : error.message) : text;
   const ctx = requestContext.getStore();
   const req = ctx?.req as any;
   return {
@@ -36,6 +46,7 @@ export const logEntryFromArgs = (level: "warn" | "error", args: unknown[]): LogE
     source: req ? "api" : "job",
     message,
     detail: error?.stack,
+    context: Object.keys(context).length ? context : undefined,
     protocol: newProtocol(),
     companyId: req?.user?.companyId,
     userId: req?.user?.id !== undefined ? Number(req.user.id) : undefined,
@@ -51,7 +62,14 @@ const logger = pino({
   ...base,
   hooks: {
     logMethod(args: any[], method: (...a: any[]) => void, level: number) {
-      if (level >= 40) recordLog(logEntryFromArgs(level >= 50 ? "error" : "warn", args));
+      if (level >= 40) {
+        try {
+          recordLog(logEntryFromArgs(level >= 50 ? "error" : "warn", args));
+        } catch (e) {
+          // Gravar log nunca derruba quem chamou.
+          console.error("Falha ao registrar log do sistema:", e);
+        }
+      }
       return method.apply(this, args);
     }
   }
