@@ -137,6 +137,30 @@ class BaileysChannel implements MessagingChannel {
     });
   }
 
+  // The key must be the reacted message's own (participant in groups),
+  // taken from the stored payload when there is one.
+  async react(chat: ChatAddress, message: MessageRef, emoji: string): Promise<void> {
+    const stored = quotedOf(message);
+    const jid = stored?.key?.remoteJid || message.chatJid || jidOf(chat);
+    const messageId = newMessageId();
+    markSentByPlatform(this.connectionId, messageId);
+    await this.socket().sendMessage(
+      jid,
+      {
+        react: {
+          text: emoji,
+          key: {
+            remoteJid: jid,
+            id: message.externalId,
+            fromMe: stored?.key?.fromMe ?? !!message.fromMe,
+            participant: stored?.key?.participant || message.participant || undefined
+          }
+        }
+      },
+      { messageId }
+    );
+  }
+
   // Read receipts (readMessages) reach the sender and the account's other
   // devices; chatModify markRead needs app state keys sessions often lack.
   async markRead(chat: ChatAddress, messages: MessageRef[]): Promise<void> {

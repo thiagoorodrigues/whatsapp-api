@@ -84,6 +84,8 @@ export interface MessagingChannel {
   isReady(): boolean;
   send(to: ChatAddress, content: OutgoingContent, options?: SendOptions): Promise<SentMessage>;
   deleteMessage(chat: ChatAddress, message: MessageRef): Promise<void>;
+  /** Reacts to a message with an emoji; an empty emoji removes the reaction. */
+  react(chat: ChatAddress, message: MessageRef, emoji: string): Promise<void>;
   /** Sends read receipts for received messages (the sender sees them read). */
   markRead(chat: ChatAddress, messages: MessageRef[]): Promise<void>;
   setPresence(presence: Presence): Promise<void>;

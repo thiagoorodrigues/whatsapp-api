@@ -17,6 +17,7 @@ import FindOrCreateTicketService from "../services/TicketServices/FindOrCreateTi
 import UpdateTicketService from "../services/TicketServices/UpdateTicketService";
 import DeleteWhatsAppMessage from "../services/WbotServices/DeleteWhatsAppMessage";
 import SendWhatsAppMedia from "../services/WbotServices/SendWhatsAppMedia";
+import SendReactionService from "../services/MessageServices/SendReactionService";
 import ForwardMessageService from "../services/MessageServices/ForwardMessageService";
 import SendWhatsAppMessage from "../services/WbotServices/SendWhatsAppMessage";
 import CreateInternalNoteService from "../services/MessageServices/CreateInternalNoteService";
@@ -136,6 +137,16 @@ export const forward = async (req: Request, res: Response): Promise<Response> =>
   const results = await ForwardMessageService({ messageId, contactIds, companyId, userId: +userId });
 
   return res.status(200).json(results);
+};
+
+export const react = async (req: Request, res: Response): Promise<Response> => {
+  const { messageId } = req.params;
+  const { companyId } = req.user;
+  const { emoji } = req.body as { emoji?: string };
+
+  await SendReactionService({ messageId, companyId, emoji: emoji || "" });
+
+  return res.send();
 };
 
 export const remove = async (

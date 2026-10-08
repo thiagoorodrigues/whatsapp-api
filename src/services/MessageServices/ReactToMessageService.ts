@@ -18,6 +18,20 @@ interface Request {
   at: number;
 }
 
+type Reaction = { emoji: string; jid: string; fromMe: boolean; at: number };
+
+/** Stores a reaction on the message (one per person) and tells the ticket. */
+export const applyReaction = async (message: Message, { emoji, jid, fromMe, at }: Reaction): Promise<Message> => {
+  const others = (message.reactions || []).filter(r => r.jid !== jid);
+  const reactions = emoji ? [...others, { emoji, jid, fromMe, at }] : others;
+  await message.update({ reactions: reactions.length ? reactions : null });
+
+  getIO()
+    .to(ticketRoom(message.companyId, message.ticketId.toString()))
+    .emit(`company-${message.companyId}-appMessage`, { action: "update", message });
+  return message;
+};
+
 /**
  * A reaction goes on the message it reacts to, never as a new message. Each
  * person has at most one: a new emoji replaces theirs.
@@ -32,13 +46,7 @@ const ReactToMessageService = async ({ companyId, whatsappId, externalId, jid, f
     });
     if (!message) return;
 
-    const others = (message.reactions || []).filter(r => r.jid !== jid);
-    const reactions = emoji ? [...others, { emoji, jid, fromMe, at }] : others;
-    await message.update({ reactions: reactions.length ? reactions : null });
-
-    getIO()
-      .to(ticketRoom(message.companyId, message.ticketId.toString()))
-      .emit(`company-${message.companyId}-appMessage`, { action: "update", message });
+    await applyReaction(message, { emoji, jid, fromMe, at });
   } catch (err) {
     Sentry.captureException(err);
     logger.error(`Error handling message reaction. Err: ${err}`);
