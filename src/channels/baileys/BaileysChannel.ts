@@ -137,6 +137,19 @@ class BaileysChannel implements MessagingChannel {
     });
   }
 
+  async edit(chat: ChatAddress, message: MessageRef, text: string): Promise<void> {
+    const stored = quotedOf(message);
+    const jid = stored?.key?.remoteJid || message.chatJid || jidOf(chat);
+    // The edit is a new message on WhatsApp; its echo must not be saved again.
+    const messageId = newMessageId();
+    markSentByPlatform(this.connectionId, messageId);
+    await this.socket().sendMessage(
+      jid,
+      { text, edit: { remoteJid: jid, id: message.externalId, fromMe: true } },
+      { messageId }
+    );
+  }
+
   // The key must be the reacted message's own (participant in groups),
   // taken from the stored payload when there is one.
   async react(chat: ChatAddress, message: MessageRef, emoji: string): Promise<void> {

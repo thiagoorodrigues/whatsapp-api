@@ -17,6 +17,7 @@ messageRoutes.post("/messages/:ticketId/read", isAuth, MessageController.markRea
 messageRoutes.post("/messages/:ticketId/typing", isAuth, MessageController.typing);
 messageRoutes.post("/messages/:ticketId", isAuth, memoryUpload.array("medias"), MessageController.store);
 messageRoutes.post("/messages/:messageId/forward", isAuth, MessageController.forward);
+messageRoutes.put("/messages/:messageId", isAuth, MessageController.edit);
 messageRoutes.post("/messages/:messageId/react", isAuth, MessageController.react);
 messageRoutes.delete("/messages/:messageId", isAuth, MessageController.remove);
 messageRoutes.post("/api/messages/send", tokenAuth, upload.array("medias"), MessageController.sendFila);
