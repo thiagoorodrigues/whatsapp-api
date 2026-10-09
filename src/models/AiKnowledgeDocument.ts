@@ -14,6 +14,7 @@ import Company from "./Company";
 import AiAgent from "./AiAgent";
 
 export type KnowledgeStatus = "pending" | "processing" | "ready" | "error";
+export type EmbeddingStatus = "none" | "processing" | "ready" | "error";
 
 // A document of an agent's knowledge base (its text is split into
 // AiKnowledgeChunks for search).
@@ -73,6 +74,17 @@ class AiKnowledgeDocument extends Model<AiKnowledgeDocument> {
   @Default(0)
   @Column
   chunkCount: number;
+
+  // Model that produced the current chunk vectors (null = none).
+  @Column
+  embeddingModel: string | null;
+
+  @Default("none")
+  @Column
+  embeddingStatus: EmbeddingStatus;
+
+  @Column(DataType.TEXT)
+  embeddingError: string | null;
 
   @CreatedAt
   createdAt: Date;

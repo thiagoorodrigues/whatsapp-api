@@ -109,6 +109,11 @@ class AiAgent extends Model<AiAgent> {
   @Column(DataType.FLOAT)
   temperature: number | null;
 
+  // Embedding model of the knowledge base's semantic search; null = off
+  // (keyword search only). See knowledge/embeddings.ts.
+  @Column
+  embeddingModel: string | null;
+
   // Provider API key, encrypted (helpers/secretBox). Never sent to clients:
   // they get `keyHint` (last characters) and `hasKey`.
   @Column(DataType.TEXT)
