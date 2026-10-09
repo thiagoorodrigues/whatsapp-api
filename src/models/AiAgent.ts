@@ -16,6 +16,7 @@ import {
 import Company from "./Company";
 import Whatsapp from "./Whatsapp";
 import type { HttpTool } from "../services/AiAgentServices/httpTools";
+import type { MediaToolConfig } from "../services/AiAgentServices/mediaTools";
 import type { McpServer } from "../services/AiAgentServices/mcpTools";
 
 // Settings of the built-in tools an agent may use.
@@ -37,6 +38,8 @@ export interface AiAgentTools {
   // Tags the agent may put on the ticket (empty: any of the company's), with
   // optional rules for when to use each one.
   tag?: { enabled: boolean; tagIds?: number[]; instructions?: string };
+  // Files the agent sends when the conversation asks for them.
+  media?: MediaToolConfig;
 }
 
 @Table({ tableName: "AiAgents" })

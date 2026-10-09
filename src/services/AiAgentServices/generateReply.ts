@@ -34,6 +34,8 @@ const generateReply = async (params: {
   crm?: ToolContext["crm"];
   // Puts a tag on the conversation's ticket; absent in the test console.
   addTag?: (tagId: number) => Promise<{ ok: boolean; message: string }>;
+  // Queues an "Enviar mídia" file to go after the reply; absent in the test console.
+  sendMedia?: ToolContext["sendMedia"];
 }): Promise<ReplyResult> => {
   const { agent, apiKey, history, queues } = params;
   const knowledge = await knowledgeForTurn(agent.id, agent.companyId);
@@ -52,7 +54,8 @@ const generateReply = async (params: {
       ? query => searchKnowledge(agent.id, agent.companyId, query)
       : undefined,
     crm: params.crm,
-    tags: { list: tags.map(t => ({ id: t.id, name: t.name })), add: params.addTag }
+    tags: { list: tags.map(t => ({ id: t.id, name: t.name })), add: params.addTag },
+    sendMedia: params.sendMedia
   });
   const mcp = await openMcpSession(agent.tools?.mcp || [], { companyId: agent.companyId });
 

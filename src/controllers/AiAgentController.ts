@@ -17,6 +17,7 @@ import generateReply from "../services/AiAgentServices/generateReply";
 import { splitReply } from "../services/AiAgentServices/messageParts";
 import { ChatMessage } from "../services/AiAgentServices/types";
 import { callHttpTool, sanitizeHttpTools } from "../services/AiAgentServices/httpTools";
+import { MAX_MEDIA_FILES, saveAgentMedia } from "../services/AiAgentServices/mediaTools";
 import { McpOAuthRequired, probeMcpServer, sanitizeMcpServers } from "../services/AiAgentServices/mcpTools";
 import {
   completeAuthorization,
@@ -54,6 +55,19 @@ export const remove = async (req: Request, res: Response): Promise<Response> => 
 export const connections = async (req: Request, res: Response): Promise<Response> => {
   admin(req);
   return res.json(await setAgentConnections(req.params.agentId, req.body.whatsappIds, req.user.companyId));
+};
+
+// "Enviar mídia": stores the files; they join the agent when it is saved.
+export const uploadMedia = async (req: Request, res: Response): Promise<Response> => {
+  admin(req);
+  const agent = await findAgent(req.params.agentId, req.user.companyId);
+  const uploads = (req.files as Express.Multer.File[]) || [];
+  if (!uploads.length) throw new AppError("ERR_AI_MEDIA_EMPTY: nenhum arquivo enviado");
+  if ((agent.tools?.media?.files || []).length + uploads.length > MAX_MEDIA_FILES) {
+    throw new AppError(`ERR_AI_MEDIA_LIMIT: no máximo ${MAX_MEDIA_FILES} arquivos`);
+  }
+  const files = await Promise.all(uploads.map(file => saveAgentMedia(req.user.companyId, agent.id, file)));
+  return res.status(201).json(files);
 };
 
 export const runs = async (req: Request, res: Response): Promise<Response> =>

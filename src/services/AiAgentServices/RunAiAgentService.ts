@@ -24,6 +24,7 @@ import generateReply from "./generateReply";
 import { ChatMessage } from "./types";
 import { DeferredAction } from "./tools";
 import { splitReply, typingDelay } from "./messageParts";
+import { AgentMediaFile, contentFor, mediaPath } from "./mediaTools";
 
 // Sends to the ticket and saves the message (see SendTicketMessageService).
 type Sender = (content: OutgoingContent) => Promise<unknown>;
@@ -197,6 +198,7 @@ const turn = async (ticketId: number, agentId: number, send: Sender, typing?: Ty
       Company.findByPk(ticket.companyId, { attributes: ["name"] })
     ]);
 
+    const media: AgentMediaFile[] = [];
     const result = await generateReply({
       agent,
       apiKey,
@@ -210,10 +212,21 @@ const turn = async (ticketId: number, agentId: number, send: Sender, typing?: Ty
         ticketId: ticket.id
       },
       crm: crmFor(agent, ticket),
-      addTag: tagAdder(ticket)
+      addTag: tagAdder(ticket),
+      sendMedia: async file => {
+        media.push(file);
+        return { ok: true, message: `O arquivo "${file.name}" será enviado logo depois da sua mensagem.` };
+      }
     });
 
     if (result.reply) await sendReply(ticket, agent, result.reply, send, typing);
+    for (const file of media) {
+      try {
+        await send(contentFor(file, mediaPath(ticket.companyId, agent.id, file)));
+      } catch (err) {
+        logger.error(`AI agent ${agent.id} could not send "${file.name}" on ticket ${ticket.id}: ${err}`);
+      }
+    }
     await applyActions(ticket, result.actions);
 
     await AiAgentRun.create({

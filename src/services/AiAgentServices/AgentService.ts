@@ -9,6 +9,7 @@ import { sanitizeHttpTools, serializeHttpTools } from "./httpTools";
 import { sanitizeMcpServers, serializeMcpServers } from "./mcpTools";
 import { connectionStatuses, syncAgentConnections } from "./mcpOAuth";
 import { splitToolConfig, waitToolConfig } from "./messageParts";
+import { removeOrphanMedia, sanitizeMediaTool } from "./mediaTools";
 import { assertCrmToolConfig, crmConfigChanged, crmToolConfig } from "../CrmServices/AgentDealService";
 
 const EFFORTS = ["low", "medium", "high"];
@@ -74,7 +75,8 @@ const clean = (data: AgentData, partial: boolean, previous: AiAgentTools = {}) =
         enabled: !!tools.tag?.enabled,
         tagIds: (tools.tag?.tagIds || []).map(Number).filter(Boolean),
         instructions: String(tools.tag?.instructions || "").trim().slice(0, 1000)
-      }
+      },
+      media: sanitizeMediaTool(tools.media, previous.media)
     };
   }
   return out;
@@ -155,14 +157,19 @@ export const updateAgent = async (id: number | string, data: AgentData, companyI
     // A key belongs to one provider.
     key = { apiKeyEncrypted: null, keyHint: null };
   }
+  const mediaBefore = agent.tools?.media?.files || [];
   await agent.update({ ...values, ...key });
-  if (values.tools) await syncAgentConnections(companyId, agent.id, oauthServerIds(agent.tools));
+  if (values.tools) {
+    await syncAgentConnections(companyId, agent.id, oauthServerIds(agent.tools));
+    await removeOrphanMedia(companyId, agent.id, mediaBefore, agent.tools?.media?.files || []);
+  }
   return showAgent(id, companyId);
 };
 
 export const deleteAgent = async (id: number | string, companyId: number) => {
   const agent = await findAgent(id, companyId);
   await Whatsapp.update({ aiAgentId: null } as any, { where: { aiAgentId: agent.id, companyId } });
+  await removeOrphanMedia(companyId, agent.id, agent.tools?.media?.files || [], []);
   await agent.destroy();
 };
 

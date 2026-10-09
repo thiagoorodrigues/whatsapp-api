@@ -1,4 +1,5 @@
 import { AiAgentTools } from "../../models/AiAgent";
+import { AgentMediaFile, MAX_MEDIA_PER_REPLY } from "./mediaTools";
 import { callHttpTool, describeResult, HttpContext, httpToolDefinitions, toolNameOf } from "./httpTools";
 import { ToolDefinition } from "./types";
 
@@ -23,6 +24,8 @@ export interface ToolContext {
     list: { id: number; name: string }[];
     add?: (tagId: number) => Promise<{ ok: boolean; message: string }>;
   };
+  /** Queues a file to go after the reply; absent in the test console. */
+  sendMedia?: (file: AgentMediaFile) => Promise<{ ok: boolean; message: string }>;
 }
 
 const DEAL_SOURCES = ["ad", "instagram", "site", "referral", "whatsapp", "other"];
@@ -228,6 +231,33 @@ export const buildToolSet = (config: AiAgentTools = {}, ctx: ToolContext): ToolS
       if (!tag) return { result: `Tag não permitida. Use uma destas: ${tagList.map(t => t.name).join(", ")}.`, error: true };
       if (!ctx.tags?.add) return { result: `Simulação (teste): a tag "${tag.name}" seria adicionada ao atendimento.` };
       const r = await ctx.tags.add(tag.id);
+      return r.ok ? { result: r.message } : { result: r.message, error: true };
+    };
+  }
+
+  const mediaFiles = config.media?.enabled ? config.media.files || [] : [];
+  if (mediaFiles.length) {
+    let sent = 0;
+    definitions.push({
+      name: "enviar_midia",
+      description:
+        "Envia ao cliente um dos arquivos da empresa (folder, tabela, vídeo...). Ele chega logo depois da sua " +
+        "mensagem; diga em uma frase que está enviando. Arquivos e quando enviar cada um:\n" +
+        mediaFiles.map(f => `- ${f.name}${f.description ? `: ${f.description}` : ""}`).join("\n"),
+      parameters: {
+        type: "object",
+        properties: { arquivo: { type: "string", enum: mediaFiles.map(f => f.name), description: "Nome do arquivo" } },
+        required: ["arquivo"],
+        additionalProperties: false
+      }
+    });
+    handlers.enviar_midia = async input => {
+      const file = mediaFiles.find(f => f.name === String(input.arquivo || ""));
+      if (!file) return { result: `Arquivo desconhecido. Use um destes: ${mediaFiles.map(f => f.name).join(", ")}.`, error: true };
+      if (sent >= MAX_MEDIA_PER_REPLY) return { result: `No máximo ${MAX_MEDIA_PER_REPLY} arquivos por resposta.`, error: true };
+      sent += 1;
+      if (!ctx.sendMedia) return { result: `Simulação (teste): o arquivo "${file.name}" seria enviado depois da mensagem.` };
+      const r = await ctx.sendMedia(file);
       return r.ok ? { result: r.message } : { result: r.message, error: true };
     };
   }

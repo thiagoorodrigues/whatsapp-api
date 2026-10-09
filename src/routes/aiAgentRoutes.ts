@@ -5,9 +5,13 @@ import requirePlanFeature from "../middleware/requirePlanFeature";
 import multer from "multer";
 import * as AiAgentController from "../controllers/AiAgentController";
 import * as AiKnowledgeController from "../controllers/AiKnowledgeController";
+import { MAX_MEDIA_BYTES, MAX_MEDIA_FILES } from "../services/AiAgentServices/mediaTools";
 
 // Knowledge files are read in memory and only their text is kept.
 const knowledgeUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
+
+// "Enviar mídia" files, kept on disk (see mediaTools).
+const mediaUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_MEDIA_BYTES, files: MAX_MEDIA_FILES } });
 
 // AI agents are sold per plan.
 const aiInPlan = requirePlanFeature("useAiAgents");
@@ -32,6 +36,7 @@ aiAgentRoutes.put("/ai-agents/:agentId", isAuth, aiInPlan, AiAgentController.upd
 aiAgentRoutes.delete("/ai-agents/:agentId", isAuth, aiInPlan, AiAgentController.remove);
 aiAgentRoutes.put("/ai-agents/:agentId/connections", isAuth, aiInPlan, AiAgentController.connections);
 aiAgentRoutes.post("/ai-agents/:agentId/test", isAuth, aiInPlan, AiAgentController.test);
+aiAgentRoutes.post("/ai-agents/:agentId/media", isAuth, aiInPlan, mediaUpload.array("files", MAX_MEDIA_FILES), AiAgentController.uploadMedia);
 
 aiAgentRoutes.get("/ai-agents/:agentId/knowledge", isAuth, aiInPlan, AiKnowledgeController.index);
 aiAgentRoutes.post("/ai-agents/:agentId/knowledge", isAuth, aiInPlan, knowledgeUpload.single("file"), AiKnowledgeController.store);
