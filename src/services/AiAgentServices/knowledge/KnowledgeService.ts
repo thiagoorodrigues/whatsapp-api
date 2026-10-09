@@ -6,6 +6,7 @@ import AiKnowledgeDocument from "../../../models/AiKnowledgeDocument";
 import { logger } from "../../../utils/logger";
 import { findAgent } from "../AgentService";
 import { chunkText } from "./chunk";
+import { embedDocument, resumeEmbeddings } from "./EmbeddingService";
 import { extractText } from "./extract";
 
 // Knowledge base of an agent. Documents are split into chunks searched with
@@ -30,6 +31,9 @@ const LIST_ATTRIBUTES = [
   "isActive",
   "charCount",
   "chunkCount",
+  "embeddingModel",
+  "embeddingStatus",
+  "embeddingError",
   "createdAt",
   "updatedAt"
 ];
@@ -70,6 +74,8 @@ export const indexDocument = async (documentId: number): Promise<void> => {
     logger.error(`Knowledge document ${documentId} failed: ${err}`);
     await document.update({ status: "error", error: String((err as Error)?.message || err).slice(0, 500) });
   }
+  // Outside the try: an embeddings failure must not mark the document as failed.
+  await embedDocument(documentId).catch(err => logger.error(`Knowledge embeddings ${documentId}: ${err}`));
 };
 
 const indexLater = (documentId: number) => {
@@ -266,4 +272,7 @@ export const resumeInterruptedIndexing = async (): Promise<void> => {
     attributes: ["id"]
   });
   stuck.forEach(d => indexLater(d.id));
+  setImmediate(() => {
+    resumeEmbeddings().catch(err => logger.error(`Knowledge embeddings resume failed: ${err}`));
+  });
 };
