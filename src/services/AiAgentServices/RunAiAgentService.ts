@@ -1,7 +1,7 @@
 import * as Sentry from "@sentry/node";
 import { OutgoingContent } from "../../channels/types";
 
-import { qualifyContactDeal, registerContactDeal } from "../CrmServices/AgentDealService";
+import { moveContactDeal, registerContactDeal } from "../CrmServices/AgentDealService";
 import AiAgent from "../../models/AiAgent";
 import AiAgentRun from "../../models/AiAgentRun";
 import Company from "../../models/Company";
@@ -53,7 +53,7 @@ export const agentMayAnswer = (ticket: Ticket): boolean =>
   ticket.status !== "closed" &&
   !ticket.isGroup &&
   !ticket.userId &&
-  !ticket.queueId &&
+  (!ticket.queueId || !!ticket.aiAgentKept) &&
   !ticket.useIntegration &&
   !ticket.aiStoppedAt;
 
@@ -106,7 +106,7 @@ const crmFor = (agent: AiAgent, ticket: Ticket) => {
   return {
     register: (input: { summary: string; title?: string; value?: number | string; source?: string }) =>
       registerContactDeal({ ...target, stageId: cfg.stageId, ...input }),
-    qualify: () => qualifyContactDeal({ ...target, stageId: cfg.qualifiedStageId })
+    move: (stageId: number) => moveContactDeal({ ...target, stageId })
   };
 };
 
@@ -126,10 +126,20 @@ const tagAdder = (ticket: Ticket) => async (tagId: number) => {
 
 const applyActions = async (ticket: Ticket, actions: DeferredAction[]) => {
   for (const action of actions) {
-    if (action.type === "transfer") {
-      await ticket.update({ aiStoppedAt: new Date() });
+    if (action.type === "transfer" && action.keepAgent && action.queueId) {
+      // Only the queue changes: the agent goes on answering.
+      await ticket.update({ aiAgentKept: true });
       await UpdateTicketService({
-        ticketData: { queueId: action.queueId, status: "pending", chatbot: false } as any,
+        ticketData: { queueId: action.queueId, chatbot: false } as any,
+        ticketId: ticket.id,
+        companyId: ticket.companyId
+      });
+    } else if (action.type === "transfer") {
+      await ticket.update({ aiStoppedAt: new Date(), aiAgentKept: false });
+      await UpdateTicketService({
+        ticketData: (action.userId
+          ? { userId: action.userId, status: "open", chatbot: false }
+          : { queueId: action.queueId, status: "pending", chatbot: false }) as any,
         ticketId: ticket.id,
         companyId: ticket.companyId
       });

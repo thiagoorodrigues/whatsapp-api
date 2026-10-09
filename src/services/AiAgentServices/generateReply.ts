@@ -1,5 +1,7 @@
 import AiAgent from "../../models/AiAgent";
 import Tag from "../../models/Tag";
+import User from "../../models/User";
+import FunnelStage from "../../models/FunnelStage";
 import { getProvider } from "./providers";
 import { buildContext, buildSystemPrompt } from "./prompt";
 import { buildToolSet, DeferredAction, ToolContext } from "./tools";
@@ -47,8 +49,19 @@ const generateReply = async (params: {
         order: [["name", "ASC"]]
       })
     : [];
+  const userIds = (agent.tools?.transfer?.targets || []).filter(t => t.kind === "user").map(t => t.id);
+  const users = agent.tools?.transfer?.enabled && userIds.length
+    ? await User.findAll({ where: { id: userIds, companyId: agent.companyId }, attributes: ["id", "name"] })
+    : [];
+  const crmCfg = agent.tools?.crm;
+  const stageIds = crmCfg?.moveStages ? crmCfg.moveStages.map(m => m.stageId) : crmCfg?.qualifiedStageId ? [crmCfg.qualifiedStageId] : [];
+  const crmStages = crmCfg?.enabled && stageIds.length
+    ? await FunnelStage.findAll({ where: { id: stageIds, companyId: agent.companyId, kind: "open", archived: false }, attributes: ["id", "name"] })
+    : [];
   const toolSet = buildToolSet(agent.tools || {}, {
     queues,
+    users: users.map(u => ({ id: u.id, name: u.name })),
+    crmStages: crmStages.map(st => ({ id: st.id, name: st.name })),
     http: params.httpContext || { contactName: params.contactName },
     searchKnowledge: knowledge.searchable
       ? query => searchKnowledge(agent.id, agent.companyId, query)

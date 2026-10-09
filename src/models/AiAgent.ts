@@ -23,12 +23,28 @@ import type { McpServer } from "../services/AiAgentServices/mcpTools";
 export type AiAgentStatus = "draft" | "active" | "paused";
 
 export interface AiAgentTools {
-  transfer?: { enabled: boolean; queueIds?: number[] };
+  // Where the agent may hand the conversation, with when to use each; older
+  // agents only have queueIds. keepAgent: a queue transfer only changes the
+  // queue and the agent goes on answering.
+  transfer?: {
+    enabled: boolean;
+    queueIds?: number[];
+    targets?: { kind: "queue" | "user"; id: number; instructions: string }[];
+    keepAgent?: boolean;
+  };
   close?: { enabled: boolean };
   http?: HttpTool[];
   mcp?: McpServer[];
   // Lets the agent register and qualify the contact's deal in one funnel.
-  crm?: { enabled: boolean; funnelId: number | null; stageId: number | null; qualifiedStageId: number | null };
+  // moveStages: open columns the agent may move the deal to, with when; older
+  // agents have only qualifiedStageId.
+  crm?: {
+    enabled: boolean;
+    funnelId: number | null;
+    stageId: number | null;
+    qualifiedStageId: number | null;
+    moveStages?: { stageId: number; instructions: string }[];
+  };
   // Sends the reply as several short messages, with "typing..." before each
   // one for `delay` seconds (null: by the size of the text).
   split?: { enabled: boolean; delay: number | null };

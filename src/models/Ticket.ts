@@ -151,6 +151,11 @@ class Ticket extends Model<Ticket> {
   // The AI agent handed this conversation to people (until it is closed).
   @Column
   aiStoppedAt: Date | null;
+
+  // The AI agent moved the conversation to a queue and goes on answering it.
+  @Default(false)
+  @Column
+  aiAgentKept: boolean;
 }
 
 export default Ticket;

@@ -17,6 +17,7 @@ export interface CrmToolConfig {
   funnelId: number | null;
   stageId: number | null;
   qualifiedStageId: number | null;
+  moveStages?: { stageId: number; instructions: string }[];
 }
 
 interface Outcome {
@@ -31,12 +32,24 @@ const idOrNull = (value: unknown): number | null => {
   return Number.isInteger(n) && n > 0 ? n : null;
 };
 
-export const crmToolConfig = (raw: any): CrmToolConfig => ({
-  enabled: !!(raw && raw.enabled),
-  funnelId: idOrNull(raw && raw.funnelId),
-  stageId: idOrNull(raw && raw.stageId),
-  qualifiedStageId: idOrNull(raw && raw.qualifiedStageId)
-});
+export const crmToolConfig = (raw: any): CrmToolConfig => {
+  const cfg: CrmToolConfig = {
+    enabled: !!(raw && raw.enabled),
+    funnelId: idOrNull(raw && raw.funnelId),
+    stageId: idOrNull(raw && raw.stageId),
+    qualifiedStageId: idOrNull(raw && raw.qualifiedStageId)
+  };
+  // Agents saved before the stage list keep only qualifiedStageId.
+  if (raw && Array.isArray(raw.moveStages)) {
+    const seen = new Set<number>();
+    cfg.moveStages = raw.moveStages
+      .map((m: any) => ({ stageId: idOrNull(m && m.stageId), instructions: String((m && m.instructions) || "").trim().slice(0, 500) }))
+      .filter((m: { stageId: number | null }) => m.stageId && !seen.has(m.stageId) && seen.add(m.stageId))
+      .slice(0, 20);
+    cfg.qualifiedStageId = null;
+  }
+  return cfg;
+};
 
 const stamp = (at: Date) =>
   at
@@ -71,6 +84,10 @@ export const assertCrmToolConfig = async (companyId: number, cfg: CrmToolConfig)
   if (!(await findActiveFunnel(companyId, cfg.funnelId))) throw invalid();
   if (!(await findOpenStage(companyId, cfg.funnelId, cfg.stageId))) throw invalid();
   if (cfg.qualifiedStageId && !(await findOpenStage(companyId, cfg.funnelId, cfg.qualifiedStageId))) throw invalid();
+  for (const m of cfg.moveStages || []) {
+    // eslint-disable-next-line no-await-in-loop
+    if (!(await findOpenStage(companyId, cfg.funnelId, m.stageId))) throw invalid();
+  }
 };
 
 const unavailable = async (companyId: number, funnelId: number | null, stageId: number | null) => {
@@ -179,21 +196,47 @@ export const registerContactDeal = async (params: {
     : { ok: true, created: false, dealId: outcome.dealId, message: "Negócio do contato atualizado no CRM." };
 };
 
-export const qualifyContactDeal = async (params: {
+const MOVE_TEXT = {
+  qualified: {
+    noDeal: "Registre o negócio antes de marcar o lead como qualificado.",
+    already: "O negócio já está na coluna de qualificado.",
+    done: "Lead marcado como qualificado no CRM.",
+    failed: "Não foi possível marcar o lead agora. Siga a conversa normalmente."
+  },
+  stage: {
+    noDeal: "Registre o negócio antes de mudar a etapa.",
+    already: "O negócio já está nessa etapa.",
+    done: "Negócio movido para a nova etapa no CRM.",
+    failed: "Não foi possível mover o negócio agora. Siga a conversa normalmente."
+  }
+};
+
+export const qualifyContactDeal = (params: {
   companyId: number;
   contactId: number;
   funnelId: number | null;
   stageId: number | null;
   now?: Date;
+}): Promise<Outcome> => moveContactDeal({ ...params, texts: MOVE_TEXT.qualified });
+
+/** Moves the contact's open deal forward to an open column (never back). */
+export const moveContactDeal = async (params: {
+  companyId: number;
+  contactId: number;
+  funnelId: number | null;
+  stageId: number | null;
+  now?: Date;
+  texts?: typeof MOVE_TEXT.stage;
 }): Promise<Outcome> => {
   const { companyId, contactId, funnelId, stageId } = params;
+  const texts = params.texts || MOVE_TEXT.stage;
   const now = params.now || new Date();
   const problem = await unavailable(companyId, funnelId, stageId);
   if (problem) return { ok: false, message: problem };
   try {
     const deal = await findOpenDeal(companyId, funnelId as number, contactId);
-    if (!deal) return { ok: false, message: "Registre o negócio antes de marcar o lead como qualificado." };
-    if (deal.stageId === stageId) return { ok: true, message: "O negócio já está na coluna de qualificado." };
+    if (!deal) return { ok: false, message: texts.noDeal };
+    if (deal.stageId === stageId) return { ok: true, message: texts.already };
     const [current, target] = await Promise.all([
       FunnelStage.findOne({ where: { id: deal.stageId, companyId } }),
       FunnelStage.findOne({ where: { id: stageId as number, companyId } })
@@ -214,9 +257,9 @@ export const qualifyContactDeal = async (params: {
       );
     });
     await notify(companyId, "update", deal.id);
-    return { ok: true, dealId: deal.id, message: "Lead marcado como qualificado no CRM." };
+    return { ok: true, dealId: deal.id, message: texts.done };
   } catch (err) {
     logger.error(`CRM agent: could not qualify deal for contact ${contactId}: ${err}`);
-    return { ok: false, message: "Não foi possível marcar o lead agora. Siga a conversa normalmente." };
+    return { ok: false, message: texts.failed };
   }
 };

@@ -13,7 +13,7 @@ import generateReply from "../generateReply";
 describe("generateReply", () => {
   it("passes the agent settings and collects deferred actions from tool calls", async () => {
     runTurn.mockImplementation(async req => {
-      const call = await req.executeTool("transferir_para_atendente", { fila: "Suporte", motivo: "boleto" });
+      const call = await req.executeTool("transferir_para_atendente", { destino: "Setor: Suporte", motivo: "boleto" });
       return {
         text: "Vou te passar para o suporte.",
         inputTokens: 10,
@@ -46,7 +46,7 @@ describe("generateReply", () => {
     expect(req.systemContext).toContain("Loja");
     expect(req.tools.map((t: any) => t.name)).toEqual(["transferir_para_atendente"]);
     expect(result.reply).toBe("Vou te passar para o suporte.");
-    expect(result.actions).toEqual([{ type: "transfer", queueId: 7, reason: "boleto" }]);
+    expect(result.actions).toEqual([{ type: "transfer", queueId: 7, userId: null, keepAgent: false, reason: "boleto" }]);
   });
 
   it("offers the knowledge search and puts 'always include' documents in the prompt", async () => {

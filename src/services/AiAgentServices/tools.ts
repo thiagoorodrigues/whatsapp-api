@@ -6,18 +6,22 @@ import { ToolDefinition } from "./types";
 // Actions that change the ticket run only after the agent's reply is sent,
 // so the customer gets the goodbye/handoff message before the ticket moves.
 export type DeferredAction =
-  | { type: "transfer"; queueId: number | null; reason: string }
+  | { type: "transfer"; queueId: number | null; userId: number | null; keepAgent: boolean; reason: string }
   | { type: "close"; reason: string };
 
 export interface ToolContext {
   queues: { id: number; name: string }[];
+  /** People the transfer may name (only those in the agent's destinations are used). */
+  users?: { id: number; name: string }[];
+  /** Names of the CRM columns the agent may move the deal to. */
+  crmStages?: { id: number; name: string }[];
   http?: HttpContext;
   /** Search of the agent's knowledge base (when it has documents to search). */
   searchKnowledge?: (query: string) => Promise<{ title: string; description: string | null; content: string }[]>;
   /** The conversation's deal in the CRM; absent in the test console, where CRM tools only simulate. */
   crm?: {
     register: (input: { summary: string; title?: string; value?: number | string; source?: string }) => Promise<{ ok: boolean; message: string }>;
-    qualify: () => Promise<{ ok: boolean; message: string }>;
+    move: (stageId: number) => Promise<{ ok: boolean; message: string }>;
   };
   /** Tags the agent may use; without `add` (test console) it only simulates. */
   tags?: {
@@ -54,26 +58,39 @@ export const buildToolSet = (config: AiAgentTools = {}, ctx: ToolContext): ToolS
       : null;
 
   if (config.transfer?.enabled) {
-    const allowed = (config.transfer.queueIds || []).length
-      ? ctx.queues.filter(q => config.transfer.queueIds.includes(q.id))
-      : ctx.queues;
-    const names = allowed.map(q => q.name);
+    const transfer = config.transfer;
+    // Destinations: the configured ones, the older queue list, or any queue.
+    const configured = (transfer.targets || []).length
+      ? transfer.targets
+      : (transfer.queueIds || []).map(id => ({ kind: "queue" as const, id, instructions: "" }));
+    const destinations = (configured.length
+      ? configured
+      : ctx.queues.map(q => ({ kind: "queue" as const, id: q.id, instructions: "" }))
+    )
+      .map(t => {
+        const found = (t.kind === "user" ? ctx.users || [] : ctx.queues).find(x => x.id === t.id);
+        return found ? { ...t, label: `${t.kind === "user" ? "Atendente" : "Setor"}: ${found.name}` } : null;
+      })
+      .filter(Boolean) as { kind: "queue" | "user"; id: number; instructions: string; label: string }[];
+    const labels = destinations.map(d => d.label);
+    const guide = destinations.filter(d => d.instructions.trim()).map(d => `- ${d.label}: ${d.instructions.trim()}`);
 
     definitions.push({
       name: "transferir_para_atendente",
       description:
         "Transfere a conversa para um atendente humano. Use quando o cliente pedir para falar com uma pessoa, " +
         "quando você não conseguir resolver ou quando o assunto exigir uma decisão humana. " +
-        "Depois de chamar, avise o cliente em uma frase curta que um atendente vai continuar.",
+        "Depois de chamar, avise o cliente em uma frase curta que um atendente vai continuar." +
+        (guide.length ? `\nPara onde transferir em cada caso:\n${guide.join("\n")}` : ""),
       parameters: {
         type: "object",
         properties: {
-          ...(names.length
-            ? { fila: { type: "string", enum: names, description: "Fila (setor) que deve assumir a conversa." } }
+          ...(labels.length
+            ? { destino: { type: "string", enum: labels, description: "Setor ou atendente que deve assumir a conversa." } }
             : {}),
           motivo: { type: "string", description: "Resumo curto do que o cliente precisa, para o atendente." }
         },
-        required: names.length ? ["fila", "motivo"] : ["motivo"],
+        required: labels.length ? ["destino", "motivo"] : ["motivo"],
         additionalProperties: false
       }
     });
@@ -81,15 +98,21 @@ export const buildToolSet = (config: AiAgentTools = {}, ctx: ToolContext): ToolS
     handlers.transferir_para_atendente = input => {
       const decided = alreadyDecided();
       if (decided) return decided;
-      const queueName = text(input.fila);
-      const queue = names.length ? allowed.find(q => q.name === queueName) : null;
-      if (names.length && !queue) {
-        return { result: `Fila inválida. Use uma destas: ${names.join(", ")}.`, error: true };
+      const target = labels.length ? destinations.find(d => d.label === text(input.destino)) : null;
+      if (labels.length && !target) {
+        return { result: `Destino inválido. Use um destes: ${labels.join(", ")}.`, error: true };
       }
-      actions.push({ type: "transfer", queueId: queue ? queue.id : null, reason: text(input.motivo) });
+      const toQueue = target?.kind === "queue";
+      actions.push({
+        type: "transfer",
+        queueId: toQueue ? target.id : null,
+        userId: target?.kind === "user" ? target.id : null,
+        keepAgent: toQueue && !!transfer.keepAgent,
+        reason: text(input.motivo)
+      });
       return {
-        result: queue
-          ? `Transferência para a fila "${queue.name}" será feita após sua resposta.`
+        result: target
+          ? `Transferência para ${target.label} será feita após sua resposta.`
           : "Transferência para um atendente será feita após sua resposta."
       };
     };
@@ -194,17 +217,37 @@ export const buildToolSet = (config: AiAgentTools = {}, ctx: ToolContext): ToolS
       return r.ok ? { result: r.message } : { result: r.message, error: true };
     };
 
-    if (crm.qualifiedStageId) {
+    // Columns the agent may move the deal to; older agents: the qualified one.
+    const moves = (crm.moveStages
+      ? crm.moveStages
+      : crm.qualifiedStageId
+      ? [{ stageId: crm.qualifiedStageId, instructions: "quando o lead estiver qualificado: confirmou interesse e tem perfil para seguir com o time de vendas" }]
+      : []
+    )
+      .map(m => {
+        const stage = (ctx.crmStages || []).find(st => st.id === m.stageId);
+        return stage ? { ...m, name: stage.name } : null;
+      })
+      .filter(Boolean) as { stageId: number; instructions: string; name: string }[];
+    if (moves.length) {
       definitions.push({
-        name: "marcar_lead_qualificado",
+        name: "mover_negocio",
         description:
-          "Marca no CRM o negócio deste contato como lead qualificado, quando ele confirmou interesse e tem " +
-          "perfil para seguir com o time de vendas. Registre o negócio antes.",
-        parameters: { type: "object", properties: {}, additionalProperties: false }
+          "Move no CRM o negócio deste contato para outra etapa do funil, quando a conversa chegar nela. " +
+          "Registre o negócio antes. Não avise o cliente sobre o CRM. Etapas e quando mover para cada uma:\n" +
+          moves.map(m => `- ${m.name}${m.instructions.trim() ? `: ${m.instructions.trim()}` : ""}`).join("\n"),
+        parameters: {
+          type: "object",
+          properties: { etapa: { type: "string", enum: moves.map(m => m.name), description: "Etapa do funil" } },
+          required: ["etapa"],
+          additionalProperties: false
+        }
       });
-      handlers.marcar_lead_qualificado = async () => {
-        if (!ctx.crm) return { result: "Simulação (teste): o negócio seria movido para a coluna de qualificado." };
-        const r = await ctx.crm.qualify();
+      handlers.mover_negocio = async input => {
+        const move = moves.find(m => m.name === text(input.etapa));
+        if (!move) return { result: `Etapa inválida. Use uma destas: ${moves.map(m => m.name).join(", ")}.`, error: true };
+        if (!ctx.crm) return { result: `Simulação (teste): o negócio seria movido para a etapa "${move.name}".` };
+        const r = await ctx.crm.move(move.stageId);
         return r.ok ? { result: r.message } : { result: r.message, error: true };
       };
     }

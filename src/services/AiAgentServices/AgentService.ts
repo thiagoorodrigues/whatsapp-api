@@ -63,7 +63,18 @@ const clean = (data: AgentData, partial: boolean, previous: AiAgentTools = {}) =
     out.tools = {
       transfer: {
         enabled: !!tools.transfer?.enabled,
-        queueIds: (tools.transfer?.queueIds || []).map(Number).filter(Boolean)
+        queueIds: (tools.transfer?.queueIds || []).map(Number).filter(Boolean),
+        targets: (Array.isArray(tools.transfer?.targets) ? tools.transfer.targets : [])
+          .map((t: any) => ({
+            kind: t?.kind === "user" ? ("user" as const) : ("queue" as const),
+            id: Number(t?.id),
+            instructions: String(t?.instructions || "").trim().slice(0, 500)
+          }))
+          .filter((t: { id: number }, i: number, all: { kind: string; id: number }[]) =>
+            t.id > 0 && all.findIndex(o => o.kind === (t as any).kind && o.id === t.id) === i
+          )
+          .slice(0, 30),
+        keepAgent: !!tools.transfer?.keepAgent
       },
       close: { enabled: !!tools.close?.enabled },
       http: sanitizeHttpTools(tools.http, previous.http),

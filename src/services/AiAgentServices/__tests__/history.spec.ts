@@ -74,6 +74,8 @@ describe("agentMayAnswer", () => {
     expect(agentMayAnswer(base as any)).toBe(true);
     expect(agentMayAnswer({ ...base, userId: 3 } as any)).toBe(false);
     expect(agentMayAnswer({ ...base, queueId: 1 } as any)).toBe(false);
+    expect(agentMayAnswer({ ...base, queueId: 1, aiAgentKept: true } as any)).toBe(true);
+    expect(agentMayAnswer({ ...base, queueId: 1, aiAgentKept: true, userId: 3 } as any)).toBe(false);
     expect(agentMayAnswer({ ...base, status: "closed" } as any)).toBe(false);
     expect(agentMayAnswer({ ...base, isGroup: true } as any)).toBe(false);
     expect(agentMayAnswer({ ...base, aiStoppedAt: new Date() } as any)).toBe(false);
