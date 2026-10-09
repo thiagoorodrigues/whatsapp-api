@@ -44,5 +44,7 @@ aiAgentRoutes.put("/ai-agents/:agentId/knowledge/:documentId", isAuth, aiInPlan,
 aiAgentRoutes.delete("/ai-agents/:agentId/knowledge/:documentId", isAuth, aiInPlan, AiKnowledgeController.remove);
 aiAgentRoutes.post("/ai-agents/:agentId/knowledge/:documentId/reindex", isAuth, aiInPlan, AiKnowledgeController.reindex);
 aiAgentRoutes.post("/ai-agents/:agentId/knowledge-search", isAuth, aiInPlan, AiKnowledgeController.search);
+aiAgentRoutes.get("/ai-agents/:agentId/knowledge-settings", isAuth, aiInPlan, AiKnowledgeController.settings);
+aiAgentRoutes.put("/ai-agents/:agentId/knowledge-settings", isAuth, aiInPlan, AiKnowledgeController.updateSettings);
 
 export default aiAgentRoutes;

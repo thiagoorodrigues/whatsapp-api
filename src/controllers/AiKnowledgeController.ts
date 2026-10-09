@@ -5,9 +5,11 @@ import {
   createFromFile,
   createFromText,
   deleteDocument,
+  knowledgeSettings,
   listDocuments,
   reindexDocument,
   searchKnowledge,
+  setEmbeddingModel,
   updateDocument
 } from "../services/AiAgentServices/knowledge/KnowledgeService";
 
@@ -49,4 +51,12 @@ export const reindex = async (req: Request, res: Response): Promise<Response> =>
 export const search = async (req: Request, res: Response): Promise<Response> => {
   const agent = await findAgent(req.params.agentId, req.user.companyId);
   return res.json(await searchKnowledge(agent, String(req.body?.query || "")));
+};
+
+export const settings = async (req: Request, res: Response): Promise<Response> =>
+  res.json(await knowledgeSettings(req.params.agentId, req.user.companyId));
+
+export const updateSettings = async (req: Request, res: Response): Promise<Response> => {
+  admin(req);
+  return res.json(await setEmbeddingModel(req.params.agentId, req.user.companyId, req.body?.embeddingModel));
 };

@@ -7,8 +7,8 @@ import { logger } from "../../../utils/logger";
 import { findAgent } from "../AgentService";
 import { agentKey } from "../keys";
 import { chunkText } from "./chunk";
-import { embedDocument, resumeEmbeddings } from "./EmbeddingService";
-import { embedTexts, toVectorLiteral } from "./embeddings";
+import { embedDocument, reembedAgentLater, resumeEmbeddings } from "./EmbeddingService";
+import { embedTexts, embeddingModelsFor, isEmbeddingModelFor, toVectorLiteral } from "./embeddings";
 import { fuseRankings } from "./hybrid";
 import { extractText } from "./extract";
 
@@ -330,4 +330,33 @@ export const resumeInterruptedIndexing = async (): Promise<void> => {
   setImmediate(() => {
     resumeEmbeddings().catch(err => logger.error(`Knowledge embeddings resume failed: ${err}`));
   });
+};
+
+export interface KnowledgeSettings {
+  provider: string;
+  embeddingModel: string | null;
+  options: { id: string; label: string }[];
+}
+
+const settingsOf = (agent: { provider: string; embeddingModel: string | null }): KnowledgeSettings => ({
+  provider: agent.provider,
+  embeddingModel: agent.embeddingModel || null,
+  options: embeddingModelsFor(agent.provider)
+});
+
+export const knowledgeSettings = async (agentId: number | string, companyId: number) =>
+  settingsOf(await findAgent(agentId, companyId));
+
+/** Chooses the embedding model (null/"" = off); a change redoes every document's vectors. */
+export const setEmbeddingModel = async (agentId: number | string, companyId: number, value: unknown) => {
+  const agent = await findAgent(agentId, companyId);
+  const model = value === null || value === undefined || value === "" ? null : value;
+  if (model !== null && !isEmbeddingModelFor(agent.provider, model)) {
+    throw new AppError("ERR_AI_EMBEDDING_MODEL_INVALID");
+  }
+  if ((agent.embeddingModel || null) !== model) {
+    await agent.update({ embeddingModel: model });
+    reembedAgentLater(agent.id);
+  }
+  return settingsOf(agent);
 };

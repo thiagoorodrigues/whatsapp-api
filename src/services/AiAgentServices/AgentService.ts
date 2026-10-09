@@ -5,6 +5,8 @@ import AiAgentRun from "../../models/AiAgentRun";
 import Whatsapp from "../../models/Whatsapp";
 import { isProviderName } from "./providers";
 import { validateKey } from "./keys";
+import { defaultEmbeddingModel, nextEmbeddingModel } from "./knowledge/embeddings";
+import { reembedAgentLater } from "./knowledge/EmbeddingService";
 import { sanitizeHttpTools, serializeHttpTools } from "./httpTools";
 import { sanitizeMcpServers, serializeMcpServers } from "./mcpTools";
 import { connectionStatuses, syncAgentConnections } from "./mcpOAuth";
@@ -153,7 +155,12 @@ export const createAgent = async (data: AgentData, companyId: number) => {
   );
   await assertCrmToolConfig(companyId, crmToolConfig((values.tools as AiAgentTools | undefined)?.crm));
   const key = data.apiKey ? await validateKey(values.provider as string, data.apiKey) : {};
-  const agent = await AiAgent.create({ ...values, ...key, companyId } as any);
+  const agent = await AiAgent.create({
+    ...values,
+    ...key,
+    embeddingModel: defaultEmbeddingModel(values.provider as string),
+    companyId
+  } as any);
   await syncAgentConnections(companyId, agent.id, oauthServerIds(agent.tools));
   return showAgent(agent.id, companyId);
 };
@@ -174,7 +181,13 @@ export const updateAgent = async (id: number | string, data: AgentData, companyI
     key = { apiKeyEncrypted: null, keyHint: null };
   }
   const mediaBefore = agent.tools?.media?.files || [];
-  await agent.update({ ...values, ...key });
+  // A provider without the current embedding model moves to its default
+  // (or off, for Claude) and the knowledge base vectors are redone.
+  const embeddingModel =
+    provider === agent.provider ? agent.embeddingModel || null : nextEmbeddingModel(agent.embeddingModel || null, provider);
+  const embeddingChanged = embeddingModel !== (agent.embeddingModel || null);
+  await agent.update({ ...values, ...key, ...(embeddingChanged ? { embeddingModel } : {}) });
+  if (embeddingChanged) reembedAgentLater(agent.id);
   if (values.tools) {
     await syncAgentConnections(companyId, agent.id, oauthServerIds(agent.tools));
     await removeOrphanMedia(companyId, agent.id, mediaBefore, agent.tools?.media?.files || []);
