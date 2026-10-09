@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { AiProvider, ToolCallRecord, TurnRequest, TurnResult, normalizeHistory, parseToolInput } from "../types";
+import { AiProvider, EmbedRequest, ToolCallRecord, TurnRequest, TurnResult, normalizeHistory, parseToolInput } from "../types";
 
 const runTurn = async (req: TurnRequest): Promise<TurnResult> => {
   const client = new OpenAI({ apiKey: req.apiKey, timeout: 90_000, maxRetries: 2 });
@@ -65,6 +65,12 @@ const listModels = async (apiKey: string) => {
   return models.sort((a, b) => a.id.localeCompare(b.id));
 };
 
-const openaiProvider: AiProvider = { name: "openai", runTurn, listModels };
+const embed = async (req: EmbedRequest): Promise<number[][]> => {
+  const client = new OpenAI({ apiKey: req.apiKey, timeout: 60_000, maxRetries: 2 });
+  const response = await client.embeddings.create({ model: req.model, input: req.texts, dimensions: req.dimensions });
+  return [...response.data].sort((a, b) => a.index - b.index).map(d => d.embedding);
+};
+
+const openaiProvider: AiProvider = { name: "openai", runTurn, listModels, embed };
 
 export default openaiProvider;

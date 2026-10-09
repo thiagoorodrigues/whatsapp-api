@@ -47,10 +47,23 @@ export interface TurnResult {
   stopReason: string;
 }
 
+export type EmbeddingKind = "document" | "query";
+
+export interface EmbedRequest {
+  apiKey: string;
+  model: string;
+  texts: string[];
+  // Gemini tunes vectors for documents vs. questions; OpenAI ignores it.
+  kind: EmbeddingKind;
+  dimensions: number;
+}
+
 export interface AiProvider {
   name: AiProviderName;
   runTurn: (request: TurnRequest) => Promise<TurnResult>;
   listModels: (apiKey: string) => Promise<{ id: string; name: string }[]>;
+  // Text embeddings (knowledge base semantic search); absent = not offered.
+  embed?: (request: EmbedRequest) => Promise<number[][]>;
 }
 
 // Turns the stored history into a valid alternating conversation that starts

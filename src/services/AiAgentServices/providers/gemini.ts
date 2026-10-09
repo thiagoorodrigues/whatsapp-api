@@ -1,5 +1,5 @@
 import { GoogleGenAI, Content } from "@google/genai";
-import { AiProvider, ToolCallRecord, TurnRequest, TurnResult, normalizeHistory } from "../types";
+import { AiProvider, EmbedRequest, ToolCallRecord, TurnRequest, TurnResult, normalizeHistory } from "../types";
 
 const runTurn = async (req: TurnRequest): Promise<TurnResult> => {
   const ai = new GoogleGenAI({ apiKey: req.apiKey });
@@ -75,6 +75,19 @@ const listModels = async (apiKey: string) => {
   return models;
 };
 
-const geminiProvider: AiProvider = { name: "gemini", runTurn, listModels };
+const embed = async (req: EmbedRequest): Promise<number[][]> => {
+  const ai = new GoogleGenAI({ apiKey: req.apiKey });
+  const response = await ai.models.embedContent({
+    model: req.model,
+    contents: req.texts,
+    config: {
+      outputDimensionality: req.dimensions,
+      taskType: req.kind === "query" ? "RETRIEVAL_QUERY" : "RETRIEVAL_DOCUMENT"
+    }
+  });
+  return (response.embeddings || []).map(e => e.values || []);
+};
+
+const geminiProvider: AiProvider = { name: "gemini", runTurn, listModels, embed };
 
 export default geminiProvider;
