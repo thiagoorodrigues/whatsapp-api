@@ -19,6 +19,8 @@ export interface ToolContext {
   http?: HttpContext;
   /** Search of the agent's knowledge base (when it has documents to search). */
   searchKnowledge?: (query: string) => Promise<{ title: string; description: string | null; content: string }[]>;
+  /** The knowledge search also matches by meaning (embeddings), not only words. */
+  semanticKnowledge?: boolean;
   /** The conversation's deal in the CRM; absent in the test console, where CRM tools only simulate. */
   crm?: {
     register: (input: { summary: string; title?: string; value?: number | string; source?: string }) => Promise<{ ok: boolean; message: string }>;
@@ -152,8 +154,11 @@ export const buildToolSet = (config: AiAgentTools = {}, ctx: ToolContext): ToolS
       name: "buscar_base_conhecimento",
       description:
         "Busca trechos nos documentos da empresa (base de conhecimento). Use antes de responder sobre produtos, " +
-        "preços, prazos, políticas ou procedimentos. A busca é por palavras: se não achar, tente de novo com " +
-        "sinônimos ou termos mais gerais. Responda só com o que estiver nos trechos; se não houver, diga que não sabe.",
+        "preços, prazos, políticas ou procedimentos. " +
+        (ctx.semanticKnowledge
+          ? "A busca entende a pergunta pelo sentido; se não achar, tente de novo com outras palavras. "
+          : "A busca é por palavras: se não achar, tente de novo com sinônimos ou termos mais gerais. ") +
+        "Responda só com o que estiver nos trechos; se não houver, diga que não sabe.",
       parameters: {
         type: "object",
         properties: {

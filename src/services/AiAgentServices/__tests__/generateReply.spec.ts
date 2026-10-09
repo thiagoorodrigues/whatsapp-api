@@ -69,6 +69,6 @@ describe("generateReply", () => {
     expect(req.tools.map((t: any) => t.name)).toContain("buscar_base_conhecimento");
     expect(req.system).toContain('<documento titulo="Preços">');
     expect(req.system).toContain("Entrega Contagem: R$ 15");
-    expect(searchKnowledge).toHaveBeenCalledWith(4, 1, "modo econômico");
+    expect(searchKnowledge).toHaveBeenCalledWith(expect.objectContaining({ id: 4, companyId: 1 }), "modo econômico");
   });
 });

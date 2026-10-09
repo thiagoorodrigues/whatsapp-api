@@ -5,8 +5,11 @@ import AiKnowledgeChunk from "../../../models/AiKnowledgeChunk";
 import AiKnowledgeDocument from "../../../models/AiKnowledgeDocument";
 import { logger } from "../../../utils/logger";
 import { findAgent } from "../AgentService";
+import { agentKey } from "../keys";
 import { chunkText } from "./chunk";
 import { embedDocument, resumeEmbeddings } from "./EmbeddingService";
+import { embedTexts, toVectorLiteral } from "./embeddings";
+import { fuseRankings } from "./hybrid";
 import { extractText } from "./extract";
 
 // Knowledge base of an agent. Documents are split into chunks searched with
@@ -203,6 +206,7 @@ export const reindexDocument = async (agentId: number | string, documentId: numb
 };
 
 export interface KnowledgeHit {
+  chunkId: number;
   documentId: number;
   title: string;
   description: string | null;
@@ -210,26 +214,27 @@ export interface KnowledgeHit {
   rank: number;
 }
 
-/**
- * Chunks that best match the query. Any of its words counts (OR), ranked by
- * how many match and how close together; "always include" documents are
- * left out (they are already in the prompt).
- */
-export const searchKnowledge = async (
-  agentId: number,
-  companyId: number,
-  query: string,
-  limit = SEARCH_LIMIT
-): Promise<KnowledgeHit[]> => {
-  const text = String(query || "").trim().slice(0, 500);
-  if (!text) return [];
-  return AiKnowledgeChunk.sequelize.query<KnowledgeHit>(
+export interface SearchAgent {
+  id: number;
+  companyId: number;
+  provider: string;
+  embeddingModel: string | null;
+  apiKeyEncrypted?: string | null;
+}
+
+/** Candidates taken from each search before fusing them. */
+export const SEARCH_CANDIDATES = 20;
+
+// Any of the question's words counts (OR), ranked by how many match and how
+// close together.
+const keywordHits = (agent: SearchAgent, text: string, limit: number) =>
+  AiKnowledgeChunk.sequelize.query<KnowledgeHit>(
     `
     WITH q AS (
       SELECT to_tsquery('portuguese', string_agg(quote_literal(lexeme), ' | ')) AS query
       FROM unnest(to_tsvector('portuguese', ai_unaccent(:text)))
     )
-    SELECT c."documentId", d.title, d.description, c.content,
+    SELECT c.id AS "chunkId", c."documentId", d.title, d.description, c.content,
            ts_rank_cd(c."searchVector", q.query) AS rank
     FROM "AiKnowledgeChunks" c
     JOIN "AiKnowledgeDocuments" d ON d.id = c."documentId"
@@ -241,8 +246,58 @@ export const searchKnowledge = async (
     ORDER BY rank DESC, c."documentId", c.position
     LIMIT :limit
     `,
-    { replacements: { text, agentId, companyId, limit }, type: QueryTypes.SELECT }
+    { replacements: { text, agentId: agent.id, companyId: agent.companyId, limit }, type: QueryTypes.SELECT }
   );
+
+// Nearest chunks by cosine distance, only among documents embedded with the
+// agent's current model (others are being redone and count by keywords).
+// Exact search over the agent's chunks: no approximate index, see the spec.
+const semanticHits = async (agent: SearchAgent, text: string, limit: number) => {
+  const apiKey = agentKey(agent);
+  if (!apiKey || !agent.embeddingModel) return [];
+  const [vector] = await embedTexts(agent.provider, apiKey, agent.embeddingModel, [text], "query");
+  return AiKnowledgeChunk.sequelize.query<KnowledgeHit>(
+    `
+    SELECT c.id AS "chunkId", c."documentId", d.title, d.description, c.content,
+           1 - (c.embedding <=> CAST(:vector AS vector)) AS rank
+    FROM "AiKnowledgeChunks" c
+    JOIN "AiKnowledgeDocuments" d ON d.id = c."documentId"
+    WHERE c."agentId" = :agentId AND c."companyId" = :companyId
+      AND d."isActive" AND d.status = 'ready' AND NOT d."alwaysInclude"
+      AND d."embeddingModel" = :model AND c.embedding IS NOT NULL
+    ORDER BY c.embedding <=> CAST(:vector AS vector)
+    LIMIT :limit
+    `,
+    {
+      replacements: {
+        vector: toVectorLiteral(vector),
+        model: agent.embeddingModel,
+        agentId: agent.id,
+        companyId: agent.companyId,
+        limit
+      },
+      type: QueryTypes.SELECT
+    }
+  );
+};
+
+/**
+ * Chunks that best answer the question: keyword search, plus search by
+ * meaning when the agent has an embedding model, fused by rank. "Always
+ * include" documents are left out (they are already in the prompt).
+ */
+export const searchKnowledge = async (agent: SearchAgent, query: string, limit = SEARCH_LIMIT): Promise<KnowledgeHit[]> => {
+  const text = String(query || "").trim().slice(0, 500);
+  if (!text) return [];
+  const keyword = await keywordHits(agent, text, SEARCH_CANDIDATES);
+  if (!agent.embeddingModel) return keyword.slice(0, limit);
+  let semantic: KnowledgeHit[] = [];
+  try {
+    semantic = await semanticHits(agent, text, SEARCH_CANDIDATES);
+  } catch (err) {
+    logger.warn(`Knowledge semantic search of agent ${agent.id} failed, keywords only: ${err}`);
+  }
+  return fuseRankings([keyword, semantic], limit);
 };
 
 export interface KnowledgeForTurn {

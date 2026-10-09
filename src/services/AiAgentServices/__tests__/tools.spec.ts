@@ -226,5 +226,15 @@ describe("agendar_mensagem", () => {
     expect(r.result).toContain("Simulação");
     expect(r.result).toContain("12/10/2026 às 14:00");
   });
+
+  it("describes the knowledge search by meaning when semantic search is on", () => {
+    const search = jest.fn(async () => []);
+    const byWords = buildToolSet({}, { queues: [], searchKnowledge: search });
+    const byMeaning = buildToolSet({}, { queues: [], searchKnowledge: search, semanticKnowledge: true });
+    const description = (set: any) => set.definitions.find((d: any) => d.name === "buscar_base_conhecimento").description;
+    expect(description(byWords)).toContain("A busca é por palavras");
+    expect(description(byMeaning)).not.toContain("A busca é por palavras");
+    expect(description(byMeaning)).toContain("pelo sentido");
+  });
 });
 

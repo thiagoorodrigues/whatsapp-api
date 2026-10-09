@@ -48,5 +48,5 @@ export const reindex = async (req: Request, res: Response): Promise<Response> =>
 // What the agent would find for a question (editor "testar busca").
 export const search = async (req: Request, res: Response): Promise<Response> => {
   const agent = await findAgent(req.params.agentId, req.user.companyId);
-  return res.json(await searchKnowledge(agent.id, req.user.companyId, String(req.body?.query || "")));
+  return res.json(await searchKnowledge(agent, String(req.body?.query || "")));
 };

@@ -65,9 +65,8 @@ const generateReply = async (params: {
     users: users.map(u => ({ id: u.id, name: u.name })),
     crmStages: crmStages.map(st => ({ id: st.id, name: st.name })),
     http: params.httpContext || { contactName: params.contactName },
-    searchKnowledge: knowledge.searchable
-      ? query => searchKnowledge(agent.id, agent.companyId, query)
-      : undefined,
+    searchKnowledge: knowledge.searchable ? query => searchKnowledge(agent, query) : undefined,
+    semanticKnowledge: !!agent.embeddingModel,
     crm: params.crm,
     tags: { list: tags.map(t => ({ id: t.id, name: t.name })), add: params.addTag },
     sendMedia: params.sendMedia,
