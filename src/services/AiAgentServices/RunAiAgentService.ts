@@ -15,7 +15,9 @@ import ShowTicketService from "../TicketServices/ShowTicketService";
 import AddTicketTagService from "../TagServices/AddTicketTagService";
 import TicketTag from "../../models/TicketTag";
 import { getIO } from "../../libs/socket";
-import { notificationRoom, statusRoom, ticketRoom } from "../../libs/socketRooms";
+import { companyRoom, notificationRoom, statusRoom, ticketRoom } from "../../libs/socketRooms";
+import moment from "moment";
+import CreateScheduleService from "../ScheduleServices/CreateService";
 import { hasPlanFeature } from "../../helpers/planFeature";
 import { sleep } from "../../helpers/botUtils";
 import { logger } from "../../utils/logger";
@@ -115,13 +117,38 @@ const tagAdder = (ticket: Ticket) => async (tagId: number) => {
   const exists = await TicketTag.findOne({ where: { ticketId: ticket.id, tagId } });
   if (exists) return { ok: true, message: "O atendimento já tinha essa tag." };
   await AddTicketTagService({ ticketId: ticket.id, tagId, companyId: ticket.companyId });
-  const fresh = await ShowTicketService(ticket.id, ticket.companyId);
-  getIO()
-    .to(statusRoom(ticket.companyId, fresh.status))
-    .to(notificationRoom(ticket.companyId))
-    .to(ticketRoom(ticket.companyId, ticket.id.toString()))
-    .emit(`company-${ticket.companyId}-ticket`, { action: "update", ticket: fresh });
+  try {
+    const fresh = await ShowTicketService(ticket.id, ticket.companyId);
+    getIO()
+      .to(statusRoom(ticket.companyId, fresh.status))
+      .to(notificationRoom(ticket.companyId))
+      .to(ticketRoom(ticket.companyId, ticket.id.toString()))
+      .emit(`company-${ticket.companyId}-ticket`, { action: "update", ticket: fresh });
+  } catch (err) {
+    // The tag is saved either way; the screen catches up on the next update.
+    logger.warn(`AI agent: tag on ticket ${ticket.id} saved but not broadcast: ${err}`);
+  }
   return { ok: true, message: "Tag adicionada ao atendimento." };
+};
+
+// The agent's "agendar_mensagem": an Agenda entry for this contact and connection.
+const scheduler = (ticket: Ticket) => async (input: { sendAt: Date; body: string }) => {
+  if (!ticket.contactId) return { ok: false, message: "Este atendimento não tem contato para agendar." };
+  const schedule = await CreateScheduleService({
+    body: input.body,
+    sendAt: moment(input.sendAt).format("YYYY-MM-DD HH:mm:ss"),
+    contactId: ticket.contactId,
+    companyId: ticket.companyId,
+    whatsappsId: ticket.whatsappId
+  });
+  try {
+    getIO()
+      .to(companyRoom(ticket.companyId))
+      .emit(`company-${ticket.companyId}-schedule`, { action: "create", schedule });
+  } catch (err) {
+    logger.warn(`AI agent: schedule ${schedule.id} saved but not broadcast: ${err}`);
+  }
+  return { ok: true, message: `Mensagem agendada para ${moment(input.sendAt).format("DD/MM/YYYY [às] HH:mm")}.` };
 };
 
 const applyActions = async (ticket: Ticket, actions: DeferredAction[]) => {
@@ -223,6 +250,7 @@ const turn = async (ticketId: number, agentId: number, send: Sender, typing?: Ty
       },
       crm: crmFor(agent, ticket),
       addTag: tagAdder(ticket),
+      schedule: scheduler(ticket),
       sendMedia: async file => {
         media.push(file);
         return { ok: true, message: `O arquivo "${file.name}" será enviado logo depois da sua mensagem.` };

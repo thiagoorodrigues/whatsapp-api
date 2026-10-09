@@ -1,3 +1,4 @@
+import moment from "moment";
 import { AiAgentTools } from "../../models/AiAgent";
 import { AgentMediaFile, MAX_MEDIA_PER_REPLY } from "./mediaTools";
 import { callHttpTool, describeResult, HttpContext, httpToolDefinitions, toolNameOf } from "./httpTools";
@@ -28,6 +29,10 @@ export interface ToolContext {
     list: { id: number; name: string }[];
     add?: (tagId: number) => Promise<{ ok: boolean; message: string }>;
   };
+  /** Creates the Agenda entry for this contact; absent in the test console. */
+  schedule?: (input: { sendAt: Date; body: string }) => Promise<{ ok: boolean; message: string }>;
+  /** Current time (tests); defaults to now. */
+  now?: Date;
   /** Queues a file to go after the reply; absent in the test console. */
   sendMedia?: (file: AgentMediaFile) => Promise<{ ok: boolean; message: string }>;
 }
@@ -301,6 +306,44 @@ export const buildToolSet = (config: AiAgentTools = {}, ctx: ToolContext): ToolS
       sent += 1;
       if (!ctx.sendMedia) return { result: `Simulação (teste): o arquivo "${file.name}" seria enviado depois da mensagem.` };
       const r = await ctx.sendMedia(file);
+      return r.ok ? { result: r.message } : { result: r.message, error: true };
+    };
+  }
+
+  if (config.schedule?.enabled) {
+    const maxDays = config.schedule.maxDays || 90;
+    const rules = (config.schedule.instructions || "").trim();
+    let scheduled = false;
+    definitions.push({
+      name: "agendar_mensagem",
+      description:
+        "Agenda uma mensagem para ser enviada a este cliente numa data e hora futuras (lembrete, retorno combinado). " +
+        "Antes de chamar, confirme com o cliente a data e o horário. Use o horário de Brasília e a data atual do contexto. " +
+        `Até ${maxDays} dias à frente.` +
+        (rules ? `\nQuando e o que agendar: ${rules}` : ""),
+      parameters: {
+        type: "object",
+        properties: {
+          data_hora: { type: "string", description: "Data e hora do envio, no formato AAAA-MM-DDTHH:mm (ex.: 2026-10-12T14:00)." },
+          mensagem: { type: "string", description: "Texto exato que o cliente vai receber." }
+        },
+        required: ["data_hora", "mensagem"],
+        additionalProperties: false
+      }
+    });
+    handlers.agendar_mensagem = async input => {
+      if (scheduled) return { result: "Já existe um agendamento nesta resposta.", error: true };
+      const now = moment(ctx.now || new Date());
+      const when = moment(text(input.data_hora), ["YYYY-MM-DDTHH:mm", "YYYY-MM-DD HH:mm", "YYYY-MM-DDTHH:mm:ss"], true);
+      const body = text(input.mensagem);
+      if (!when.isValid()) return { result: "Data inválida. Use AAAA-MM-DDTHH:mm, ex.: 2026-10-12T14:00.", error: true };
+      if (when.isBefore(now.clone().add(2, "minutes"))) return { result: "A data precisa ser no futuro.", error: true };
+      if (when.isAfter(now.clone().add(maxDays, "days"))) return { result: `Só é possível agendar até ${maxDays} dias à frente.`, error: true };
+      if (body.length < 5) return { result: "Escreva a mensagem que o cliente vai receber.", error: true };
+      scheduled = true;
+      const label = when.format("DD/MM/YYYY [às] HH:mm");
+      if (!ctx.schedule) return { result: `Simulação (teste): a mensagem seria agendada para ${label}.` };
+      const r = await ctx.schedule({ sendAt: when.toDate(), body });
       return r.ok ? { result: r.message } : { result: r.message, error: true };
     };
   }

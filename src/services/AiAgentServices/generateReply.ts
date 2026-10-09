@@ -38,6 +38,8 @@ const generateReply = async (params: {
   addTag?: (tagId: number) => Promise<{ ok: boolean; message: string }>;
   // Queues an "Enviar mídia" file to go after the reply; absent in the test console.
   sendMedia?: ToolContext["sendMedia"];
+  // Creates the Agenda entry; absent in the test console.
+  schedule?: ToolContext["schedule"];
 }): Promise<ReplyResult> => {
   const { agent, apiKey, history, queues } = params;
   const knowledge = await knowledgeForTurn(agent.id, agent.companyId);
@@ -68,7 +70,8 @@ const generateReply = async (params: {
       : undefined,
     crm: params.crm,
     tags: { list: tags.map(t => ({ id: t.id, name: t.name })), add: params.addTag },
-    sendMedia: params.sendMedia
+    sendMedia: params.sendMedia,
+    schedule: params.schedule
   });
   const mcp = await openMcpSession(agent.tools?.mcp || [], { companyId: agent.companyId });
 

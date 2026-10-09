@@ -186,3 +186,45 @@ describe("CRM tools", () => {
     });
   });
 });
+
+describe("agendar_mensagem", () => {
+  const now = new Date(2026, 9, 9, 10, 0); // 09/10/2026 10:00, local time
+  const cfg = { schedule: { enabled: true, instructions: "Lembrete de vencimento", maxDays: 30 } };
+
+  it("tells the model to confirm the date and follows the instructions", () => {
+    const [def] = buildToolSet(cfg, { queues, now }).definitions;
+    expect(def.name).toBe("agendar_mensagem");
+    expect(def.description).toContain("confirme");
+    expect(def.description).toContain("Lembrete de vencimento");
+  });
+
+  it("schedules a future message within the limit, once per reply", async () => {
+    const schedule = jest.fn().mockResolvedValue({ ok: true, message: "Agendado para 12/10/2026 às 14:00." });
+    const set = buildToolSet(cfg, { queues, now, schedule });
+    const r = await set.execute("agendar_mensagem", { data_hora: "2026-10-12T14:00", mensagem: "Seu boleto vence amanhã!" });
+    expect(r).toEqual({ result: "Agendado para 12/10/2026 às 14:00." });
+    expect(schedule).toHaveBeenCalledWith({ sendAt: new Date(2026, 9, 12, 14, 0), body: "Seu boleto vence amanhã!" });
+    const second = await set.execute("agendar_mensagem", { data_hora: "2026-10-13T14:00", mensagem: "Outro lembrete" });
+    expect(second.error).toBe(true);
+    expect(schedule).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses past, too far, invalid dates and short texts", async () => {
+    const schedule = jest.fn();
+    const run = (input: any) => buildToolSet(cfg, { queues, now, schedule }).execute("agendar_mensagem", input);
+    expect((await run({ data_hora: "2026-10-09T09:00", mensagem: "Bom dia, tudo certo?" })).error).toBe(true);
+    expect((await run({ data_hora: "2026-12-20T09:00", mensagem: "Bom dia, tudo certo?" })).error).toBe(true);
+    expect((await run({ data_hora: "amanhã às 9", mensagem: "Bom dia, tudo certo?" })).error).toBe(true);
+    expect((await run({ data_hora: "2026-10-12T14:00", mensagem: "oi" })).error).toBe(true);
+    expect(schedule).not.toHaveBeenCalled();
+  });
+
+  it("only simulates in the test console", async () => {
+    const set = buildToolSet(cfg, { queues, now });
+    const r = await set.execute("agendar_mensagem", { data_hora: "2026-10-12T14:00", mensagem: "Seu boleto vence amanhã!" });
+    expect(r.error).toBeFalsy();
+    expect(r.result).toContain("Simulação");
+    expect(r.result).toContain("12/10/2026 às 14:00");
+  });
+});
+

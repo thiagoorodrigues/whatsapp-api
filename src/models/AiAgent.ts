@@ -56,6 +56,8 @@ export interface AiAgentTools {
   tag?: { enabled: boolean; tagIds?: number[]; instructions?: string };
   // Files the agent sends when the conversation asks for them.
   media?: MediaToolConfig;
+  // Schedules a message in the Agenda after confirming the date with the customer.
+  schedule?: { enabled: boolean; instructions?: string; maxDays?: number };
 }
 
 @Table({ tableName: "AiAgents" })

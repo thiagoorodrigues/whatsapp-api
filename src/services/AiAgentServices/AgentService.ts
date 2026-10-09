@@ -87,7 +87,12 @@ const clean = (data: AgentData, partial: boolean, previous: AiAgentTools = {}) =
         tagIds: (tools.tag?.tagIds || []).map(Number).filter(Boolean),
         instructions: String(tools.tag?.instructions || "").trim().slice(0, 1000)
       },
-      media: sanitizeMediaTool(tools.media, previous.media)
+      media: sanitizeMediaTool(tools.media, previous.media),
+      schedule: {
+        enabled: !!tools.schedule?.enabled,
+        instructions: String(tools.schedule?.instructions || "").trim().slice(0, 1000),
+        maxDays: Math.min(Math.max(Math.round(Number(tools.schedule?.maxDays)) || 90, 1), 365)
+      }
     };
   }
   return out;
