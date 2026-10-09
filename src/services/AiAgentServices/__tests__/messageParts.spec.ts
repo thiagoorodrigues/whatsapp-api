@@ -51,9 +51,9 @@ describe("typingDelay", () => {
 });
 
 describe("splitToolConfig", () => {
-  it("keeps the pause between 1 and 30 whole seconds, or automatic", () => {
+  it("keeps the pause between 1 and 60 whole seconds, or automatic", () => {
     expect(splitToolConfig({ enabled: true, delay: "3" })).toEqual({ enabled: true, delay: 3 });
-    expect(splitToolConfig({ enabled: true, delay: 90 })).toEqual({ enabled: true, delay: 30 });
+    expect(splitToolConfig({ enabled: true, delay: 90 })).toEqual({ enabled: true, delay: 60 });
     expect(splitToolConfig({ enabled: true, delay: 0.4 })).toEqual({ enabled: true, delay: 1 });
     expect(splitToolConfig({ enabled: true, delay: "" })).toEqual({ enabled: true, delay: null });
     expect(splitToolConfig({ enabled: true, delay: -2 })).toEqual({ enabled: true, delay: null });
