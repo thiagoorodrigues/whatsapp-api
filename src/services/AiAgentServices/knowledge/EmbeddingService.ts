@@ -28,7 +28,12 @@ const currentModel = async (agentId: number) => (await AiAgent.findByPk(agentId)
 
 export const embedDocument = async (documentId: number): Promise<void> => {
   const document = await AiKnowledgeDocument.findByPk(documentId);
-  if (!document || document.status !== "ready") return;
+  if (!document) return;
+  if (document.status !== "ready") {
+    // Being re-indexed (or failed): its own indexing embeds it when ready.
+    if (document.embeddingStatus === "processing") await document.update({ embeddingStatus: "none" });
+    return;
+  }
   const agent = await AiAgent.findByPk(document.agentId);
   const model = agent?.embeddingModel || null;
 
@@ -77,27 +82,58 @@ export const embedDocument = async (documentId: number): Promise<void> => {
   }
 };
 
-/** Vectors of every ready document of the agent, one document at a time. */
+/**
+ * Brings every ready document of the agent to its current model, one at a
+ * time; documents already embedded with it are skipped.
+ */
 export const reembedAgent = async (agentId: number): Promise<void> => {
-  const documents = await AiKnowledgeDocument.findAll({
-    where: { agentId, status: "ready" },
-    attributes: ["id"],
-    order: [["id", "ASC"]]
-  });
+  const model = await currentModel(agentId);
+  const documents = (
+    await AiKnowledgeDocument.findAll({
+      where: { agentId, status: "ready" },
+      attributes: ["id", "embeddingStatus", "embeddingModel"],
+      order: [["id", "ASC"]]
+    })
+  ).filter(d => !(d.embeddingStatus === "ready" && (d.embeddingModel || null) === model));
   if (!documents.length) return;
-  await AiKnowledgeDocument.update({ embeddingStatus: "processing" } as any, {
-    where: { id: documents.map(d => d.id) }
-  });
+  if (model) {
+    await AiKnowledgeDocument.update({ embeddingStatus: "processing" } as any, {
+      where: { id: documents.map(d => d.id) }
+    });
+  }
   for (const d of documents) {
     // eslint-disable-next-line no-await-in-loop
     await embedDocument(d.id);
   }
 };
 
-export const reembedAgentLater = (agentId: number): void => {
-  setImmediate(() => {
-    reembedAgent(agentId).catch(err => logger.error(`Knowledge re-embedding of agent ${agentId}: ${err}`));
-  });
+// One chain per agent: a request while one runs makes it run once more at the
+// end, instead of a parallel chain paying for the same vectors twice.
+const chains = new Map<number, { rerun: boolean; done: Promise<void> }>();
+
+export const reembedAgentLater = (agentId: number): Promise<void> => {
+  const running = chains.get(agentId);
+  if (running) {
+    running.rerun = true;
+    return running.done;
+  }
+  const chain = { rerun: false, done: Promise.resolve() };
+  chain.done = (async () => {
+    await new Promise(resolve => setImmediate(resolve));
+    try {
+      do {
+        chain.rerun = false;
+        // eslint-disable-next-line no-await-in-loop
+        await reembedAgent(agentId);
+      } while (chain.rerun);
+    } catch (err) {
+      logger.error(`Knowledge re-embedding of agent ${agentId}: ${err}`);
+    } finally {
+      chains.delete(agentId);
+    }
+  })();
+  chains.set(agentId, chain);
+  return chain.done;
 };
 
 /** At startup: vectors a restart left half-made. */

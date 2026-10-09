@@ -5,9 +5,15 @@ jest.mock("../../../../models/AiKnowledgeChunk", () => ({
   default: { findAll: (...a: any[]) => chunkFindAll(...a), sequelize: { query: (...a: any[]) => query(...a) } }
 }));
 const documentFindByPk = jest.fn();
+const documentFindAll = jest.fn(async (..._a: any[]) => [] as any[]);
+const documentUpdate = jest.fn();
 jest.mock("../../../../models/AiKnowledgeDocument", () => ({
   __esModule: true,
-  default: { findByPk: (...a: any[]) => documentFindByPk(...a), findAll: jest.fn(async () => []), update: jest.fn() }
+  default: {
+    findByPk: (...a: any[]) => documentFindByPk(...a),
+    findAll: (...a: any[]) => documentFindAll(...a),
+    update: (...a: any[]) => documentUpdate(...a)
+  }
 }));
 const agentFindByPk = jest.fn();
 jest.mock("../../../../models/AiAgent", () => ({
@@ -25,7 +31,7 @@ jest.mock("../embeddings", () => ({
 }));
 
 // eslint-disable-next-line import/first
-import { embedDocument } from "../EmbeddingService";
+import { embedDocument, reembedAgent, reembedAgentLater } from "../EmbeddingService";
 
 const makeDocument = () => {
   const doc: any = { id: 9, agentId: 3, status: "ready" };
@@ -120,5 +126,66 @@ describe("embedDocument", () => {
     documentFindByPk.mockResolvedValue({ ...makeDocument(), status: "processing" });
     await embedDocument(9);
     expect(agentFindByPk).not.toHaveBeenCalled();
+  });
+});
+
+describe("embedDocument on a document being re-indexed", () => {
+  it("drops a pending 'processing' mark so the screen stops waiting", async () => {
+    const doc: any = { id: 9, agentId: 3, status: "error", embeddingStatus: "processing" };
+    doc.update = jest.fn(async (values: any) => Object.assign(doc, values));
+    documentFindByPk.mockResolvedValue(doc);
+    await embedDocument(9);
+    expect(doc.embeddingStatus).toBe("none");
+    expect(agentFindByPk).not.toHaveBeenCalled();
+  });
+});
+
+describe("reembedAgent", () => {
+  it("only redoes documents not already embedded with the current model", async () => {
+    agentFindByPk.mockResolvedValue(agentWith("text-embedding-3-small"));
+    documentFindAll.mockResolvedValue([
+      { id: 1, embeddingStatus: "ready", embeddingModel: "text-embedding-3-small" },
+      { id: 2, embeddingStatus: "error", embeddingModel: null },
+      { id: 3, embeddingStatus: "ready", embeddingModel: "text-embedding-3-large" }
+    ]);
+    documentFindByPk.mockResolvedValue(null);
+
+    await reembedAgent(3);
+
+    expect(documentUpdate).toHaveBeenCalledWith({ embeddingStatus: "processing" }, { where: { id: [2, 3] } });
+    expect(documentFindByPk.mock.calls.map(c => c[0])).toEqual([2, 3]);
+  });
+
+  it("does not mark documents as being embedded when turning it off", async () => {
+    agentFindByPk.mockResolvedValue(agentWith(null));
+    documentFindAll.mockResolvedValue([{ id: 1, embeddingStatus: "ready", embeddingModel: "text-embedding-3-small" }]);
+    documentFindByPk.mockResolvedValue(null);
+
+    await reembedAgent(3);
+
+    expect(documentUpdate).not.toHaveBeenCalled();
+    expect(documentFindByPk.mock.calls.map(c => c[0])).toEqual([1]);
+  });
+});
+
+describe("reembedAgentLater", () => {
+  it("runs one chain per agent: calls during a run collapse into a single rerun", async () => {
+    agentFindByPk.mockResolvedValue(agentWith("text-embedding-3-small"));
+    documentFindAll.mockResolvedValue([]);
+
+    // Requests before the run starts join it.
+    const first = reembedAgentLater(3);
+    expect(reembedAgentLater(3)).toBe(first);
+    await first;
+    expect(documentFindAll).toHaveBeenCalledTimes(1);
+
+    // Requests while it runs collapse into one more pass.
+    documentFindAll.mockImplementationOnce(async () => {
+      reembedAgentLater(3);
+      reembedAgentLater(3);
+      return [];
+    });
+    await reembedAgentLater(3);
+    expect(documentFindAll).toHaveBeenCalledTimes(3);
   });
 });

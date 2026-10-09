@@ -36,7 +36,14 @@ describe("searchKnowledge", () => {
     const result = await searchKnowledge(agent("text-embedding-3-small"), "quanto é o frete?");
     expect(embedTexts).toHaveBeenCalledWith("openai", "k", "text-embedding-3-small", ["quanto é o frete?"], "query");
     const vectorCall = query.mock.calls.find(c => isVectorQuery(c[0]));
-    expect(vectorCall[1].replacements).toMatchObject({ model: "text-embedding-3-small", vector: "[0.5,0.5]", agentId: 3, companyId: 2 });
+    expect(vectorCall[1].replacements).toMatchObject({
+      model: "text-embedding-3-small",
+      vector: "[0.5,0.5]",
+      agentId: 3,
+      companyId: 2,
+      minSimilarity: 0.3
+    });
+    expect(vectorCall[0]).toContain(">= :minSimilarity");
     expect(result.map(h => h.chunkId)).toEqual([1, 3, 2]);
   });
 
@@ -46,6 +53,20 @@ describe("searchKnowledge", () => {
     const result = await searchKnowledge(agent("text-embedding-3-small"), "frete");
     expect(result.map(h => h.chunkId)).toEqual([7]);
     expect(query.mock.calls.some(c => isVectorQuery(c[0]))).toBe(false);
+  });
+
+  it("finds nothing for an off-topic question (no keyword hit, semantic below the floor)", async () => {
+    query.mockResolvedValue([]);
+    embedTexts.mockResolvedValue([[1, 0]]);
+    expect(await searchKnowledge(agent("text-embedding-3-small"), "vocês vendem pneus?")).toEqual([]);
+  });
+
+  it("does not filter by similarity for a model without a calibrated floor", async () => {
+    query.mockResolvedValue([]);
+    embedTexts.mockResolvedValue([[1, 0]]);
+    await searchKnowledge({ ...agent("gemini-embedding-001"), provider: "gemini" }, "frete");
+    const vectorCall = query.mock.calls.find(c => isVectorQuery(c[0]));
+    expect(vectorCall[0]).not.toContain(":minSimilarity");
   });
 
   it("returns nothing for an empty question", async () => {

@@ -5,7 +5,7 @@ import AiAgentRun from "../../models/AiAgentRun";
 import Whatsapp from "../../models/Whatsapp";
 import { isProviderName } from "./providers";
 import { validateKey } from "./keys";
-import { defaultEmbeddingModel, nextEmbeddingModel } from "./knowledge/embeddings";
+import { defaultEmbeddingModel, embeddingAfterUpdate } from "./knowledge/embeddings";
 import { reembedAgentLater } from "./knowledge/EmbeddingService";
 import { sanitizeHttpTools, serializeHttpTools } from "./httpTools";
 import { sanitizeMcpServers, serializeMcpServers } from "./mcpTools";
@@ -182,12 +182,15 @@ export const updateAgent = async (id: number | string, data: AgentData, companyI
   }
   const mediaBefore = agent.tools?.media?.files || [];
   // A provider without the current embedding model moves to its default
-  // (or off, for Claude) and the knowledge base vectors are redone.
-  const embeddingModel =
-    provider === agent.provider ? agent.embeddingModel || null : nextEmbeddingModel(agent.embeddingModel || null, provider);
-  const embeddingChanged = embeddingModel !== (agent.embeddingModel || null);
-  await agent.update({ ...values, ...key, ...(embeddingChanged ? { embeddingModel } : {}) });
-  if (embeddingChanged) reembedAgentLater(agent.id);
+  // (or off, for Claude); that or a new key redoes the knowledge base vectors.
+  const embedding = embeddingAfterUpdate({
+    previousProvider: agent.provider,
+    previousModel: agent.embeddingModel || null,
+    provider,
+    keyChanged: !!data.apiKey
+  });
+  await agent.update({ ...values, ...key, embeddingModel: embedding.model });
+  if (embedding.reembed) reembedAgentLater(agent.id);
   if (values.tools) {
     await syncAgentConnections(companyId, agent.id, oauthServerIds(agent.tools));
     await removeOrphanMedia(companyId, agent.id, mediaBefore, agent.tools?.media?.files || []);

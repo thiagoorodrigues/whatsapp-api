@@ -6,8 +6,10 @@ jest.mock("../../providers", () => ({
 // eslint-disable-next-line import/first
 import {
   defaultEmbeddingModel,
+  embeddingAfterUpdate,
   embedTexts,
   isEmbeddingModelFor,
+  minSimilarityFor,
   nextEmbeddingModel,
   toVectorLiteral
 } from "../embeddings";
@@ -30,6 +32,40 @@ describe("embedding models", () => {
     expect(nextEmbeddingModel("text-embedding-3-large", "openai")).toBe("text-embedding-3-large");
     expect(nextEmbeddingModel("text-embedding-3-large", "gemini")).toBe("gemini-embedding-001");
     expect(nextEmbeddingModel("gemini-embedding-001", "anthropic")).toBeNull();
+  });
+});
+
+describe("minSimilarityFor", () => {
+  it("has a floor calibrated per OpenAI model and none otherwise", () => {
+    expect(minSimilarityFor("text-embedding-3-small")).toBe(0.3);
+    expect(minSimilarityFor("text-embedding-3-large")).toBe(0.37);
+    expect(minSimilarityFor("gemini-embedding-001")).toBeNull();
+    expect(minSimilarityFor("unknown")).toBeNull();
+  });
+});
+
+describe("embeddingAfterUpdate", () => {
+  const base = { previousProvider: "openai", previousModel: "text-embedding-3-small" as string | null, keyChanged: false };
+
+  it("switches to the new provider's default and redoes the vectors", () => {
+    expect(embeddingAfterUpdate({ ...base, provider: "gemini" })).toEqual({ model: "gemini-embedding-001", reembed: true });
+  });
+
+  it("turns off for Claude and redoes (clears) the vectors", () => {
+    expect(embeddingAfterUpdate({ ...base, provider: "anthropic" })).toEqual({ model: null, reembed: true });
+  });
+
+  it("stays off when it was off", () => {
+    expect(embeddingAfterUpdate({ ...base, previousModel: null, provider: "gemini" })).toEqual({ model: null, reembed: false });
+  });
+
+  it("does nothing when only other settings change", () => {
+    expect(embeddingAfterUpdate({ ...base, provider: "openai" })).toEqual({ model: "text-embedding-3-small", reembed: false });
+  });
+
+  it("retries the vectors when a new key arrives (documents left in error without a key)", () => {
+    expect(embeddingAfterUpdate({ ...base, provider: "openai", keyChanged: true })).toEqual({ model: "text-embedding-3-small", reembed: true });
+    expect(embeddingAfterUpdate({ ...base, previousModel: null, provider: "openai", keyChanged: true })).toEqual({ model: null, reembed: false });
   });
 });
 

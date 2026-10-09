@@ -8,7 +8,7 @@ import { findAgent } from "../AgentService";
 import { agentKey } from "../keys";
 import { chunkText } from "./chunk";
 import { embedDocument, reembedAgentLater, resumeEmbeddings } from "./EmbeddingService";
-import { embedTexts, embeddingModelsFor, isEmbeddingModelFor, toVectorLiteral } from "./embeddings";
+import { embedTexts, embeddingModelsFor, isEmbeddingModelFor, minSimilarityFor, toVectorLiteral } from "./embeddings";
 import { fuseRankings } from "./hybrid";
 import { extractText } from "./extract";
 
@@ -256,6 +256,7 @@ const semanticHits = async (agent: SearchAgent, text: string, limit: number) => 
   const apiKey = agentKey(agent);
   if (!apiKey || !agent.embeddingModel) return [];
   const [vector] = await embedTexts(agent.provider, apiKey, agent.embeddingModel, [text], "query");
+  const minSimilarity = minSimilarityFor(agent.embeddingModel);
   return AiKnowledgeChunk.sequelize.query<KnowledgeHit>(
     `
     SELECT c.id AS "chunkId", c."documentId", d.title, d.description, c.content,
@@ -265,6 +266,7 @@ const semanticHits = async (agent: SearchAgent, text: string, limit: number) => 
     WHERE c."agentId" = :agentId AND c."companyId" = :companyId
       AND d."isActive" AND d.status = 'ready' AND NOT d."alwaysInclude"
       AND d."embeddingModel" = :model AND c.embedding IS NOT NULL
+      ${minSimilarity !== null ? "AND 1 - (c.embedding <=> CAST(:vector AS vector)) >= :minSimilarity" : ""}
     ORDER BY c.embedding <=> CAST(:vector AS vector)
     LIMIT :limit
     `,
@@ -272,6 +274,7 @@ const semanticHits = async (agent: SearchAgent, text: string, limit: number) => 
       replacements: {
         vector: toVectorLiteral(vector),
         model: agent.embeddingModel,
+        minSimilarity,
         agentId: agent.id,
         companyId: agent.companyId,
         limit
