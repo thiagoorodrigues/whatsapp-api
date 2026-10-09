@@ -11,6 +11,11 @@ import Queue from "../../models/Queue";
 import Ticket from "../../models/Ticket";
 import Whatsapp from "../../models/Whatsapp";
 import UpdateTicketService from "../TicketServices/UpdateTicketService";
+import ShowTicketService from "../TicketServices/ShowTicketService";
+import AddTicketTagService from "../TagServices/AddTicketTagService";
+import TicketTag from "../../models/TicketTag";
+import { getIO } from "../../libs/socket";
+import { notificationRoom, statusRoom, ticketRoom } from "../../libs/socketRooms";
 import { hasPlanFeature } from "../../helpers/planFeature";
 import { sleep } from "../../helpers/botUtils";
 import { logger } from "../../utils/logger";
@@ -104,6 +109,20 @@ const crmFor = (agent: AiAgent, ticket: Ticket) => {
   };
 };
 
+// The agent's "adicionar_tag": tags the ticket and refreshes it on screen.
+const tagAdder = (ticket: Ticket) => async (tagId: number) => {
+  const exists = await TicketTag.findOne({ where: { ticketId: ticket.id, tagId } });
+  if (exists) return { ok: true, message: "O atendimento já tinha essa tag." };
+  await AddTicketTagService({ ticketId: ticket.id, tagId, companyId: ticket.companyId });
+  const fresh = await ShowTicketService(ticket.id, ticket.companyId);
+  getIO()
+    .to(statusRoom(ticket.companyId, fresh.status))
+    .to(notificationRoom(ticket.companyId))
+    .to(ticketRoom(ticket.companyId, ticket.id.toString()))
+    .emit(`company-${ticket.companyId}-ticket`, { action: "update", ticket: fresh });
+  return { ok: true, message: "Tag adicionada ao atendimento." };
+};
+
 const applyActions = async (ticket: Ticket, actions: DeferredAction[]) => {
   for (const action of actions) {
     if (action.type === "transfer") {
@@ -190,7 +209,8 @@ const turn = async (ticketId: number, agentId: number, send: Sender, typing?: Ty
         contactNumber: ticket.contact?.number,
         ticketId: ticket.id
       },
-      crm: crmFor(agent, ticket)
+      crm: crmFor(agent, ticket),
+      addTag: tagAdder(ticket)
     });
 
     if (result.reply) await sendReply(ticket, agent, result.reply, send, typing);

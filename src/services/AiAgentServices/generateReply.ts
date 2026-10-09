@@ -1,4 +1,5 @@
 import AiAgent from "../../models/AiAgent";
+import Tag from "../../models/Tag";
 import { getProvider } from "./providers";
 import { buildContext, buildSystemPrompt } from "./prompt";
 import { buildToolSet, DeferredAction, ToolContext } from "./tools";
@@ -31,16 +32,27 @@ const generateReply = async (params: {
   contactName?: string;
   httpContext?: HttpContext;
   crm?: ToolContext["crm"];
+  // Puts a tag on the conversation's ticket; absent in the test console.
+  addTag?: (tagId: number) => Promise<{ ok: boolean; message: string }>;
 }): Promise<ReplyResult> => {
   const { agent, apiKey, history, queues } = params;
   const knowledge = await knowledgeForTurn(agent.id, agent.companyId);
+  const tagIds = agent.tools?.tag?.tagIds || [];
+  const tags = agent.tools?.tag?.enabled
+    ? await Tag.findAll({
+        where: { companyId: agent.companyId, ...(tagIds.length ? { id: tagIds } : {}) },
+        attributes: ["id", "name"],
+        order: [["name", "ASC"]]
+      })
+    : [];
   const toolSet = buildToolSet(agent.tools || {}, {
     queues,
     http: params.httpContext || { contactName: params.contactName },
     searchKnowledge: knowledge.searchable
       ? query => searchKnowledge(agent.id, agent.companyId, query)
       : undefined,
-    crm: params.crm
+    crm: params.crm,
+    tags: { list: tags.map(t => ({ id: t.id, name: t.name })), add: params.addTag }
   });
   const mcp = await openMcpSession(agent.tools?.mcp || [], { companyId: agent.companyId });
 

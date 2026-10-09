@@ -69,7 +69,12 @@ const clean = (data: AgentData, partial: boolean, previous: AiAgentTools = {}) =
       mcp: sanitizeMcpServers(tools.mcp, previous.mcp),
       crm: crmToolConfig(tools.crm),
       split: splitToolConfig(tools.split),
-      wait: waitToolConfig(tools.wait)
+      wait: waitToolConfig(tools.wait),
+      tag: {
+        enabled: !!tools.tag?.enabled,
+        tagIds: (tools.tag?.tagIds || []).map(Number).filter(Boolean),
+        instructions: String(tools.tag?.instructions || "").trim().slice(0, 1000)
+      }
     };
   }
   return out;

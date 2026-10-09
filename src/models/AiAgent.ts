@@ -34,6 +34,9 @@ export interface AiAgentTools {
   // Waits this many seconds of silence from the customer before answering,
   // so messages sent in a row are answered together.
   wait?: { enabled: boolean; seconds: number };
+  // Tags the agent may put on the ticket (empty: any of the company's), with
+  // optional rules for when to use each one.
+  tag?: { enabled: boolean; tagIds?: number[]; instructions?: string };
 }
 
 @Table({ tableName: "AiAgents" })

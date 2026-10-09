@@ -18,6 +18,11 @@ export interface ToolContext {
     register: (input: { summary: string; title?: string; value?: number | string; source?: string }) => Promise<{ ok: boolean; message: string }>;
     qualify: () => Promise<{ ok: boolean; message: string }>;
   };
+  /** Tags the agent may use; without `add` (test console) it only simulates. */
+  tags?: {
+    list: { id: number; name: string }[];
+    add?: (tagId: number) => Promise<{ ok: boolean; message: string }>;
+  };
 }
 
 const DEAL_SOURCES = ["ad", "instagram", "site", "referral", "whatsapp", "other"];
@@ -200,6 +205,31 @@ export const buildToolSet = (config: AiAgentTools = {}, ctx: ToolContext): ToolS
         return r.ok ? { result: r.message } : { result: r.message, error: true };
       };
     }
+  }
+
+  const tagList = ctx.tags?.list || [];
+  if (config.tag?.enabled && tagList.length) {
+    const rules = (config.tag.instructions || "").trim();
+    definitions.push({
+      name: "adicionar_tag",
+      description:
+        "Coloca uma tag (etiqueta) neste atendimento, para a equipe organizar e filtrar as conversas. " +
+        "Use quando a conversa se encaixar no significado da tag; não avise o cliente." +
+        (rules ? `\nQuando usar cada tag: ${rules}` : ""),
+      parameters: {
+        type: "object",
+        properties: { tag: { type: "string", enum: tagList.map(t => t.name), description: "Nome da tag" } },
+        required: ["tag"],
+        additionalProperties: false
+      }
+    });
+    handlers.adicionar_tag = async input => {
+      const tag = tagList.find(t => t.name === String(input.tag || ""));
+      if (!tag) return { result: `Tag não permitida. Use uma destas: ${tagList.map(t => t.name).join(", ")}.`, error: true };
+      if (!ctx.tags?.add) return { result: `Simulação (teste): a tag "${tag.name}" seria adicionada ao atendimento.` };
+      const r = await ctx.tags.add(tag.id);
+      return r.ok ? { result: r.message } : { result: r.message, error: true };
+    };
   }
 
   const httpTools = config.http || [];

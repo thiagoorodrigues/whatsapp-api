@@ -87,4 +87,41 @@ describe("CRM tools", () => {
     expect(r.error).toBe(true);
     expect(register).not.toHaveBeenCalled();
   });
+
+  describe("adicionar_tag", () => {
+    const list = [
+      { id: 7, name: "Lead quente" },
+      { id: 8, name: "Cliente" }
+    ];
+
+    it("is offered only with the tool on and tags to choose", () => {
+      expect(buildToolSet({ tag: { enabled: true } }, { queues, tags: { list: [] } }).definitions).toEqual([]);
+      expect(buildToolSet({ tag: { enabled: false } }, { queues, tags: { list } }).definitions).toEqual([]);
+      const [def] = buildToolSet(
+        { tag: { enabled: true, instructions: "Lead quente quando pedir preço" } },
+        { queues, tags: { list } }
+      ).definitions;
+      expect(def.name).toBe("adicionar_tag");
+      expect((def.parameters as any).properties.tag.enum).toEqual(["Lead quente", "Cliente"]);
+      expect(def.description).toContain("Lead quente quando pedir preço");
+    });
+
+    it("adds the chosen tag and refuses others", async () => {
+      const add = jest.fn().mockResolvedValue({ ok: true, message: "Tag adicionada." });
+      const set = buildToolSet({ tag: { enabled: true } }, { queues, tags: { list, add } });
+      expect(await set.execute("adicionar_tag", { tag: "Cliente" })).toEqual({ result: "Tag adicionada." });
+      expect(add).toHaveBeenCalledWith(8);
+      const wrong = await set.execute("adicionar_tag", { tag: "VIP" });
+      expect(wrong.error).toBe(true);
+      expect(add).toHaveBeenCalledTimes(1);
+      expect(set.actions).toEqual([]);
+    });
+
+    it("only simulates in the test console", async () => {
+      const set = buildToolSet({ tag: { enabled: true } }, { queues, tags: { list } });
+      const res = await set.execute("adicionar_tag", { tag: "Cliente" });
+      expect(res.error).toBeFalsy();
+      expect(res.result).toContain("Simulação");
+    });
+  });
 });
