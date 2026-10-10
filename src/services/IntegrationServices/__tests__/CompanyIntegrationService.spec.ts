@@ -61,6 +61,25 @@ describe("CompanyIntegrationService", () => {
     expect(JSON.stringify(view)).not.toContain(rows[0].tokenEncrypted);
   });
 
+  it("removes line breaks and invisible characters pasted inside the token", async () => {
+    await connect(1, "plamev", "abc\u200b-12\r\n34\ufeff");
+    expect(testConnection).toHaveBeenCalledWith("abc-1234");
+    expect(decryptSecret(rows[0].tokenEncrypted)).toBe("abc-1234");
+  });
+
+  it("rejects a token with characters that cannot go in a header", async () => {
+    await expect(connect(1, "plamev", "tóken")).rejects.toMatchObject({ message: "ERR_INTEGRATION_TOKEN_INVALID", statusCode: 400 });
+    expect(testConnection).not.toHaveBeenCalled();
+    expect(rows).toHaveLength(0);
+  });
+
+  it("testSaved marks an unreadable saved token as error instead of failing", async () => {
+    await connect(1, "plamev", "tok-7777");
+    rows[0].tokenEncrypted = "v1:broken:data:here";
+    const view = await testSaved(1, "plamev");
+    expect(view).toMatchObject({ status: "error", lastError: "O token salvo não pôde ser lido. Cole o token de novo." });
+  });
+
   it("requires a token", async () => {
     await expect(connect(1, "plamev", "   ")).rejects.toMatchObject({ message: "ERR_INTEGRATION_TOKEN_REQUIRED" });
   });

@@ -35,6 +35,17 @@ const asAppError = (err: unknown): unknown => {
     : new AppError("ERR_INTEGRATION_UNREACHABLE", 502);
 };
 
+// Tokens are pasted from e-mails, PDFs and chats: drop whitespace and
+// zero-width characters anywhere. What is left must fit in an HTTP header.
+const cleanToken = (token: unknown): string => {
+  const clean = typeof token === "string" ? token.replace(/[\s\u200b-\u200d\u2060\ufeff]/g, "") : "";
+  if (!clean) throw new AppError("ERR_INTEGRATION_TOKEN_REQUIRED", 400);
+  if (/[^\x21-\x7e]/.test(clean)) throw new AppError("ERR_INTEGRATION_TOKEN_INVALID", 400);
+  return clean;
+};
+
+const UNREADABLE_TOKEN = "O token salvo não pôde ser lido. Cole o token de novo.";
+
 const findRow = (companyId: number, provider: string) =>
   CompanyIntegration.unscoped().findOne({ where: { companyId, provider } });
 
@@ -53,8 +64,7 @@ export const listForCompany = async (companyId: number): Promise<IntegrationView
 // Tests the token first; nothing is stored when the partner refuses it.
 export const connect = async (companyId: number, key: string, token: unknown): Promise<IntegrationView> => {
   const provider = await assertIntegration(companyId, key);
-  const clean = typeof token === "string" ? token.trim() : "";
-  if (!clean) throw new AppError("ERR_INTEGRATION_TOKEN_REQUIRED", 400);
+  const clean = cleanToken(token);
 
   try {
     await provider.testConnection(clean);
@@ -80,8 +90,17 @@ export const testSaved = async (companyId: number, key: string): Promise<Integra
   const row = await findRow(companyId, key);
   if (!row) throw new AppError("ERR_INTEGRATION_NOT_CONNECTED", 404);
 
+  let token: string;
   try {
-    await provider.testConnection(decryptSecret(row.tokenEncrypted));
+    token = decryptSecret(row.tokenEncrypted);
+  } catch {
+    // SECRETS_KEY changed or the payload is damaged: the user must paste it again.
+    await row.update({ status: "error", lastCheckedAt: new Date(), lastError: UNREADABLE_TOKEN });
+    return view(provider, row);
+  }
+
+  try {
+    await provider.testConnection(token);
     await row.update({ status: "connected", lastCheckedAt: new Date(), lastError: null });
   } catch (err) {
     if (!(err instanceof IntegrationError)) throw err;
