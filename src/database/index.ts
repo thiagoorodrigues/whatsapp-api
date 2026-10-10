@@ -52,6 +52,7 @@ import FollowUpStep from "../models/FollowUpStep";
 import FollowUpEnrollment from "../models/FollowUpEnrollment";
 import SystemLog from "../models/SystemLog";
 import ServerMetric from "../models/ServerMetric";
+import CompanyIntegration from "../models/CompanyIntegration";
 
 // eslint-disable-next-line
 const dbConfig = require("../config/database");
@@ -112,7 +113,8 @@ const models = [
   FollowUpStep,
   FollowUpEnrollment,
   SystemLog,
-  ServerMetric
+  ServerMetric,
+  CompanyIntegration
 ];
 
 sequelize.addModels(models);
