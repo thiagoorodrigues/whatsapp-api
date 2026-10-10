@@ -47,4 +47,36 @@ describe("ImportContactsService", () => {
     expect(renamed.name).toBe("Cliente VIP");
     expect(renamed.save).not.toHaveBeenCalled();
   });
+
+  it("takes the name from the LID entry of the same person when the phone entry has none", async () => {
+    findAllSynced.mockResolvedValue([
+      { jid: "5585920048774@s.whatsapp.net", lid: "163475682771010@lid", number: "5585920048774", name: null, notify: null, verifiedName: null },
+      { jid: "163475682771010@lid", lid: "163475682771010@lid", number: null, name: "Ricardo Nutrir Emporio", notify: null, verifiedName: null }
+    ]);
+
+    await ImportContactsService(1);
+
+    expect(createContact).toHaveBeenCalledTimes(1);
+    expect(createContact).toHaveBeenCalledWith({ number: "5585920048774", name: "Ricardo Nutrir Emporio", companyId: 1 });
+  });
+
+  it("renames an existing numbered contact with the LID entry name", async () => {
+    const numbered: any = { name: "5585920048774", number: "5585920048774", save: jest.fn() };
+    findContact.mockResolvedValue(numbered);
+    findAllSynced.mockResolvedValue([
+      { jid: "5585920048774@s.whatsapp.net", lid: "163475682771010@lid", number: "5585920048774", name: null },
+      { jid: "163475682771010@lid", lid: null, number: null, notify: "Ricardo" }
+    ]);
+
+    await ImportContactsService(1);
+
+    expect(numbered.name).toBe("Ricardo");
+    expect(numbered.save).toHaveBeenCalled();
+  });
+
+  it("does not create contacts known only by LID", async () => {
+    findAllSynced.mockResolvedValue([{ jid: "999@lid", lid: "999@lid", number: null, name: "Só LID" }]);
+    await ImportContactsService(1);
+    expect(createContact).not.toHaveBeenCalled();
+  });
 });
