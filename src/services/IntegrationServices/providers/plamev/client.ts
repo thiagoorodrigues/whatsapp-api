@@ -1,5 +1,7 @@
 import { IntegrationError } from "../types";
 
+export type Query = Record<string, string | undefined>;
+
 interface Options {
   apiUrl: string;
   token: string;
@@ -11,10 +13,15 @@ interface Options {
 // Swagger defines it (seller token; sales are attributed to its owner).
 export const plamevGet = async (
   { apiUrl, token, fetchFn = (globalThis as any).fetch, timeoutMs = 15000 }: Options,
-  path: string
+  path: string,
+  query: Query = {}
 ): Promise<unknown> => {
   const base = apiUrl.endsWith("/") ? apiUrl : `${apiUrl}/`;
-  const url = new URL(path, base).toString();
+  const target = new URL(path, base);
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") target.searchParams.append(key, value);
+  });
+  const url = target.toString();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let response: any;

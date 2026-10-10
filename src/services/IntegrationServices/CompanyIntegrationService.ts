@@ -114,3 +114,29 @@ export const disconnect = async (companyId: number, key: string): Promise<void> 
   const row = await findRow(companyId, key);
   if (row) await row.destroy();
 };
+
+// Runs a partner call with the company's saved token (server side only). A
+// refused or unreadable token marks the connection as error, so the admin
+// sees it in Settings.
+export const withSavedToken = async <T>(companyId: number, key: string, fn: (token: string) => Promise<T>): Promise<T> => {
+  await assertIntegration(companyId, key);
+  const row = await findRow(companyId, key);
+  if (!row) throw new AppError("ERR_INTEGRATION_NOT_CONNECTED", 404);
+
+  let token: string;
+  try {
+    token = decryptSecret(row.tokenEncrypted);
+  } catch {
+    await row.update({ status: "error", lastCheckedAt: new Date(), lastError: UNREADABLE_TOKEN });
+    throw new AppError("ERR_INTEGRATION_TOKEN_UNREADABLE", 400);
+  }
+
+  try {
+    return await fn(token);
+  } catch (err) {
+    if (err instanceof IntegrationError && err.kind === "auth") {
+      await row.update({ status: "error", lastCheckedAt: new Date(), lastError: err.message });
+    }
+    throw asAppError(err);
+  }
+};

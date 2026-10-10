@@ -12,6 +12,17 @@ describe("plamevGet", () => {
     expect(init.headers.Authorization).toBe("abc");
   });
 
+  it("adds the query, skipping empty values", async () => {
+    const fetchFn = reply(200, "[]");
+    await plamevGet({ apiUrl: "https://x.test/", token: "t", fetchFn }, "Credenciados/BuscarCredenciadosFiltros/", {
+      Cep: "36015350",
+      EstadosId: "",
+      CidadesId: undefined,
+      Bairro: "Centro"
+    });
+    expect((fetchFn.mock.calls[0] as any)[0]).toBe("https://x.test/Credenciados/BuscarCredenciadosFiltros/?Cep=36015350&Bairro=Centro");
+  });
+
   it("works with a trailing slash", async () => {
     const fetchFn = reply(200, "[]");
     await plamevGet({ apiUrl: "https://service.plamev-hm.com/", token: "abc", fetchFn }, "Estados/consultar");

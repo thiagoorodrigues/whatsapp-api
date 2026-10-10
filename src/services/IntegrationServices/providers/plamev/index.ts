@@ -1,7 +1,8 @@
 import { IntegrationProvider } from "../types";
 import { plamevGet } from "./client";
 
-const apiUrl = (): string => (process.env.PLAMEV_API_URL || "").trim();
+export const plamevApiUrl = (): string => (process.env.PLAMEV_API_URL || "").trim();
+const apiUrl = plamevApiUrl;
 
 const plamev: IntegrationProvider = {
   key: "plamev",

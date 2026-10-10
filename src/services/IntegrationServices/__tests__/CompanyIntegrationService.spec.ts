@@ -34,7 +34,7 @@ jest.mock("../../../helpers/integrationAccess", () => {
 });
 
 // eslint-disable-next-line import/first
-import { connect, disconnect, listForCompany, testSaved } from "../CompanyIntegrationService";
+import { connect, disconnect, listForCompany, testSaved, withSavedToken } from "../CompanyIntegrationService";
 // eslint-disable-next-line import/first
 import { IntegrationError } from "../providers";
 // eslint-disable-next-line import/first
@@ -127,5 +127,44 @@ describe("CompanyIntegrationService", () => {
     await connect(1, "plamev", "tok");
     await disconnect(1, "plamev");
     expect(rows).toHaveLength(0);
+  });
+
+  describe("withSavedToken", () => {
+    it("runs the call with the decrypted token", async () => {
+      await connect(1, "plamev", "tok-5555");
+      const fn = jest.fn(async (t: string) => `ok:${t.length}`);
+      expect(await withSavedToken(1, "plamev", fn)).toBe("ok:8");
+      expect(fn).toHaveBeenCalledWith("tok-5555");
+    });
+
+    it("404 when not connected", async () => {
+      await expect(withSavedToken(1, "plamev", jest.fn())).rejects.toMatchObject({ message: "ERR_INTEGRATION_NOT_CONNECTED", statusCode: 404 });
+    });
+
+    it("403 when out of the plan", async () => {
+      planKeys = [];
+      await expect(withSavedToken(1, "plamev", jest.fn())).rejects.toMatchObject({ statusCode: 403 });
+    });
+
+    it("a refused token marks the connection as error", async () => {
+      await connect(1, "plamev", "tok-6666");
+      const fn = jest.fn(async () => { throw new IntegrationError("auth", "A Plamev recusou o token."); });
+      await expect(withSavedToken(1, "plamev", fn)).rejects.toMatchObject({ message: "ERR_INTEGRATION_TOKEN_REJECTED" });
+      expect(rows[0]).toMatchObject({ status: "error", lastError: "A Plamev recusou o token." });
+    });
+
+    it("partner down is 502 and keeps the connection as it was", async () => {
+      await connect(1, "plamev", "tok-6666");
+      const fn = jest.fn(async () => { throw new IntegrationError("unreachable", "A Plamev não respondeu a tempo."); });
+      await expect(withSavedToken(1, "plamev", fn)).rejects.toMatchObject({ message: "ERR_INTEGRATION_UNREACHABLE", statusCode: 502 });
+      expect(rows[0].status).toBe("connected");
+    });
+
+    it("an unreadable saved token asks to paste it again", async () => {
+      await connect(1, "plamev", "tok-6666");
+      rows[0].tokenEncrypted = "v1:broken:data:here";
+      await expect(withSavedToken(1, "plamev", jest.fn())).rejects.toMatchObject({ message: "ERR_INTEGRATION_TOKEN_UNREADABLE" });
+      expect(rows[0].status).toBe("error");
+    });
   });
 });
