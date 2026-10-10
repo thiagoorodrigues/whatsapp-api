@@ -275,7 +275,8 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
       unreadMessages,
       companyId,
       groupContact,
-      inbound.history
+      inbound.history,
+      inbound.history ? new Date(inbound.timestamp) : undefined
     );
 
     // CRM rules run alongside the message; the service logs its own failures.

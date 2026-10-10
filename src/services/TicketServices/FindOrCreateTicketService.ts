@@ -16,8 +16,17 @@ interface TicketData {
 
 // history: message imported from the chat history. It does not change the
 // unread count, and a conversation known only from the history is filed as
-// closed instead of waiting for someone in the queue.
-const FindOrCreateTicketService = async (contact: Contact, whatsappId: number, unreadMessages: number, companyId: number, groupContact?: Contact, history = false): Promise<Ticket> => {
+// closed instead of waiting for someone in the queue, dated by its message
+// (`at`) and kept out of the reports (no tracking row: it was not attended here).
+const FindOrCreateTicketService = async (
+  contact: Contact,
+  whatsappId: number,
+  unreadMessages: number,
+  companyId: number,
+  groupContact?: Contact,
+  history = false,
+  at?: Date
+): Promise<Ticket> => {
   let ticket = await Ticket.findOne({
     where: {
       status: {
@@ -43,7 +52,7 @@ const FindOrCreateTicketService = async (contact: Contact, whatsappId: number, u
   });
 
   if (!ticket) {
-    ticket = await Ticket.create({
+    const data = {
       contactId: !!groupContact ? groupContact.id : contact.id,
       status: history ? "closed" : "pending",
       isGroup: !!groupContact,
@@ -51,14 +60,19 @@ const FindOrCreateTicketService = async (contact: Contact, whatsappId: number, u
       whatsappId,
       whatsapp,
       companyId
-    });
+    };
+    ticket = history && at
+      ? await Ticket.create({ ...data, createdAt: at, updatedAt: at } as any, { silent: true })
+      : await Ticket.create(data as any);
 
-    await FindOrCreateATicketTrakingService({
-      ticketId: ticket.id,
-      companyId,
-      whatsappId,
-      userId: ticket.userId
-    });
+    if (!history) {
+      await FindOrCreateATicketTrakingService({
+        ticketId: ticket.id,
+        companyId,
+        whatsappId,
+        userId: ticket.userId
+      });
+    }
   }
 
   if (!contact.isGroup && ticket.isGroup) {
