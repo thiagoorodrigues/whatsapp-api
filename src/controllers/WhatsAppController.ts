@@ -31,6 +31,7 @@ interface WhatsappData {
   expiresTicket?: number;
   expiresInactiveMessage?: string;
   importMessages?: boolean;
+  closeImportedTickets?: boolean;
   showOnline?: boolean;
   color?: string;
   initialDate?: string;
@@ -60,6 +61,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     queueIds,
     token,
     importMessages = false,
+    closeImportedTickets,
     showOnline = false,
     color,
     initialDate = null,
@@ -85,6 +87,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     companyId,
     token: req.user.profile === "admin" ? token : undefined,
     importMessages,
+    closeImportedTickets,
     showOnline,
     color,
     initialDate,

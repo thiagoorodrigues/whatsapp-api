@@ -25,7 +25,8 @@ const FindOrCreateTicketService = async (
   companyId: number,
   groupContact?: Contact,
   history = false,
-  at?: Date
+  at?: Date,
+  historyStatus: "closed" | "pending" = "closed"
 ): Promise<Ticket> => {
   let ticket = await Ticket.findOne({
     where: {
@@ -54,7 +55,7 @@ const FindOrCreateTicketService = async (
   if (!ticket) {
     const data = {
       contactId: !!groupContact ? groupContact.id : contact.id,
-      status: history ? "closed" : "pending",
+      status: history ? historyStatus : "pending",
       isGroup: !!groupContact,
       unreadMessages: history ? 0 : unreadMessages,
       whatsappId,

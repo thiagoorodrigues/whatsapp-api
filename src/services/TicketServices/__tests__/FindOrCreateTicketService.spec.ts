@@ -56,4 +56,11 @@ describe("FindOrCreateTicketService", () => {
     await FindOrCreateTicketService(contact, 2, 1, 1);
     expect(tracking).toHaveBeenCalled();
   });
+
+  it("history conversations can be filed as pending, still nothing unread", async () => {
+    findOne.mockResolvedValue(null);
+    const at = new Date("2026-09-01T11:56:10Z");
+    await FindOrCreateTicketService(contact, 2, 0, 1, undefined, true, at, "pending");
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ status: "pending", unreadMessages: 0 }), { silent: true });
+  });
 });
