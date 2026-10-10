@@ -32,6 +32,7 @@ import emailRoute from "./emailRoute"; //Email
 import forgotsRoutes from "./forgotPasswordRoutes"; // Reset Passwd
 import crmRoutes from "./crmRoutes";
 import followUpRoutes from "./followUpRoutes";
+import integrationRoutes from "./integrationRoutes";
 const routes = Router();
 
 routes.use(userRoutes);
@@ -63,6 +64,7 @@ routes.use(flowRoutes);
 routes.use(aiAgentRoutes);
 routes.use(crmRoutes);
 routes.use(followUpRoutes);
+routes.use(integrationRoutes);
 routes.use(systemLogRoutes);
 routes.use(serverMonitorRoutes);
 routes.use(emailRoute); //Email
