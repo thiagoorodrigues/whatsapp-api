@@ -1,0 +1,21 @@
+import { IntegrationProvider } from "../types";
+import { plamevGet } from "./client";
+
+const apiUrl = (): string => (process.env.PLAMEV_API_URL || "").trim();
+
+const plamev: IntegrationProvider = {
+  key: "plamev",
+  name: "Plamev",
+  description: "Plano de saúde pet: consulte a rede credenciada e os planos durante o atendimento.",
+  tools: [
+    { key: "rede", label: "Rede credenciada" },
+    { key: "planos", label: "Planos" }
+  ],
+  isAvailable: () => apiUrl() !== "",
+  testConnection: async (token: string) => {
+    // Light authenticated read; 401/403 means the token was refused.
+    await plamevGet({ apiUrl: apiUrl(), token }, "Estados/consultar");
+  }
+};
+
+export default plamev;
