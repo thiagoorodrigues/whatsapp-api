@@ -1,5 +1,6 @@
 jest.mock("../../controllers/IntegrationController", () => ({
-  catalog: jest.fn(), index: jest.fn(), update: jest.fn(), test: jest.fn(), remove: jest.fn()
+  catalog: jest.fn(), index: jest.fn(), update: jest.fn(), test: jest.fn(), remove: jest.fn(),
+  plamevEstados: jest.fn(), plamevCidades: jest.fn(), plamevCredenciados: jest.fn()
 }));
 // eslint-disable-next-line import/first
 import integrationRoutes from "../integrationRoutes";
