@@ -32,6 +32,7 @@ type StorePlanData = {
   useAiAgents?: boolean;
   useCrm?: boolean;
   crmFunnels?: number;
+  integrations?: string[];
 };
 
 type UpdatePlanData = {
@@ -50,6 +51,7 @@ type UpdatePlanData = {
   useAiAgents?: boolean;
   useCrm?: boolean;
   crmFunnels?: number;
+  integrations?: string[];
 };
 
 export const index = async (req: Request, res: Response): Promise<Response> => {

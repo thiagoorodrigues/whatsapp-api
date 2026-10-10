@@ -7,7 +7,8 @@ import {
   PrimaryKey,
   AutoIncrement,
   AllowNull,
-  Unique
+  Unique,
+  DataType
 } from "sequelize-typescript";
 
 @Table
@@ -69,6 +70,10 @@ class Plan extends Model<Plan> {
   // Max active sales funnels; 0 means unlimited.
   @Column
   crmFunnels: number;
+
+  // Partner integrations this plan sells (keys from the integration catalog).
+  @Column({ type: DataType.JSONB, defaultValue: [] })
+  integrations: string[];
 }
 
 export default Plan;

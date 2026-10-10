@@ -1,5 +1,6 @@
 import AppError from "../../errors/AppError";
 import Plan from "../../models/Plan";
+import { sanitizeIntegrationKeys } from "../IntegrationServices/providers";
 
 interface PlanData {
   name: string;
@@ -17,6 +18,7 @@ interface PlanData {
   useAiAgents?: boolean;
   useCrm?: boolean;
   crmFunnels?: number;
+  integrations?: string[];
 }
 
 const UpdatePlanService = async (planData: PlanData): Promise<Plan> => {
@@ -28,7 +30,10 @@ const UpdatePlanService = async (planData: PlanData): Promise<Plan> => {
     throw new AppError("ERR_NO_PLAN_FOUND", 404);
   }
 
-  await plan.update(planData);
+  const data = planData.integrations === undefined
+    ? planData
+    : { ...planData, integrations: sanitizeIntegrationKeys(planData.integrations) };
+  await plan.update(data);
 
   return plan;
 };

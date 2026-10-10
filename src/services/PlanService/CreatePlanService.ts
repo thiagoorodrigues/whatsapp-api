@@ -1,6 +1,7 @@
 import * as Yup from "yup";
 import AppError from "../../errors/AppError";
 import Plan from "../../models/Plan";
+import { sanitizeIntegrationKeys } from "../IntegrationServices/providers";
 
 interface PlanData {
   name: string;
@@ -17,6 +18,7 @@ interface PlanData {
   useAiAgents?: boolean;
   useCrm?: boolean;
   crmFunnels?: number;
+  integrations?: string[];
 }
 
 const CreatePlanService = async (planData: PlanData): Promise<Plan> => {
@@ -48,7 +50,7 @@ const CreatePlanService = async (planData: PlanData): Promise<Plan> => {
     throw new AppError(err.message);
   }
 
-  const plan = await Plan.create(planData);
+  const plan = await Plan.create({ ...planData, integrations: sanitizeIntegrationKeys(planData.integrations) });
 
   return plan;
 };

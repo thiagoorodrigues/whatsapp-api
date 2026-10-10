@@ -23,7 +23,8 @@ const ListCompaniesPlanService = async (): Promise<Company[]> => {
         "useFlowBuilder",
         "useAiAgents",
         "useCrm",
-        "crmFunnels"
+        "crmFunnels",
+                "integrations"
         ]
       },
     ]
