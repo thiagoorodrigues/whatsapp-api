@@ -21,6 +21,8 @@ const setup = (over: any = {}) => {
     }),
     finish: jest.fn(async () => undefined),
     log: (s: string) => logs.push(s),
+    report: jest.fn(),
+    reportEveryMs: 0,
     pauseMs: 0,
     idleMs: 30
   };
@@ -141,5 +143,51 @@ describe("createHistoryImporter", () => {
     off.importer.onBatch([msg("a", "2026-09-10T10:00:00-03:00")], before);
     await off.importer.idle();
     expect(before).toHaveBeenCalled();
+  });
+
+  describe("progress", () => {
+    const last = (deps: any) => deps.report.mock.calls[deps.report.mock.calls.length - 1][0];
+
+    it("reports what WhatsApp sent and what was saved", async () => {
+      const { importer, deps } = setup({ existing: ["b"] });
+      importer.onBatch([msg("a", "2026-09-10T10:00:00-03:00"), msg("b", "2026-09-10T10:00:00-03:00")], undefined, 40);
+      importer.onBatch([msg("c", "2026-08-01T10:00:00-03:00")], undefined, 100);
+      await importer.idle();
+      expect(last(deps)).toMatchObject({
+        status: "running",
+        receivedPercent: 100,
+        total: 3,
+        processed: 3,
+        saved: 1,
+        existing: 1,
+        outside: 1,
+        conversations: 1
+      });
+    });
+
+    it("marks done when the import finishes", async () => {
+      const { importer, deps } = setup();
+      importer.onBatch([msg("a", "2026-09-10T10:00:00-03:00")]);
+      await importer.idle();
+      await wait(50);
+      expect(last(deps)).toMatchObject({ status: "done", saved: 1 });
+      expect(last(deps).finishedAt).toBeTruthy();
+    });
+
+    it("WhatsApp saying the sync is complete sets 100%", async () => {
+      const { importer, deps } = setup();
+      importer.onBatch([msg("a", "2026-09-10T10:00:00-03:00")], undefined, 30);
+      await importer.idle();
+      importer.receivedAll();
+      expect(last(deps).receivedPercent).toBe(100);
+    });
+
+    it("batches skipped with the option off do not count", async () => {
+      const { importer, deps } = setup({ conn: { importMessages: false } });
+      importer.onBatch([msg("a", "2026-09-10T10:00:00-03:00")]);
+      await importer.idle();
+      expect(deps.report).not.toHaveBeenCalled();
+      expect(importer.snapshot()).toBeNull();
+    });
   });
 });

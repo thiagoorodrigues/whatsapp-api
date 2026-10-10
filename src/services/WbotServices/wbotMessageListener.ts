@@ -29,6 +29,7 @@ import ReactToMessageService from "../MessageServices/ReactToMessageService";
 import UpdateMessageAckService from "../MessageServices/UpdateMessageAckService";
 import ShowWhatsAppService from "../WhatsappService/ShowWhatsAppService";
 import { createHistoryImporter, importDay } from "./historyImport";
+import { publishImportProgress } from "../../libs/historyImportProgress";
 import FinishHistoryImportService from "../WhatsappService/FinishHistoryImportService";
 import UpsertWhatsappContactsService, { SyncedContact } from "../WhatsappContactServices/UpsertWhatsappContactsService";
 
@@ -192,14 +193,18 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
       exists: async id => (await Message.count({ where: { messagesWhatsappsId: id, whatsappId: wbot.id } })) > 0,
       handle: message => handleMessage(message, wbot, companyId, true),
       finish: () => FinishHistoryImportService(wbot.id!, companyId),
-      log: line => logger.info(`importação de histórico (whatsapp ${wbot.id}): ${line}`)
+      log: line => logger.info(`importação de histórico (whatsapp ${wbot.id}): ${line}`),
+      report: progress => publishImportProgress(wbot.id!, companyId, progress)
     });
     wbot.ev.on("connection.update", ({ connection }) => {
       if (connection === "close") history.cancel();
     });
 
-    wbot.ev.on("messaging-history.set", ({ contacts, messages }) => {
-      history.onBatch(messages.filter(filterMessages), () => saveSyncedContacts(contacts as SyncedContact[]));
+    wbot.ev.on("messaging-history.set", ({ contacts, messages, progress }) => {
+      history.onBatch(messages.filter(filterMessages), () => saveSyncedContacts(contacts as SyncedContact[]), progress);
+    });
+    wbot.ev.on("messaging-history.status", ({ status }) => {
+      if (status === "complete") history.receivedAll();
     });
 
   } catch (error) {

@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { getImportProgress } from "../libs/historyImportProgress";
 import { getIO } from "../libs/socket";
 import { removeWbot } from "../libs/wbot";
 import { requestContext } from "../libs/requestContext";
@@ -181,3 +182,7 @@ export const remove = async (
 
   return res.status(200).json({ message: "Whatsapp deleted." });
 };
+
+// Progress of the history import (null when there is none in memory).
+export const importProgress = async (req: Request, res: Response): Promise<Response> =>
+  res.json(getImportProgress(Number(req.params.whatsappId), req.user.companyId));
