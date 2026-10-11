@@ -52,7 +52,7 @@ recibos, recusa de chamada) e espaço para recursos que só o whatsmeow tem
 └────────▲───────────────────────────┼────────────────────┘
          │ Redis Streams             │ HTTP interno + token
 ┌────────┴───────────────────────────▼────────────────────┐
-│ gateway Go (repo sweasy/whatsapp-api)                    │
+│ gateway Go (repo weconex-api-meow)                       │
 │  sessões whatsmeow · comandos · publica eventos         │
 │  Postgres schema "whatsmeow" · mídia no volume comum    │
 └─────────────────────────────────────────────────────────┘
@@ -66,7 +66,7 @@ recibos, recusa de chamada) e espaço para recursos que só o whatsmeow tem
 | `app` | nada |
 | `postgres` | ganha o schema `whatsmeow` (chaves das sessões; entra no backup) |
 | `redis` | ganha os streams `wa:events:{connectionId}` e `wa:dead` |
-| **`gateway`** (novo) | Dockerfile do repo `sweasy/whatsapp-api`; deploy no push da `main` |
+| **`gateway`** (novo) | Dockerfile do repo privado `thiagoorodrigues/weconex-api-meow` (pasta `~/Projetos/weconex/weconex-api-meow`); deploy no push da `main` |
 
 `gateway`:
 - **sem domínio público**; só a `api` acessa, pela rede interna
