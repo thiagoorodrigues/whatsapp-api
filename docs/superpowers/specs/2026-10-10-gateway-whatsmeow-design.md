@@ -25,7 +25,10 @@ recibos, recusa de chamada) e espaço para recursos que só o whatsmeow tem
   funcionar, ninguém lê QR; se falhar, plano B = todos leem o QR de novo.
 - Comunicação **A**: HTTP para comandos (Node → Go) e **Redis Streams** para
   eventos (Go → Node).
-- Gateway grava a mídia recebida **direto no volume comum** do Wazzy.
+- Gateway e api compartilham o volume `/app/public`. A mídia recebida é baixada
+  **só quando o Wazzy vai gravar a mensagem** (como hoje): o gateway grava numa
+  pasta de passagem `public/.gateway/` (o Express não serve arquivos que
+  começam com ponto) e o Node move para a pasta da empresa.
 - Nenhum cliente usa n8n: o `raw` do webhook pode mudar de formato.
 - A API externa (`/api/messages/send`) continua igual.
 
@@ -68,7 +71,8 @@ recibos, recusa de chamada) e espaço para recursos que só o whatsmeow tem
 `gateway`:
 - **sem domínio público**; só a `api` acessa, pela rede interna
   (`http://wazzy_gateway:8080`), com header `Authorization: Bearer $GATEWAY_TOKEN`;
-- monta o **mesmo volume** da `api` em `/app/public`;
+- monta o **mesmo volume** da `api` em `/app/public` e roda como root (igual à
+  api), para poder escrever nele;
 - variáveis: `POSTGRES_DSN` (banco do Wazzy, `search_path=whatsmeow`),
   `REDIS_URL`, `GATEWAY_TOKEN`, `HTTP_PORT=8080`, `LOG_LEVEL`;
 - `api` ganha `GATEWAY_URL` e `GATEWAY_TOKEN`.
@@ -80,8 +84,9 @@ recibos, recusa de chamada) e espaço para recursos que só o whatsmeow tem
 
 Só fala de WhatsApp; não conhece ticket, fila nem empresa.
 
-- **Sessão = `Whatsapps.id`** (não mais UUID próprio). O `connect` recebe
-  `companyId` para saber a pasta da mídia (`public/company{companyId}/`).
+- **Sessão = `Whatsapps.id`** (não mais UUID próprio). O gateway não sabe de
+  empresa. A tabela `whatsmeow.gateway_sessions (connection_id, jid)` liga a
+  conexão ao aparelho.
 - Ao subir, restaura sozinho as sessões que estão em `whatsmeow_device`.
 - Reconexão de rede fica com o whatsmeow.
 - O código atual (`whatsapp/`, `http/`, webhook simples, `profile_media/`,
@@ -92,7 +97,7 @@ Só fala de WhatsApp; não conhece ticket, fila nem empresa.
 | Método e rota | Uso |
 |---|---|
 | `GET /health` | vivo + nº de sessões conectadas |
-| `POST /sessions/{id}/connect` `{companyId}` | idempotente: sobe a sessão ou confirma |
+| `POST /sessions/{id}/connect` | idempotente: sobe a sessão ou confirma |
 | `POST /sessions/{id}/disconnect` | fecha o socket, mantém o pareamento |
 | `POST /sessions/{id}/logout` | desfaz o pareamento e apaga as chaves |
 | `GET /sessions/{id}` | status (`connecting`, `qr`, `connected`, `logged_out`) |
@@ -109,12 +114,14 @@ Só fala de WhatsApp; não conhece ticket, fila nem empresa.
 | `GET /sessions/{id}/avatar?jid=` | URL da foto |
 | `GET /sessions/{id}/groups/{jid}` | assunto, descrição, criação, membros (LID, telefone, admin, eu) |
 | `POST /sessions/{id}/calls/{callId}/reject` `{from}` | recusar chamada |
+| `POST /sessions/{id}/media` `{message}` | baixa a mídia de uma mensagem (o `raw.message` guardado) para `public/.gateway/in/`; devolve `{path, mimetype, fileName}` ou `null` se o WhatsApp não tiver mais o arquivo |
 
 `POST /messages` recebe `{to, content, quoted?, forwarded?}`:
 - `to`: `{jid}` ou `{number, lid, isGroup}` (mesma resolução de hoje: LID
   quando conhecido);
-- `content`: o `OutgoingContent` atual; mídia **sempre por `path`** no volume
-  comum (o Node grava `buffer`/upload em arquivo temporário antes);
+- `content`: o `OutgoingContent` atual; mídia **sempre por `path`** relativo a
+  `/app/public` (o Node grava `buffer`/upload em `public/.gateway/out/` antes e
+  apaga depois); caminhos que saem da pasta são recusados;
 - `quoted`: `{id, chat, sender, fromMe, text}` — a citação é montada a partir
   do que já está no banco, **sem depender do payload bruto**; mensagens
   antigas no formato Baileys continuam citáveis;
@@ -132,7 +139,7 @@ Stream `wa:events:{connectionId}` (ordem por conexão). Envelope:
 
 | `type` | `data` |
 |---|---|
-| `message` | quase o `InboundMessage`: `id, fromMe, history, timestamp, chat{jid,isGroup,name}, sender{jid,name,lid}, kind, channelType, text, media{path,mimetype,fileName}?, quotedId, editOf, forwarded, mentions, raw` |
+| `message` | quase o `InboundMessage`: `id, fromMe, history, timestamp, chat{jid,isGroup,name}, sender{jid,name,lid}, kind, channelType, text, hasMedia, media{mimetype,fileName}?, quotedId, editOf, forwarded, mentions, raw` |
 | `receipt` | `ids[], chat, sender, status` (`delivered`/`read`/`played`) |
 | `reaction` | `id` da mensagem alvo, `chat, sender, emoji, fromMe` |
 | `message_update` | `id, chat, revoked` (apagada) — edição vem como `message` com `editOf` |
@@ -141,11 +148,13 @@ Stream `wa:events:{connectionId}` (ordem por conexão). Envelope:
 | `contacts` | lista `{jid, lid, name, notify}` |
 | `group_update` | `jid` (o Node esquece o cache do grupo) |
 | `history` | lote de `message` com `history: true` + `progress` |
-| `call` | `callId, from, isVideo, isGroup, ts` |
+| `call` | `event` (`offer`/`terminate`), `callId, from, isVideo, isGroup, ts` |
 | `connection` | `status` (`qr` + `qr`, `pair_code` + `code`, `connected` + `me`, `disconnected`, `logged_out`) |
 
 A tradução proto → envelope é feita em Go (perto do proto); o Node só
-completa `companyId` e `loadMedia` (lê o arquivo do disco).
+completa `companyId` e `loadMedia` (chama `POST /media`, lê o arquivo da
+pasta de passagem e o apaga depois de gravar). O gateway apaga arquivos da
+pasta de passagem com mais de 24 h.
 
 ### Wazzy (Node)
 
