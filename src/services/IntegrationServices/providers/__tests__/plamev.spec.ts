@@ -1,4 +1,4 @@
-import { plamevGet } from "../plamev/client";
+import { plamevGet, plamevPost } from "../plamev/client";
 import { IntegrationError } from "../types";
 
 const reply = (status: number, body = "") => jest.fn(async () => ({ status, ok: status >= 200 && status < 300, text: async () => body }));
@@ -45,5 +45,24 @@ describe("plamevGet", () => {
     expect(err).toBeInstanceOf(IntegrationError);
     expect(err.kind).toBe("unreachable");
     expect(err.message).not.toContain("SECRET-TOKEN-XYZ");
+  });
+});
+
+describe("plamevPost", () => {
+  const reply = (status: number, body: unknown) => jest.fn(async () => ({ status, ok: status < 400, text: async () => JSON.stringify(body) }));
+
+  it("posts JSON with the token and returns the parsed body", async () => {
+    const fetchFn = reply(200, { ValorTotal: 1 });
+    expect(await plamevPost({ apiUrl: "https://x.test", token: "t", fetchFn }, "Cotacoes/SimulaCotacaoPet", { a: 1 })).toEqual({ ValorTotal: 1 });
+    const [url, init] = fetchFn.mock.calls[0] as any;
+    expect(url).toBe("https://x.test/Cotacoes/SimulaCotacaoPet");
+    expect(init).toMatchObject({ method: "POST", body: JSON.stringify({ a: 1 }), headers: { Authorization: "t", "Content-Type": "application/json" } });
+  });
+
+  it("turns a 400 with a reason into a rejected error with that reason", async () => {
+    await expect(plamevPost({ apiUrl: "https://x.test", token: "t", fetchFn: reply(400, { erro: "Raça não localizada" }) }, "p", {}))
+      .rejects.toMatchObject({ kind: "rejected", message: "A Plamev não aceitou: Raça não localizada" });
+    await expect(plamevPost({ apiUrl: "https://x.test", token: "t", fetchFn: reply(403, {}) }, "p", {})).rejects.toMatchObject({ kind: "auth" });
+    await expect(plamevPost({ apiUrl: "https://x.test", token: "t", fetchFn: reply(500, {}) }, "p", {})).rejects.toMatchObject({ kind: "unreachable" });
   });
 });

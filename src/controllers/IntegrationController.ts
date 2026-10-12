@@ -46,6 +46,23 @@ export const plamevPlanoImagem = async (req: Request, res: Response): Promise<Re
   return res.type("png").send(png);
 };
 
+export const plamevRacas = async (req: Request, res: Response): Promise<Response> =>
+  res.json(await PlamevRede.racas(req.user.companyId, str(req.query.especie) || ""));
+
+export const plamevCampanhas = async (req: Request, res: Response): Promise<Response> =>
+  res.json(await PlamevRede.campanhas(req.user.companyId, { tipoId: str(req.query.tipoId) || "", estadoId: str(req.query.estadoId) || "" }));
+
+export const plamevTabelas = async (req: Request, res: Response): Promise<Response> =>
+  res.json(await PlamevRede.tabelas(req.user.companyId, str(req.query.campanhaId) || ""));
+
+export const plamevSimular = async (req: Request, res: Response): Promise<Response> =>
+  res.json(await PlamevRede.simular(req.user.companyId, req.body || {}));
+
+export const plamevCotacaoImagem = async (req: Request, res: Response): Promise<Response> => {
+  const png = await PlamevRede.imagemCotacao(req.user.companyId, req.body || {});
+  return res.type("png").send(png);
+};
+
 export const plamevCredenciados = async (req: Request, res: Response): Promise<Response> =>
   res.json(
     await PlamevRede.credenciados(req.user.companyId, {

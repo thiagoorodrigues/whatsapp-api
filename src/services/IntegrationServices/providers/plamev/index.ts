@@ -7,10 +7,11 @@ const apiUrl = plamevApiUrl;
 const plamev: IntegrationProvider = {
   key: "plamev",
   name: "Plamev",
-  description: "Plano de saúde pet: consulte a rede credenciada e os planos durante o atendimento.",
+  description: "Plano de saúde pet: consulte a rede credenciada e os planos e simule cotações durante o atendimento.",
   tools: [
     { key: "rede", label: "Rede credenciada" },
-    { key: "planos", label: "Planos" }
+    { key: "planos", label: "Planos" },
+    { key: "cotacao", label: "Simular cotação" }
   ],
   isAvailable: () => apiUrl() !== "",
   testConnection: async (token: string) => {

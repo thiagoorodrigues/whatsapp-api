@@ -11,10 +11,11 @@ describe("integration registry", () => {
     expect(availableProviders().map(p => p.key)).toEqual(["plamev"]);
   });
 
-  it("Plamev exposes the two tools", () => {
+  it("Plamev exposes its tools", () => {
     expect(getProvider("plamev")?.tools).toEqual([
       { key: "rede", label: "Rede credenciada" },
-      { key: "planos", label: "Planos" }
+      { key: "planos", label: "Planos" },
+      { key: "cotacao", label: "Simular cotação" }
     ]);
   });
 

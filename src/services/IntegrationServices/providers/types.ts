@@ -1,4 +1,5 @@
-export type IntegrationErrorKind = "auth" | "unreachable";
+// rejected: the partner refused the request and said why (the message is theirs).
+export type IntegrationErrorKind = "auth" | "unreachable" | "rejected";
 
 // Failure talking to a partner API. The message never carries the token.
 export class IntegrationError extends Error {

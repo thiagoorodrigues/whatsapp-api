@@ -30,9 +30,10 @@ const view = (provider: IntegrationProvider, row?: CompanyIntegration | null): I
 
 const asAppError = (err: unknown): unknown => {
   if (!(err instanceof IntegrationError)) return err;
-  return err.kind === "auth"
-    ? new AppError("ERR_INTEGRATION_TOKEN_REJECTED", 400)
-    : new AppError("ERR_INTEGRATION_UNREACHABLE", 502);
+  if (err.kind === "auth") return new AppError("ERR_INTEGRATION_TOKEN_REJECTED", 400);
+  // O motivo da Plamev vai como está (o app mostra o texto que não é código).
+  if (err.kind === "rejected") return new AppError(err.message, 400);
+  return new AppError("ERR_INTEGRATION_UNREACHABLE", 502);
 };
 
 // Tokens are pasted from e-mails, PDFs and chats: drop whitespace and

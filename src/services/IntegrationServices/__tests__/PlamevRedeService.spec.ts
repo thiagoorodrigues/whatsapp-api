@@ -1,4 +1,5 @@
 const plamevGet = jest.fn();
+const plamevPost = jest.fn();
 const consultarCep = jest.fn();
 const gerarImagemRede = jest.fn();
 jest.mock("../providers/plamev/redeImagem", () => ({
@@ -6,7 +7,10 @@ jest.mock("../providers/plamev/redeImagem", () => ({
   gerarImagemRede: (...a: any[]) => gerarImagemRede(...a)
 }));
 jest.mock("../../../helpers/consultaCep", () => ({ consultarCep: (...a: any[]) => consultarCep(...a) }));
-jest.mock("../providers/plamev/client", () => ({ plamevGet: (...a: any[]) => plamevGet(...a) }));
+jest.mock("../providers/plamev/client", () => ({
+  plamevGet: (...a: any[]) => plamevGet(...a),
+  plamevPost: (...a: any[]) => plamevPost(...a)
+}));
 jest.mock("../CompanyIntegrationService", () => ({
   withSavedToken: async (companyId: number, key: string, fn: (t: string) => Promise<unknown>) => {
     if (companyId !== 7 || key !== "plamev") throw new Error("wrong company or provider");
@@ -15,9 +19,10 @@ jest.mock("../CompanyIntegrationService", () => ({
 }));
 
 // eslint-disable-next-line import/first
-import { bairros, cep, credenciados, cidades, estados, imagem, imagemPlano, planos } from "../PlamevRedeService";
+import { bairros, cep, credenciados, cidades, estados, imagem, imagemPlano, planos, simular } from "../PlamevRedeService";
 
 beforeEach(() => {
+  plamevPost.mockReset();
   plamevGet.mockReset();
   process.env.PLAMEV_API_URL = "https://service.plamev-hm.com/";
 });
@@ -88,6 +93,18 @@ describe("PlamevRedeService", () => {
     expect(png.subarray(0, 4).toString("hex")).toBe("89504e47");
     await expect(imagemPlano(8, { plano: { id: "c1" } })).rejects.toThrow("wrong company or provider");
     await expect(imagemPlano(7, {})).rejects.toMatchObject({ message: "ERR_INTEGRATION_FILTER_REQUIRED" });
+  });
+
+  it("simulates a quote with the company token through a POST", async () => {
+    plamevPost.mockResolvedValue({ ValorTotalMensalidade: 139.99 });
+    const r = await simular(7, {
+      estadoId: "mg",
+      formaPagamento: "cartao",
+      pets: [{ especie: "cachorro", racaId: "r", nascimento: "2022-01-01", coberturaId: "c" }]
+    });
+    expect(r.totalMensal).toBe(139.99);
+    expect(plamevPost.mock.calls[0][0]).toEqual({ apiUrl: "https://service.plamev-hm.com/", token: "tok-777" });
+    expect(plamevPost.mock.calls[0][1]).toBe("Cotacoes/SimulaCotacaoPet");
   });
 
   it("passes the filters to the credenciados search", async () => {
