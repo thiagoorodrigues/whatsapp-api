@@ -15,8 +15,8 @@ export type MediaSource = { buffer: Buffer } | { path: string } | { url: string 
 
 export type OutgoingContent =
   | { type: "text"; text: string; /** Ids of the people mentioned ("@name" in groups). */ mentions?: string[] }
-  | ({ type: "image"; caption?: string } & MediaSource)
-  | ({ type: "video"; caption?: string; fileName?: string } & MediaSource)
+  | ({ type: "image"; caption?: string; mimetype?: string } & MediaSource)
+  | ({ type: "video"; caption?: string; fileName?: string; mimetype?: string } & MediaSource)
   | ({ type: "audio"; mimetype?: string; voice?: boolean } & MediaSource)
   | ({ type: "document"; caption?: string; fileName?: string; mimetype?: string } & MediaSource);
 

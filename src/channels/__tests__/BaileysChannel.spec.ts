@@ -182,7 +182,7 @@ describe("BaileysChannel", () => {
 
 describe("media content", () => {
   it("builds content from files like the old getMessageOptions", () => {
-    expect(contentFromFile("v.mp4", "/tmp/v.mp4", "oi")).toEqual({ type: "video", path: "/tmp/v.mp4", caption: "oi", fileName: "v.mp4" });
+    expect(contentFromFile("v.mp4", "/tmp/v.mp4", "oi")).toEqual({ type: "video", path: "/tmp/v.mp4", caption: "oi", fileName: "v.mp4", mimetype: "video/mp4" });
     expect(contentFromFile("a.ogg", "/tmp/a.ogg")).toEqual({ type: "audio", path: "/tmp/a.ogg", mimetype: "audio/mp4", voice: true });
     expect(contentFromFile("d.pdf", "/tmp/d.pdf", "")).toEqual({
       type: "document",
@@ -191,7 +191,7 @@ describe("media content", () => {
       fileName: "d.pdf",
       mimetype: "application/pdf"
     });
-    expect(contentFromFile("i.png", "/tmp/i.png", "c")).toEqual({ type: "image", path: "/tmp/i.png", caption: "c" });
+    expect(contentFromFile("i.png", "/tmp/i.png", "c")).toEqual({ type: "image", path: "/tmp/i.png", caption: "c", mimetype: "image/png" });
     expect(() => contentFromFile("x", "/tmp/sem-extensao")).toThrow("Invalid mimetype");
   });
 
