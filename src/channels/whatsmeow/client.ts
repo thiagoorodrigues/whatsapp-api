@@ -1,6 +1,7 @@
 import axios, { AxiosRequestConfig } from "axios";
 import AppError from "../../errors/AppError";
 import { gatewayConfig } from "../../config/whatsappEngine";
+import { logger } from "../../utils/logger";
 
 // Cliente HTTP do gateway whatsmeow (Go). Um método por rota; os nomes de
 // campo seguem o JSON do gateway (README do weconex-api-meow).
@@ -94,8 +95,10 @@ export interface Downloaded {
 export type PresenceState = "available" | "unavailable";
 export type TypingState = "composing" | "recording" | "paused";
 
-const SHORT_TIMEOUT = 30 * 1000;
-const LONG_TIMEOUT = 120 * 1000;
+// Margem sobre os timeouts do próprio gateway (30 s / 120 s): um sucesso
+// lento não pode virar falha aqui (e duplicar o envio na nova tentativa).
+const SHORT_TIMEOUT = 35 * 1000;
+const LONG_TIMEOUT = 130 * 1000;
 
 interface Envelope<T> {
   success: boolean;
@@ -104,14 +107,17 @@ interface Envelope<T> {
 }
 
 // Traduz a falha do axios em AppError (códigos que o frontend já traduz).
-const mapError = (err: unknown): never => {
+// Rede e 5xx vão para o log com a causa (nunca headers nem token).
+const mapError = (err: unknown, route: string): never => {
   if (!axios.isAxiosError(err)) throw err;
   const res = err.response;
   if (!res) {
     // Sem resposta: rede caída, recusada, DNS ou timeout.
+    logger.warn(`gateway: ${route} sem resposta (${err.code || "sem código"}: ${err.message})`);
     throw new AppError("ERR_GATEWAY_UNAVAILABLE", 503);
   }
   const msg = (res.data as Envelope<unknown> | undefined)?.error || "";
+  if (res.status >= 500) logger.warn(`gateway: ${route} respondeu ${res.status}${msg ? ` (${msg})` : ""}`);
   if (
     (res.status === 404 && msg === "session_not_found") ||
     (res.status === 409 && msg === "not_connected")
@@ -150,7 +156,7 @@ export const gatewayClient = () => {
       const res = await axios.request<Envelope<T>>(config);
       return res.data.data;
     } catch (err) {
-      return mapError(err);
+      return mapError(err, `${method} ${path}`);
     }
   };
 

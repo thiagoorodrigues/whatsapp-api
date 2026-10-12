@@ -2,12 +2,16 @@ jest.mock("axios");
 jest.mock("../../../config/whatsappEngine", () => ({
   gatewayConfig: jest.fn()
 }));
+jest.mock("../../../utils/logger", () => ({
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
+}));
 
 /* eslint-disable import/first */
 import axios from "axios";
 import { gatewayConfig } from "../../../config/whatsappEngine";
 import AppError from "../../../errors/AppError";
 import { gatewayClient } from "../client";
+import { logger } from "../../../utils/logger";
 /* eslint-enable import/first */
 
 const request = axios.request as unknown as jest.Mock;
@@ -25,6 +29,7 @@ const last = () => request.mock.calls[request.mock.calls.length - 1][0];
 
 beforeEach(() => {
   request.mockReset();
+  (logger.warn as jest.Mock).mockReset();
   (gatewayConfig as jest.Mock).mockReturnValue({
     url: "http://gw:8080",
     token: "secret-token",
@@ -40,7 +45,7 @@ describe("gatewayClient: rotas", () => {
     expect(last().url).toBe("http://gw:8080/sessions/3/connect");
     expect(last().method).toBe("POST");
     expect(last().headers.Authorization).toBe("Bearer secret-token");
-    expect(last().timeout).toBe(30000);
+    expect(last().timeout).toBe(35000);
   });
 
   it("falha claro sem GATEWAY_URL", () => {
@@ -84,7 +89,7 @@ describe("gatewayClient: rotas", () => {
     expect(last().url).toBe("http://gw:8080/sessions/3/messages");
     expect(last().method).toBe("POST");
     expect(last().data).toEqual(body);
-    expect(last().timeout).toBe(120000);
+    expect(last().timeout).toBe(130000);
   });
 
   it("revoke, edit, react", async () => {
@@ -140,7 +145,7 @@ describe("gatewayClient: rotas", () => {
     const raw = { imageMessage: {} };
     expect((await gatewayClient().downloadMedia(3, raw))?.path).toBe(".gateway/in/x.jpg");
     expect(last().data).toEqual({ message: raw });
-    expect(last().timeout).toBe(120000);
+    expect(last().timeout).toBe(130000);
     request.mockResolvedValue(ok(null));
     expect(await gatewayClient().downloadMedia(3, raw)).toBeNull();
   });
@@ -191,6 +196,29 @@ describe("gatewayClient: erros", () => {
     const original = new Error("outro");
     request.mockRejectedValue(original);
     await expect(gatewayClient().status(3)).rejects.toBe(original);
+  });
+
+  it("rede: registra o código e a rota no log, sem o token", async () => {
+    await code(netError("ECONNREFUSED"));
+    const line = (logger.warn as jest.Mock).mock.calls.map(c => String(c[0])).join("\n");
+    expect(line).toContain("ECONNREFUSED");
+    expect(line).toContain("/sessions/3");
+    expect(line).not.toContain("secret-token");
+    expect(line).not.toContain("Bearer");
+  });
+
+  it("5xx: registra status e a mensagem do gateway no log", async () => {
+    await code(httpError(500, "falha interna"));
+    const line = (logger.warn as jest.Mock).mock.calls.map(c => String(c[0])).join("\n");
+    expect(line).toContain("500");
+    expect(line).toContain("falha interna");
+    expect(line).not.toContain("secret-token");
+  });
+
+  it("respostas esperadas (404 de sessão, 400) não poluem o log", async () => {
+    await code(httpError(404, "session_not_found"));
+    await code(httpError(400, "invalid"));
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it("não vaza o token na mensagem de erro", async () => {
