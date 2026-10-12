@@ -22,14 +22,18 @@ Nada deste documento foi executado ainda. Marque cada passo ao fazer.
       **Push na `main` dispara deploy automático da api em produção.** Com
       `WHATSAPP_ENGINE=baileys` (padrão) nada muda, mas só dê o push na hora da
       Fase 1, com o usuário presente.
+- [ ] `whatsapp-app`: antes do merge, `npm run build` local da branch
+      `feat/wazzy-gateway` termina sem erro (o deploy do app compila igual; um
+      erro de build só apareceria em produção).
 - [ ] `whatsapp-app`: branch `feat/wazzy-gateway` mesclada na `main` (deploy
       automático do app). Se um push não subir, chamar de novo a URL de deploy do
       hook (`gh api repos/{owner}/{repo}/hooks`); conferir com `curl` numa rota
       nova (401 = no ar, 404 = antigo).
 - [ ] `weconex-api-meow` (gateway): `feat/migrate-baileys` mesclada na `main` do
       repositório (`thiagoorodrigues/weconex-api-meow`) e a imagem constrói pelo
-      `Dockerfile`. O binário `migrate-baileys` precisa estar na imagem; se não
-      estiver, ver 4.3 (container avulso).
+      `Dockerfile`. A imagem traz os dois binários: `/app/gateway` e
+      `/app/migrate-baileys` (conferir com `ls /app` no console do serviço depois
+      do deploy da Fase 1).
 - [ ] O repositório `weconex-api-meow` está acessível ao EasyPanel (GitHub).
 
 ### 1.2 Redis
@@ -94,21 +98,24 @@ Projeto `weconex`, novo serviço do tipo App:
       `/app/public/.gateway/out`). O container do gateway roda como root, para
       ter o mesmo dono de arquivos da api.
 - [ ] Variáveis de ambiente (modelo: `.env.example` do gateway; **valores só no
-      EasyPanel, nunca no Git**):
+      EasyPanel, nunca no Git**). **Os nomes de host internos abaixo
+      (`weconex_postgres`, `weconex_redis`, `weconex_gateway`) são palpites:
+      confirmar no painel** (aba do serviço, host interno) antes de usar, aqui e
+      em todos os comandos deste runbook:
 
 | Variável | Valor em produção |
 |---|---|
 | `HTTP_PORT` | `8080` |
 | `LOG_LEVEL` | `INFO` |
-| `POSTGRES_DSN` | `postgres://USUARIO:SENHA@weconex_postgres:5432/weconex?sslmode=disable` (mesmo banco do Wazzy; o `search_path=whatsmeow` é acrescentado sozinho) |
-| `REDIS_URL` | `redis://weconex_redis:6379` (com senha, se houver) |
+| `POSTGRES_DSN` | `postgres://USUARIO:SENHA@weconex_postgres:5432/weconex?sslmode=disable` (host: confirmar no painel; mesmo banco do Wazzy; o `search_path=whatsmeow` é acrescentado sozinho) |
+| `REDIS_URL` | `redis://weconex_redis:6379` (host: confirmar no painel; com senha, se houver) |
 | `GATEWAY_TOKEN` | token novo e longo (gerar, ex.: `openssl rand -hex 32`); o mesmo valor vai na api |
 | `MEDIA_ROOT` | `/app/public` |
 
 - [ ] Deploy do `gateway`. No log da UI deve aparecer `gateway em :8080`.
 - [ ] Atenção: o gateway **restaura sozinho** as sessões que existirem em
       `whatsmeow.gateway_sessions`. Neste momento a tabela está vazia, então
-      nenhuma sessão sobe. Não rode `migrate-baileys` antes da Fase 2.
+      nenhuma sessão sobe. Não rode `migrate-baileys` antes da janela (Fase 3).
 
 ### 2.2 Variáveis da api (ainda no Baileys)
 
@@ -121,9 +128,9 @@ GATEWAY_TOKEN=<o mesmo valor do gateway>
 GATEWAY_MEDIA_ROOT=/app/public
 ```
 
-(O nome interno do serviço pode diferir; use o host interno que o EasyPanel
-mostra no serviço `gateway`.) Env no EasyPanel só vale depois de clicar
-**Deploy**.
+(`weconex_gateway` é palpite: **confirmar no painel** o host interno que o
+EasyPanel mostra no serviço `gateway`.) Env no EasyPanel só vale depois de
+clicar **Deploy**.
 
 - [ ] Deploy da api com o código novo e `WHATSAPP_ENGINE=baileys`.
 
@@ -131,7 +138,8 @@ mostra no serviço `gateway`.) Env no EasyPanel só vale depois de clicar
 
 - [ ] Api sobe sem erro e as conexões Baileys continuam `CONNECTED`; enviar e
       receber uma mensagem em uma conexão de teste.
-- [ ] Gateway saudável. A partir do console do serviço `api` (rede interna):
+- [ ] Gateway saudável. A partir do console do serviço `api` (rede interna;
+      host confirmado no painel):
 
 ```bash
 curl -s http://weconex_gateway:8080/health
@@ -144,8 +152,9 @@ curl -s -o /dev/null -w "%{http_code}\n" http://weconex_gateway:8080/sessions/1
       `whatsmeow_*`; pgweb).
 - [ ] Escrita no volume comum: confirmar que o dono/permissão dos arquivos de
       `/app/public` permite escrita pelos dois serviços (risco do spec).
-- [ ] Monitor do servidor: gateway aparece, consumer ainda não relevante
-      (engine baileys).
+- [ ] Monitor do servidor: com `WHATSAPP_ENGINE=baileys` ele **não** mostra o
+      gateway nem o consumer (só aparecem com `whatsmeow`, na Fase 3). A saúde do
+      gateway nesta fase é conferida só pelo `curl /health` acima.
 
 Se algo falhar aqui, nenhum cliente foi afetado: corrija e repita.
 
@@ -185,14 +194,17 @@ Só inicie a Fase 3 com:
 Listar as conexões a converter (pgweb ou `psql` no serviço `postgres`):
 
 ```sql
-SELECT id, name, status, "companyId" FROM "Whatsapps" WHERE provider = 'baileys' ORDER BY id;
+SELECT id, name, status, provider, "companyId" FROM "Whatsapps"
+WHERE session IS NOT NULL AND session <> '' ORDER BY id;
 ```
 
-Para cada `id`, **primeiro `--dry-run`**, depois a gravação:
+(`provider` é `beta`/`stable`, não diz se há pareamento; o que importa é ter
+`session`.) Para cada `id`, **primeiro `--dry-run`**, depois a gravação, no
+console do serviço `gateway` (4.3):
 
 ```bash
-migrate-baileys --connection <ID> --dry-run
-migrate-baileys --connection <ID>
+./migrate-baileys --connection <ID> --dry-run
+./migrate-baileys --connection <ID>
 ```
 
 - O `--dry-run` valida device e assinaturas, imprime só contagens (nunca chaves)
@@ -209,18 +221,25 @@ migrate-baileys --connection <ID>
 
 ### 4.3 Como rodar o CLI em produção
 
-Opção A (preferida): console do serviço `gateway` no EasyPanel, se a imagem
-inclui o binário (`/app/migrate-baileys` ou no `PATH`). O container já tem
-`POSTGRES_DSN`. **Atenção:** o gateway restaura sozinho as sessões de
-`gateway_sessions` ao subir; como a gravação cria essa linha, **não reinicie o
-`gateway` depois das gravações antes da api estar com `whatsmeow`**. (Se o
-gateway reiniciar com a api ainda parada, ele só conecta o que foi convertido;
-não há Baileys rodando, então não há conflito; ainda assim, prefira não
-reiniciar.)
+Pelo console (exec) do serviço `gateway` no EasyPanel: a imagem traz o binário
+em `/app/migrate-baileys` e o container já tem o `POSTGRES_DSN` (diretório de
+trabalho `/app`, por isso `./migrate-baileys`). O gateway segue ligado durante
+as gravações: ele ainda não tem nenhuma dessas conexões carregada (as linhas de
+`gateway_sessions` só passam a valer quando ele sobe de novo, em 4.4).
 
-Opção B: container avulso com o mesmo DSN, a partir de uma máquina com Docker
-que alcance o Postgres de produção (a VPS não tem SSH; se o Postgres não for
-alcançável de fora, use a opção A). Gerar o binário no repositório do gateway:
+Ordem da janela:
+
+1. [ ] Api parada e nenhum processo Node com Baileys (4.1).
+2. [ ] `--dry-run` e gravação, conexão por conexão (4.2).
+3. [ ] Reiniciar o serviço `gateway` (4.4): ao subir ele restaura (RestoreAll)
+   as conexões convertidas. É seguro porque o Baileys está parado.
+4. [ ] Deploy da api com `WHATSAPP_ENGINE=whatsmeow` (4.5).
+5. [ ] Conferir que todas as conexões convertidas ficaram conectadas sem
+   nenhum clique no painel (4.6).
+
+Alternativa (só se o console do gateway não funcionar): container avulso com o
+mesmo DSN, a partir de uma máquina com Docker que alcance o Postgres de produção
+(a VPS não tem SSH):
 
 ```bash
 cd weconex-api-meow
@@ -231,7 +250,16 @@ docker run --rm -v "$PWD/bin":/b -e POSTGRES_DSN='postgres://...' alpine:3.22 \
 
 Não coloque o DSN real em arquivo versionado nem no histórico compartilhado.
 
-### 4.4 Virar a api para o whatsmeow
+### 4.4 Reiniciar o gateway
+
+- [ ] No EasyPanel, reiniciar o serviço `gateway` (Restart ou Deploy).
+- [ ] No log: `gateway em :8080`, sem `restaurar conexão <ID>: ...` (erro de
+      restauração) e sem `conflict`.
+- [ ] Do console do serviço `gateway`: `wget -qO- http://localhost:8080/health`
+      mostra `sessions` igual ao número de conexões convertidas (e `connected`
+      subindo até ele).
+
+### 4.5 Virar a api para o whatsmeow
 
 No serviço `api`, Environment:
 
@@ -243,17 +271,21 @@ GATEWAY_MEDIA_ROOT=/app/public
 ```
 
 - [ ] Clicar **Deploy** (iniciar o serviço `api` com a variável nova). Com
-      `whatsmeow` a api não inicia nenhum socket Baileys: ela chama `connect`
-      para cada conexão ativa e consome os eventos de `wa:events:{id}`.
+      `whatsmeow` a api não inicia nenhum socket Baileys: no boot ela consulta
+      `GET /sessions/{id}` e chama `connect` (idempotente) para cada conexão que
+      estava ativa (`CONNECTED`/`OPENING`/`qrcode`), inclusive as que o gateway
+      ainda não carregou (404), e consome os eventos de `wa:events:{id}`. Uma
+      conexão ativa sem pareamento convertido passa a mostrar QR, como no
+      Baileys.
 - [ ] Só uma instância da api rodando.
 
-### 4.5 Verificar no Monitor do servidor
+### 4.6 Verificar no Monitor do servidor
 
 Configurações, Monitor do servidor:
 
 - [ ] Gateway: ok.
-- [ ] Todas as conexões esperadas aparecem `connected` (as que falharam na
-      conversão pedem QR; ver seção 8).
+- [ ] Todas as conexões convertidas aparecem `connected` **sem nenhum clique**
+      em Conexões (as que falharam na conversão pedem QR; ver seção 8).
 - [ ] Consumer do stream rodando; atraso (lag) próximo de 0 (alerta só passa de
       1 h, mas deve ser segundos).
 - [ ] `wa:dead` igual a 0 (eventos na fila de falhas geram alerta).
@@ -261,7 +293,7 @@ Configurações, Monitor do servidor:
       em tela cheia, pois o visualizador mistura o container anterior): sem
       `conflict replaced`, sem erro de decifragem em loop.
 
-### 4.6 Testes de fumaça (com o celular de teste e uma conexão real)
+### 4.7 Testes de fumaça (com o celular de teste e uma conexão real)
 
 - [ ] Receber: mensagem de texto, imagem e áudio de contato chegam no ticket
       (privado e grupo).
@@ -296,25 +328,41 @@ motivo de volta atrás: tratar caso a caso (seção 8).
 ## 6. Procedimento de volta atrás
 
 A ordem importa: dois clientes no mesmo aparelho se derrubam e corrompem as
-chaves.
+chaves, e trocar o motor com eventos ainda no stream perde mensagens.
 
 1. [ ] **Parar o serviço `gateway` primeiro** (Stop no EasyPanel) e confirmar
    que parou (log `gateway finalizado`, sem container ativo).
-2. [ ] No serviço `api`, Environment: `WHATSAPP_ENGINE=baileys`
+2. [ ] **Esvaziar o stream antes de trocar o motor.** A api continua com
+   `whatsmeow` e consumindo o que o gateway publicou até parar. No Monitor do
+   servidor, aguardar **pendentes = 0** e **atraso (lag) ≈ 0** em todas as
+   conexões, e `wa:dead` sem crescer. Só então seguir. (Com `baileys` o consumer
+   não roda: o que ficar no stream não entra nos tickets.)
+3. [ ] No serviço `api`, Environment: `WHATSAPP_ENGINE=baileys`
    (`GATEWAY_URL` pode ficar).
-3. [ ] **Deploy** da api. Ela restaura as conexões pelo Baileys com
+4. [ ] **Deploy** da api. Ela restaura as conexões pelo Baileys com
    `BaileysKeys` e `Whatsapps.session`, que não foram alteradas.
-4. [ ] Conferir no Monitor e nas Conexões: conectadas; enviar/receber uma
+5. [ ] Conferir no Monitor e nas Conexões: conectadas; enviar/receber uma
    mensagem de teste.
-5. [ ] Conexões que já conversaram pelo gateway por um tempo: o estado dos
+6. [ ] Conexões que já conversaram pelo gateway por um tempo: o estado dos
    ratchets avançou no whatsmeow, e o Baileys pode ter de renegociar sessões
    (o WhatsApp renegocia sozinho). Se alguma não reconectar, pedir QR.
-6. [ ] Mensagens que chegaram só pelo gateway ficam no stream; o consumer não as
-   lê com `baileys`. Elas ficam no histórico do ticket já gravado; o que não foi
-   consumido pode ser perdido. Registrar o horário da virada e da volta.
-7. [ ] Avisar clientes afetados. Para nova tentativa depois, antes de converter
-   de novo: `migrate-baileys --connection <ID> --replace` (só com o gateway
-   parado e a api no Baileys).
+7. [ ] Conexões que foram **desconectadas, deslogadas ou pareadas de novo
+   (novo QR) enquanto estavam no whatsmeow** não têm credencial válida no
+   Baileys: precisam de QR novo depois da volta. Anotar quais.
+8. [ ] Registrar o horário da virada e da volta. Avisar clientes afetados.
+9. [ ] **Antes de qualquer nova virada**, zerar o consumer para não reprocessar
+   eventos antigos do stream (mensagens velhas virariam tickets/automações).
+   No console do serviço `redis`, para cada stream:
+
+```bash
+redis-cli --scan --pattern 'wa:events:*'           # lista os streams
+redis-cli XGROUP SETID wa:events:<ID> wazzy-api '$' # para cada um
+```
+
+   (Alternativa mais simples, com o gateway e a api parados: `redis-cli DEL
+   wa:events:<ID>` para cada stream; o consumer recria o grupo ao subir.)
+   Depois, converter de novo: `./migrate-baileys --connection <ID> --replace`
+   (só com o gateway sem a conexão carregada e a api parada).
 
 ## 7. Pós-virada
 
@@ -344,6 +392,27 @@ chaves.
 - **Conexão ainda no estado `CONNECTED` no Wazzy mas sem sessão no gateway**
   (ou o contrário): conferir `GET /sessions/{id}` (404 `session_not_found`
   significa que não está rodando) e reconectar pelo painel.
+- **Eventos em `wa:dead`** (5 falhas seguidas de um evento; o Monitor alerta e
+  os Logs do sistema têm o protocolo e o erro): **só reinjetar depois de
+  corrigir a causa** (deploy da correção, banco/Redis de volta), senão o evento
+  volta para `wa:dead`. No console do serviço `redis`:
+
+```bash
+redis-cli XRANGE wa:dead - +   # cada entrada: stream, id, e, error, connectionId, deliveries
+```
+
+  Para cada entrada a reinjetar (`<DEAD_ID>` é o id da entrada em `wa:dead`):
+  `XADD <stream> * e <e>` com o mesmo `stream` e o mesmo `e` da entrada, e depois
+  `XDEL wa:dead <DEAD_ID>`. Como o `e` é um JSON longo, é mais seguro fazer os
+  dois passos de uma vez no próprio Redis:
+
+```bash
+redis-cli EVAL "local r=redis.call('XRANGE',KEYS[1],ARGV[1],ARGV[1]) if #r==0 then return 0 end local f=r[1][2] local s,e for i=1,#f,2 do if f[i]=='stream' then s=f[i+1] elseif f[i]=='e' then e=f[i+1] end end if not s or not e or e=='' then return -1 end redis.call('XADD',s,'*','e',e) redis.call('XDEL',KEYS[1],ARGV[1]) return 1" 1 wa:dead <DEAD_ID>
+# 1 = reinjetado; 0 = id não existe; -1 = entrada sem stream/e (não reinjetar)
+```
+
+  O evento volta no fim do stream da conexão (fora da ordem original); os
+  handlers deduplicam pelo id da mensagem.
 - **Duplicidade de eventos**: se o Redis cair, o gateway não confirma ao
   WhatsApp e ele reentrega; o consumer deduplica pelo `id`.
 - **Chat/sender em LID**: recibos, reações e presença chegam com
@@ -354,7 +423,7 @@ chaves.
   spec).
 - **Recebimento de contato com sessão/sender key convertida** em privado e
   grupo ficou sem teste no HM (faltou segundo telefone): é o primeiro item a
-  observar na fumaça real (4.6).
+  observar na fumaça real (4.7).
 - **Nomes de grupo**: se não puderem ser buscados, a mensagem chega com
   `chat.name` vazio e o nome aparece depois (cache de 5 e 10 minutos).
 - **Grupos antigos sem hífen**: o gateway resolve pelo JID da lista de grupos
@@ -374,11 +443,13 @@ chaves.
 ## 9. Checklist final
 
 Antes:
-- [ ] Merges na `main` conferidos, imagem do gateway constrói
+- [ ] Merges na `main` conferidos, imagem do gateway constrói (com
+      `/app/migrate-baileys`), `npm run build` do app sem erro
 - [ ] Redis >= 6.2 com AOF/RDB
 - [ ] Backup do Postgres feito e copiado para fora
 - [ ] Janela e clientes avisados
 - [ ] Token do gateway gerado, igual no gateway e na api
+- [ ] Hosts internos (Postgres, Redis, gateway) confirmados no painel
 
 Fase 1:
 - [ ] Serviço `gateway` no ar, sem domínio, volume comum, `/health` ok
@@ -386,9 +457,10 @@ Fase 1:
 
 Janela:
 - [ ] Api parada; nenhum processo/container com Baileys; 2 minutos de espera
-- [ ] `--dry-run` e gravação por conexão; lista de QR anotada
+- [ ] `--dry-run` e gravação por conexão (console do gateway); lista de QR anotada
+- [ ] Gateway reiniciado; `/health` com as sessões convertidas
 - [ ] `WHATSAPP_ENGINE=whatsmeow` + `GATEWAY_URL`, deploy da api
-- [ ] Monitor: gateway ok, conexões conectadas, lag ~0, `wa:dead` 0
+- [ ] Monitor: gateway ok, conexões conectadas sem clique, lag ~0, `wa:dead` 0
 - [ ] Fumaça: receber, enviar, ACK, mídia, reação, edição, digitando, lida
 - [ ] Clientes com QR pendente avisados
 
