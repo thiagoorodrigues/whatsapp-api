@@ -332,6 +332,18 @@ chaves, e trocar o motor com eventos ainda no stream perde mensagens.
 
 1. [ ] **Parar o serviço `gateway` primeiro** (Stop no EasyPanel) e confirmar
    que parou (log `gateway finalizado`, sem container ativo).
+   **O gateway fica PARADO enquanto a api rodar no Baileys, até a próxima
+   janela.** As linhas de `whatsmeow.gateway_sessions` continuam lá, e qualquer
+   start do gateway (redeploy, push na `main` do repositório do gateway, nova
+   tentativa da Fase 1) roda o RestoreAll, conecta essas contas e derruba o
+   Baileys com `conflict replaced`. Se o gateway precisar rodar antes disso,
+   primeiro tire as sessões dele (o RestoreAll só pega `jid IS NOT NULL`):
+
+```sql
+UPDATE whatsmeow.gateway_sessions SET jid = NULL WHERE connection_id IN (<IDs>);
+-- ou apagar as linhas de device dessas contas no schema whatsmeow
+```
+
 2. [ ] **Esvaziar o stream antes de trocar o motor.** A api continua com
    `whatsmeow` e consumindo o que o gateway publicou até parar. No Monitor do
    servidor, aguardar **pendentes = 0** e **atraso (lag) ≈ 0** em todas as
