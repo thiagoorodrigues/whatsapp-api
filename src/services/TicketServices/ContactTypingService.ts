@@ -1,6 +1,7 @@
 import { Op } from "sequelize";
 import Contact from "../../models/Contact";
 import Ticket from "../../models/Ticket";
+import WhatsappContact from "../../models/WhatsappContact";
 import { getIO } from "../../libs/socket";
 import { ticketRoom } from "../../libs/socketRooms";
 import { getTicketChannel, ticketAddress } from "../../channels";
@@ -43,21 +44,38 @@ interface PresenceUpdate {
   presences: Record<string, { lastKnownPresence?: string }>;
 }
 
-export const handlePresenceUpdate = async (
-  companyId: number,
-  whatsappId: number,
-  { id, presences }: PresenceUpdate
-): Promise<void> => {
-  if (!id || !/@(s\.whatsapp\.net|lid)$/.test(id)) return;
-  const entry = presences?.[id] || Object.values(presences || {})[0];
-  const state = typingState(entry?.lastKnownPresence);
-
-  const lid = id.endsWith("@lid") ? toUserLid(id) : undefined;
-  const number = lid ? undefined : toPhoneNumber(id);
+// Contato de um chat 1:1. Chat em LID: tenta Contact.lid e, se não achar, o
+// número guardado em WhatsappContacts para o mesmo LID nesta conexão.
+const findTypingContact = async (companyId: number, whatsappId: number, chatJid: string) => {
+  const lid = chatJid.endsWith("@lid") ? toUserLid(chatJid) : undefined;
+  const number = lid ? undefined : toPhoneNumber(chatJid);
   const contact = await Contact.findOne({
     where: { companyId, isGroup: false, ...(lid ? { lid } : { number }) },
     attributes: ["id"]
   });
+  if (contact || !lid) return contact;
+
+  const known = await WhatsappContact.findOne({ where: { whatsappId, companyId, lid }, attributes: ["number"] });
+  if (!known?.number) return null;
+  return Contact.findOne({ where: { companyId, isGroup: false, number: known.number }, attributes: ["id"] });
+};
+
+// Entrada neutra (Baileys e gateway): chat e estado já extraídos do evento.
+export const handleContactTyping = async ({
+  companyId,
+  whatsappId,
+  chatJid,
+  state
+}: {
+  companyId: number;
+  whatsappId: number;
+  chatJid: string;
+  state?: string | null;
+}): Promise<void> => {
+  if (!chatJid || !/@(s\.whatsapp\.net|lid)$/.test(chatJid)) return;
+  const typing = typingState(state || undefined);
+
+  const contact = await findTypingContact(companyId, whatsappId, chatJid);
   if (!contact) return;
 
   const tickets = await Ticket.findAll({
@@ -66,6 +84,17 @@ export const handlePresenceUpdate = async (
   });
   const io = getIO();
   tickets.forEach(ticket =>
-    io.to(ticketRoom(companyId, ticket.id)).emit(`company-${companyId}-typing`, { ticketId: ticket.id, state })
+    io.to(ticketRoom(companyId, ticket.id)).emit(`company-${companyId}-typing`, { ticketId: ticket.id, state: typing })
   );
+};
+
+// Baileys: extrai chat e estado do presence.update.
+export const handlePresenceUpdate = async (
+  companyId: number,
+  whatsappId: number,
+  { id, presences }: PresenceUpdate
+): Promise<void> => {
+  if (!id || !/@(s\.whatsapp\.net|lid)$/.test(id)) return;
+  const entry = presences?.[id] || Object.values(presences || {})[0];
+  await handleContactTyping({ companyId, whatsappId, chatJid: id, state: entry?.lastKnownPresence });
 };

@@ -4,16 +4,19 @@ const to = jest.fn(() => ({ emit }));
 jest.mock("../../../libs/socket", () => ({ getIO: () => ({ to }) }));
 jest.mock("../../../channels", () => ({ getTicketChannel: jest.fn(), ticketAddress: jest.fn() }));
 jest.mock("../../../models/Contact", () => ({ findOne: jest.fn() }));
+jest.mock("../../../models/WhatsappContact", () => ({ findOne: jest.fn() }));
 jest.mock("../../../models/Ticket", () => ({ findAll: jest.fn() }));
 
 // eslint-disable-next-line import/first
 import Contact from "../../../models/Contact";
 // eslint-disable-next-line import/first
+import WhatsappContact from "../../../models/WhatsappContact";
+// eslint-disable-next-line import/first
 import Ticket from "../../../models/Ticket";
 // eslint-disable-next-line import/first
 import { getTicketChannel } from "../../../channels";
 // eslint-disable-next-line import/first
-import { handlePresenceUpdate, sendAttendantTyping, typingState } from "../ContactTypingService";
+import { handleContactTyping, handlePresenceUpdate, sendAttendantTyping, typingState } from "../ContactTypingService";
 
 describe("contact typing", () => {
   beforeEach(() => jest.clearAllMocks());
@@ -46,6 +49,35 @@ describe("contact typing", () => {
     await handlePresenceUpdate(1, 3, { id: "1203@g.us", presences: {} });
     expect(Contact.findOne).toHaveBeenCalledTimes(1);
     expect(emit).not.toHaveBeenCalled();
+  });
+});
+
+describe("handleContactTyping (neutro)", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("LID desconhecido no Contact: resolve o número por WhatsappContacts", async () => {
+    (Contact.findOne as jest.Mock).mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 8 });
+    (WhatsappContact.findOne as jest.Mock).mockResolvedValue({ number: "5531999990000" });
+    (Ticket.findAll as jest.Mock).mockResolvedValue([{ id: 5 }]);
+
+    await handleContactTyping({ companyId: 1, whatsappId: 3, chatJid: "123@lid", state: "composing" });
+
+    expect((WhatsappContact.findOne as jest.Mock).mock.calls[0][0].where).toMatchObject({ whatsappId: 3, companyId: 1, lid: "123@lid" });
+    expect((Contact.findOne as jest.Mock).mock.calls[1][0].where).toMatchObject({ companyId: 1, number: "5531999990000" });
+    expect(emit).toHaveBeenCalledWith("company-1-typing", { ticketId: 5, state: "composing" });
+  });
+
+  it("paused vira estado nulo; LID sem nenhum vínculo é ignorado", async () => {
+    (Contact.findOne as jest.Mock).mockResolvedValue({ id: 8 });
+    (Ticket.findAll as jest.Mock).mockResolvedValue([{ id: 5 }]);
+    await handleContactTyping({ companyId: 1, whatsappId: 3, chatJid: "5531@s.whatsapp.net", state: "paused" });
+    expect(emit).toHaveBeenCalledWith("company-1-typing", { ticketId: 5, state: null });
+
+    jest.clearAllMocks();
+    (Contact.findOne as jest.Mock).mockResolvedValue(null);
+    (WhatsappContact.findOne as jest.Mock).mockResolvedValue(null);
+    await handleContactTyping({ companyId: 1, whatsappId: 3, chatJid: "9@lid", state: "composing" });
+    expect(Ticket.findAll).not.toHaveBeenCalled();
   });
 });
 

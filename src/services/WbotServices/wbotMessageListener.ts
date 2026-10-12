@@ -13,10 +13,8 @@ import { wasSentByPlatform } from "../../channels/sentByPlatform";
 import { filterMessages } from "../../channels/baileys/parse";
 import toInbound from "../../channels/baileys/toInbound";
 import { queueFor } from "../../helpers/serialQueue";
-import { toPhoneNumber, toUserLid } from "../../helpers/GetPhoneJid";
 import { handlePresenceUpdate } from "../TicketServices/ContactTypingService";
 import { forgetGroup } from "../../libs/whatsappCache";
-import Contact from "../../models/Contact";
 import Message from "../../models/Message";
 import MarkReadOnDeviceService from "../MessageServices/MarkReadOnDeviceService";
 import Ticket from "../../models/Ticket";
@@ -31,6 +29,7 @@ import ShowWhatsAppService from "../WhatsappService/ShowWhatsAppService";
 import { createHistoryImporter, importDay } from "./historyImport";
 import { publishImportProgress } from "../../libs/historyImportProgress";
 import FinishHistoryImportService from "../WhatsappService/FinishHistoryImportService";
+import ApplyLidMappingService from "../WhatsappContactServices/ApplyLidMappingService";
 import UpsertWhatsappContactsService, { SyncedContact } from "../WhatsappContactServices/UpsertWhatsappContactsService";
 
 // WhatsApp Web (Baileys) events of a connection. Messages are turned into the
@@ -100,17 +99,7 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
     // Baileys 7 reports every phone <-> LID pair it discovers; remember it on
     // the contact so sends go to the LID and LID-only messages (e.g. sent
     // from another linked device) land on the same contact.
-    wbot.ev.on("lid-mapping.update", async ({ pn, lid }) => {
-      try {
-        const number = toPhoneNumber(pn);
-        const userLid = toUserLid(lid);
-        if (!userLid || !number) return;
-        await Contact.update({ lid: userLid }, { where: { number, companyId } });
-        await saveSyncedContacts([{ id: `${number}@s.whatsapp.net`, lid: userLid }]);
-      } catch (err) {
-        logger.warn(`lid-mapping.update failed for ${lid}: ${err}`);
-      }
-    });
+    wbot.ev.on("lid-mapping.update", ({ pn, lid }) => ApplyLidMappingService({ whatsappId: wbot.id, companyId, lid, pn }));
 
     // Contacts WhatsApp sends (address book and profile names): kept per
     // connection to show names in group mentions and for "Importar contatos".
