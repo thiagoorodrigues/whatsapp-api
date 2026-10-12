@@ -1,5 +1,10 @@
 const plamevGet = jest.fn();
 const consultarCep = jest.fn();
+const gerarImagemRede = jest.fn();
+jest.mock("../providers/plamev/redeImagem", () => ({
+  ...jest.requireActual("../providers/plamev/redeImagem"),
+  gerarImagemRede: (...a: any[]) => gerarImagemRede(...a)
+}));
 jest.mock("../../../helpers/consultaCep", () => ({ consultarCep: (...a: any[]) => consultarCep(...a) }));
 jest.mock("../providers/plamev/client", () => ({ plamevGet: (...a: any[]) => plamevGet(...a) }));
 jest.mock("../CompanyIntegrationService", () => ({
@@ -10,7 +15,7 @@ jest.mock("../CompanyIntegrationService", () => ({
 }));
 
 // eslint-disable-next-line import/first
-import { bairros, cep, credenciados, cidades, estados } from "../PlamevRedeService";
+import { bairros, cep, credenciados, cidades, estados, imagem } from "../PlamevRedeService";
 
 beforeEach(() => {
   plamevGet.mockReset();
@@ -53,6 +58,20 @@ describe("PlamevRedeService", () => {
   it("says when the CEP does not exist", async () => {
     consultarCep.mockResolvedValue(null);
     await expect(cep(7, "99999999")).rejects.toMatchObject({ message: "ERR_CEP_NOT_FOUND", statusCode: 404 });
+  });
+
+  it("draws the image only with the fields it uses, through the company token", async () => {
+    gerarImagemRede.mockResolvedValue(Buffer.from("png"));
+    const out = await imagem(7, {
+      titulo: " Betim/MG ",
+      credenciados: [{ id: "k1", nome: "Vet", horarios: ["Seg 08h–18h", 3], plantao24h: "sim", logo: "x", extra: "ignorado" }]
+    });
+    expect(out.toString()).toBe("png");
+    const [lista, opts] = gerarImagemRede.mock.calls[0];
+    expect(lista[0]).toMatchObject({ id: "k1", nome: "Vet", horarios: ["Seg 08h–18h"], plantao24h: false, logo: "x" });
+    expect(lista[0]).not.toHaveProperty("extra");
+    expect(opts).toEqual({ titulo: "Betim/MG", imagemBase: "https://service.plamev-hm.com/" });
+    await expect(imagem(8, { credenciados: [] })).rejects.toThrow("wrong company or provider");
   });
 
   it("passes the filters to the credenciados search", async () => {

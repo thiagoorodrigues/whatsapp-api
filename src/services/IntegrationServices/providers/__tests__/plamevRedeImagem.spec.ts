@@ -1,0 +1,78 @@
+import { gerarImagemRede, montarSvgRede, MAX_CARTOES } from "../plamev/redeImagem";
+import { Credenciado } from "../plamev/rede";
+
+const BASE = "https://service.plamev-hm.com/";
+
+const vet = (id: string, extra: Partial<Credenciado> = {}): Credenciado => ({
+  id,
+  nome: `Clínica ${id} & Cia`,
+  endereco: "Rua A, 1",
+  bairro: "Centro",
+  cidade: "Betim",
+  uf: "MG",
+  cep: null,
+  telefone: "(31) 99710-4439",
+  plantao24h: false,
+  horaMarcada: true,
+  horarios: ["Seg a Sex 08h–18h"],
+  coberturas: ["Slim", "Advance"],
+  avaliacao: "4.79",
+  logo: null,
+  ...extra
+});
+
+describe("montarSvgRede", () => {
+  it("draws each credenciado with escaped text, rating, hours and badges", () => {
+    const { svg, width } = montarSvgRede([vet("k1")], { titulo: "Betim/MG", logos: new Map() });
+    expect(width).toBe(1080);
+    expect(svg).toContain("Clínica k1 &amp; Cia");
+    expect(svg).toContain("4,8");
+    expect(svg).toContain("Seg a Sex 08h–18h");
+    expect(svg).toContain("Hora marcada");
+    expect(svg).toContain("Centro, Betim/MG");
+    expect(svg).toContain("Betim/MG");
+    // Sem logo: as iniciais.
+    expect(svg).toContain(">CK<");
+  });
+
+  it("uses two columns above three credenciados", () => {
+    const um = montarSvgRede([vet("a"), vet("b"), vet("c")], { titulo: "x", logos: new Map() });
+    const dois = montarSvgRede([vet("a"), vet("b"), vet("c"), vet("d")], { titulo: "x", logos: new Map() });
+    expect(dois.height).toBeLessThan(um.height + 200);
+    expect(dois.columns).toBe(2);
+    expect(um.columns).toBe(1);
+  });
+
+  it("embeds the logo when it was downloaded", () => {
+    const { svg } = montarSvgRede([vet("k1")], { titulo: "x", logos: new Map([["k1", "data:image/jpeg;base64,AAAA"]]) });
+    expect(svg).toContain('href="data:image/jpeg;base64,AAAA"');
+    expect(svg).not.toContain(">CK<");
+  });
+});
+
+describe("gerarImagemRede", () => {
+  const jpeg = () => ({ ok: true, headers: { get: () => "image/jpeg" }, arrayBuffer: async () => Buffer.from([0xff, 0xd8, 0xff, 0xe0]) });
+
+  it("returns a PNG and only downloads logos from the Plamev bancoImagens", async () => {
+    const fetchFn = jest.fn(async () => jpeg());
+    const png = await gerarImagemRede(
+      [vet("k1", { logo: `${BASE}bancoImagens/abc` }), vet("k2", { logo: "http://169.254.169.254/latest/meta-data" })],
+      { titulo: "Betim/MG", imagemBase: BASE, fetchFn }
+    );
+    expect(png.subarray(0, 4).toString("hex")).toBe("89504e47");
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect((fetchFn.mock.calls[0] as any)[0]).toBe(`${BASE}bancoImagens/abc`);
+  });
+
+  it("still draws the card when a logo fails to download", async () => {
+    const fetchFn = jest.fn(async () => { throw new Error("timeout"); });
+    const png = await gerarImagemRede([vet("k1", { logo: `${BASE}bancoImagens/abc` })], { titulo: "x", imagemBase: BASE, fetchFn });
+    expect(png.length).toBeGreaterThan(1000);
+  });
+
+  it("refuses an empty selection or more than MAX_CARTOES", async () => {
+    await expect(gerarImagemRede([], { titulo: "x", imagemBase: BASE })).rejects.toMatchObject({ message: "ERR_INTEGRATION_FILTER_REQUIRED" });
+    const many = Array.from({ length: MAX_CARTOES + 1 }, (_, i) => vet(String(i)));
+    await expect(gerarImagemRede(many, { titulo: "x", imagemBase: BASE })).rejects.toMatchObject({ message: "ERR_PLAMEV_IMAGE_TOO_MANY" });
+  });
+});

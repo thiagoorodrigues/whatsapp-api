@@ -33,6 +33,11 @@ export const plamevBairros = async (req: Request, res: Response): Promise<Respon
 export const plamevCep = async (req: Request, res: Response): Promise<Response> =>
   res.json(await PlamevRede.cep(req.user.companyId, str(req.query.cep) || ""));
 
+export const plamevImagem = async (req: Request, res: Response): Promise<Response> => {
+  const png = await PlamevRede.imagem(req.user.companyId, req.body || {});
+  return res.type("png").send(png);
+};
+
 export const plamevCredenciados = async (req: Request, res: Response): Promise<Response> =>
   res.json(
     await PlamevRede.credenciados(req.user.companyId, {

@@ -1,6 +1,6 @@
 jest.mock("../../controllers/IntegrationController", () => ({
   catalog: jest.fn(), index: jest.fn(), update: jest.fn(), test: jest.fn(), remove: jest.fn(),
-  plamevEstados: jest.fn(), plamevCidades: jest.fn(), plamevBairros: jest.fn(), plamevCep: jest.fn(), plamevCredenciados: jest.fn()
+  plamevEstados: jest.fn(), plamevCidades: jest.fn(), plamevBairros: jest.fn(), plamevCep: jest.fn(), plamevImagem: jest.fn(), plamevCredenciados: jest.fn()
 }));
 // eslint-disable-next-line import/first
 import integrationRoutes from "../integrationRoutes";
@@ -13,7 +13,7 @@ describe("Plamev rede routes", () => {
         l.route.stack.map((s: any) => s.handle.name)
       ])
     );
-    ["get /integrations/plamev/estados", "get /integrations/plamev/cidades", "get /integrations/plamev/bairros", "get /integrations/plamev/cep", "get /integrations/plamev/credenciados"].forEach(path => {
+    ["get /integrations/plamev/estados", "get /integrations/plamev/cidades", "get /integrations/plamev/bairros", "get /integrations/plamev/cep", "post /integrations/plamev/rede-imagem", "get /integrations/plamev/credenciados"].forEach(path => {
       expect(byPath[path]?.[0]).toBe("isAuth");
       expect(byPath[path]).not.toContain("isAdmin");
     });
