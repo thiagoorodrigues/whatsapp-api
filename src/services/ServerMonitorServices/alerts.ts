@@ -3,6 +3,8 @@ import { MetricsSnapshot } from "./readServerMetrics";
 // Limites do monitor. Constantes de propósito: não são configuráveis pela tela.
 export const PERCENT_WARNING = 85;
 export const PERCENT_CRITICAL = 95;
+// Atraso do consumer do stream do gateway: o gateway guarda 3 dias de eventos.
+export const STREAM_LAG_WARNING_MS = 60 * 60 * 1000;
 
 export type AlertLevel = "warning" | "critical";
 
@@ -27,10 +29,25 @@ export interface QueueStatus {
   failedLastHour: number;
 }
 
+// Só existe com o motor whatsmeow.
+export interface GatewayStatus extends Check {
+  connected: number | null;
+  sessions: number | null;
+}
+
+export interface StreamStatus {
+  running: boolean;
+  pending: number;
+  lagMs: number;
+  deadLetters: number;
+}
+
 export interface ServicesHealth {
   postgres: Check & { dbSizeBytes: number | null };
   redis: Check;
   queues: QueueStatus[];
+  gateway?: GatewayStatus;
+  stream?: StreamStatus;
 }
 
 export interface DownConnection {
@@ -91,6 +108,20 @@ export const evaluateAlerts = (input: {
   services.queues
     .filter(q => q.failedLastHour > 0)
     .forEach(q => push(`queue:${q.name}`, "warning", `Fila ${q.name} com ${q.failedLastHour} falha(s) na última hora`));
+
+  if (services.gateway && !services.gateway.ok) {
+    push("gateway", "critical", "Gateway do WhatsApp sem resposta");
+  }
+  if (services.stream) {
+    const { running, lagMs, deadLetters } = services.stream;
+    if (!running) push("stream", "critical", "Consumer de eventos do gateway parado");
+    if (lagMs >= STREAM_LAG_WARNING_MS) {
+      push("stream-lag", "warning", `Eventos do gateway atrasados em ${Math.round(lagMs / 60000)} min`);
+    }
+    if (deadLetters > 0) {
+      push("stream-dead", "warning", `${deadLetters} evento(s) do gateway na fila de falhas (wa:dead)`);
+    }
+  }
 
   const down = connections.down.length;
   if (down > 0) {

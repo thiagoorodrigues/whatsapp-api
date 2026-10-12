@@ -1,7 +1,8 @@
 import { QueryTypes } from "sequelize";
 import sequelize from "../../database";
 import * as queues from "../../queues";
-import { Check, QueueStatus, ServicesHealth } from "./alerts";
+import { isWhatsmeow } from "../../config/whatsappEngine";
+import { Check, GatewayStatus, QueueStatus, ServicesHealth, StreamStatus } from "./alerts";
 
 const HOUR = 3600 * 1000;
 
@@ -53,6 +54,40 @@ const queueStatus = async (q: any, ms: number, now: Date): Promise<QueueStatus> 
   };
 };
 
+// Só com o motor whatsmeow. Carregamento tardio: com baileys nada disso é lido.
+const gatewayHealth = async (ms: number): Promise<GatewayStatus> => {
+  const started = Date.now();
+  try {
+    // eslint-disable-next-line global-require
+    const { gatewayClient } = require("../../channels/whatsmeow/client");
+    const h = await withTimeout<any>(gatewayClient().health(), ms);
+    return {
+      ok: true,
+      latencyMs: Date.now() - started,
+      connected: Number(h.connected) || 0,
+      sessions: Number(h.sessions) || 0
+    };
+  } catch (err) {
+    return { ok: false, latencyMs: null, connected: null, sessions: null, error: message(err) };
+  }
+};
+
+const streamStats = async (ms: number): Promise<StreamStatus | undefined> => {
+  try {
+    // eslint-disable-next-line global-require
+    const { consumerStats } = require("../../channels/whatsmeow/consumer");
+    const s = await withTimeout<any>(consumerStats(), ms);
+    return {
+      running: !!s.running,
+      pending: s.pending,
+      lagMs: s.lagMs,
+      deadLetters: s.deadLetters
+    };
+  } catch {
+    return undefined;
+  }
+};
+
 export const checkServicesHealth = async (timeoutMs = 3000, now = new Date()): Promise<ServicesHealth> => {
   const list = allQueues();
 
@@ -80,11 +115,18 @@ export const checkServicesHealth = async (timeoutMs = 3000, now = new Date()): P
     }
   }
 
-  return {
+  const result: ServicesHealth = {
     postgres: { ...pg, dbSizeBytes },
     redis,
     queues: queueResults
       .filter((r): r is PromiseFulfilledResult<QueueStatus> => r.status === "fulfilled")
       .map(r => r.value)
   };
+
+  if (isWhatsmeow()) {
+    const [gateway, stream] = await Promise.all([gatewayHealth(timeoutMs), streamStats(timeoutMs)]);
+    result.gateway = gateway;
+    if (stream) result.stream = stream;
+  }
+  return result;
 };

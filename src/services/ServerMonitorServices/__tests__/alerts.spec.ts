@@ -92,3 +92,35 @@ it("summarizes by the worst level", () => {
     ])
   ).toEqual({ count: 2, level: "critical" });
 });
+
+describe("gateway (motor whatsmeow)", () => {
+  const gw = { ok: true, latencyMs: 3, connected: 2, sessions: 2 };
+  const stream = { running: true, pending: 0, lagMs: 0, deadLetters: 0 };
+  const withGw = (over: any = {}) => ({ ...healthy, gateway: gw, stream, ...over });
+
+  it("is quiet when the gateway is healthy", () => {
+    expect(run({ services: withGw() })).toEqual([]);
+  });
+
+  it("flags a gateway that does not answer", () => {
+    expect(run({ services: withGw({ gateway: { ok: false, latencyMs: null, connected: null, sessions: null, error: "timeout" } }) })).toEqual([
+      { key: "gateway", level: "critical", message: "Gateway do WhatsApp sem resposta" }
+    ]);
+  });
+
+  it("flags a stopped consumer, lag from 1 hour and dead letters", () => {
+    expect(run({ services: withGw({ stream: { running: false, pending: 3, lagMs: 59 * 60000, deadLetters: 0 } }) })).toEqual([
+      { key: "stream", level: "critical", message: "Consumer de eventos do gateway parado" }
+    ]);
+    expect(run({ services: withGw({ stream: { ...stream, lagMs: 61 * 60000 } }) })).toEqual([
+      { key: "stream-lag", level: "warning", message: "Eventos do gateway atrasados em 61 min" }
+    ]);
+    expect(run({ services: withGw({ stream: { ...stream, deadLetters: 2 } }) })).toEqual([
+      { key: "stream-dead", level: "warning", message: "2 evento(s) do gateway na fila de falhas (wa:dead)" }
+    ]);
+  });
+
+  it("ignores gateway fields when absent (baileys)", () => {
+    expect(run()).toEqual([]);
+  });
+});
