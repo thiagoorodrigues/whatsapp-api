@@ -464,15 +464,15 @@ describe("reconcileOnBoot (decisão 2)", () => {
     (Whatsapp.findByPk as jest.Mock).mockImplementation(async (id: number) => conns[id] || null);
   });
 
-  it("consumer antes dos connect; conecta só ativas pareadas; demais DISCONNECTED sem QR", async () => {
+  it("consumer antes dos connect; conecta as ativas (pareadas ou que o gateway não carregou); inativas sem QR", async () => {
     const list = [
       make(1, "CONNECTED"), // gateway: connecting (pareada) -> connect
-      make(2, "OPENING"), // gateway: 404 -> DISCONNECTED
+      make(2, "OPENING"), // gateway: 404 (convertida pelo migrate-baileys, não carregada) -> connect
       make(3, "qrcode"), // gateway: qr (QR em andamento no gateway) -> fica
       make(4, "DISCONNECTED"), // gateway: 404 -> fica DISCONNECTED, sem connect
       make(5, "CONNECTED"), // gateway: connected -> CONNECTED + número
       make(6, "PENDING"), // gateway: logged_out -> DISCONNECTED
-      make(8, "qrcode") // gateway: 404 -> DISCONNECTED
+      make(8, "qrcode") // gateway: 404 -> connect (sem pareamento mostra QR, como o Baileys)
     ];
     (Whatsapp.findAll as jest.Mock).mockResolvedValue(list);
     const order: string[] = [];
@@ -503,16 +503,43 @@ describe("reconcileOnBoot (decisão 2)", () => {
     const handlerDeps = (handleEnvelope as jest.Mock).mock.calls[0][1];
     expect(handlerDeps.onConnection).toBe(SessionService.onConnection);
 
-    expect(client.connect.mock.calls.map(c => c[0])).toEqual([1]);
+    expect(client.connect.mock.calls.map(c => c[0]).sort()).toEqual([1, 2, 8]);
     expect(conns[1].status).toBe("OPENING");
-    expect(conns[2].status).toBe("DISCONNECTED");
+    expect(conns[2].status).toBe("OPENING");
     expect(conns[3].status).toBe("qrcode");
     expect(conns[4].update).not.toHaveBeenCalled();
     expect(conns[5].status).toBe("CONNECTED");
     expect(conns[5].number).toBe("5531999990000");
     expect(state.isReady(5)).toBe(true);
     expect(conns[6].status).toBe("DISCONNECTED");
-    expect(conns[8]).toMatchObject({ status: "DISCONNECTED", qrcode: "" });
+    expect(conns[8].status).toBe("OPENING");
+  });
+
+  it("conexão convertida (404 no boot, estava CONNECTED): connect restaura e o connected devolvido grava CONNECTED", async () => {
+    (Whatsapp.findAll as jest.Mock).mockResolvedValue([make(1, "CONNECTED")]);
+    client.status.mockRejectedValue(new AppError("ERR_WAPP_NOT_INITIALIZED"));
+    client.connect.mockResolvedValue({ state: "connected", me: ME });
+    await SessionService.reconcileOnBoot();
+    expect(client.connect).toHaveBeenCalledWith(1);
+    expect(conns[1].status).toBe("CONNECTED");
+    expect(state.isReady(1)).toBe(true);
+  });
+
+  it("404 no boot de conexão ativa sem pareamento: connect e o QR do gateway marca pareamento novo", async () => {
+    (Whatsapp.findAll as jest.Mock).mockResolvedValue([make(2, "OPENING")]);
+    client.status.mockRejectedValue(new AppError("ERR_WAPP_NOT_INITIALIZED"));
+    client.connect.mockResolvedValue({ state: "qr" });
+    await SessionService.reconcileOnBoot();
+    expect(client.connect).toHaveBeenCalledWith(2);
+    expect(conns[2].status).toBe("OPENING");
+  });
+
+  it("404 no boot com connect falhando: DISCONNECTED sem lançar", async () => {
+    (Whatsapp.findAll as jest.Mock).mockResolvedValue([make(1, "CONNECTED")]);
+    client.status.mockRejectedValue(new AppError("ERR_WAPP_NOT_INITIALIZED"));
+    client.connect.mockRejectedValue(new AppError("ERR_GATEWAY_UNAVAILABLE", 503));
+    await expect(SessionService.reconcileOnBoot()).resolves.toBeUndefined();
+    expect(conns[1].status).toBe("DISCONNECTED");
   });
 
   it("gateway fora do ar no boot: conexões ativas ficam OPENING (os eventos corrigem na volta)", async () => {

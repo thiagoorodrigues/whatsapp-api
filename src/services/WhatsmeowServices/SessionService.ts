@@ -374,7 +374,10 @@ const onConnection = async (connectionId: number, data: ConnectionData, ts?: num
 
 const ACTIVE = new Set(["CONNECTED", "OPENING", "qrcode"]);
 
-/** Decisão 2: estado do gateway manda; só reconecta o que estava ativo e pareado. */
+/**
+ * Decisão 2: estado do gateway manda; só reconecta o que estava ativo (pareado
+ * no gateway ou ainda não carregado por ele, 404).
+ */
 const reconcileOne = async (whatsapp: Whatsapp): Promise<void> => {
   const { id } = whatsapp;
   const wasActive = ACTIVE.has(whatsapp.status);
@@ -397,6 +400,14 @@ const reconcileOne = async (whatsapp: Whatsapp): Promise<void> => {
     await applyConnected(whatsapp, status?.me);
     return;
   }
+  if (!status && wasActive) {
+    // 404 de conexão que estava ativa: o gateway não carregou a sessão (ex.:
+    // convertida pelo migrate-baileys, que só grava no banco). O connect é
+    // idempotente: a pareada é restaurada; a sem pareamento mostra QR, como o
+    // Baileys faria no boot.
+    await connectSession(whatsapp);
+    return;
+  }
   if (gatewayState === "connecting" && wasActive) {
     // Pareada e sendo restaurada pelo gateway: connect é idempotente.
     await connectSession(whatsapp);
@@ -413,7 +424,7 @@ const reconcileOne = async (whatsapp: Whatsapp): Promise<void> => {
     state.setStatus(id, "qr");
     return;
   }
-  // 404 (não está rodando), logged_out ou QR que ninguém pediu: sem abrir QR.
+  // 404 de conexão inativa, logged_out ou QR que ninguém pediu: sem abrir QR.
   state.setStatus(id, gatewayState === "logged_out" ? "logged_out" : "disconnected");
   if (whatsapp.status !== "DISCONNECTED" || whatsapp.qrcode) {
     await save(whatsapp, { status: "DISCONNECTED", qrcode: "" });
