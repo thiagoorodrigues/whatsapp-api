@@ -107,7 +107,8 @@ interface Card {
 const icon = (path: string, x: number, y: number, size: number, color: string): string =>
   `<path d="${path}" fill="${color}" transform="translate(${x} ${y}) scale(${size / 24})"/>`;
 
-const card = (c: Credenciado, width: number, compact: boolean, logo: string | null): Card => {
+// solo: a imagem é só este cartão (sem moldura nem borda).
+const card = (c: Credenciado, width: number, compact: boolean, logo: string | null, solo = false): Card => {
   const pad = compact ? 22 : 28;
   const logoSize = compact ? 72 : 96;
   const nameSize = compact ? 25 : 30;
@@ -132,7 +133,11 @@ const card = (c: Credenciado, width: number, compact: boolean, logo: string | nu
 
   const draw = (x: number, y: number, height: number): string => {
     const out: string[] = [];
-    out.push(`<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="20" fill="${C.card}" stroke="${C.border}" stroke-width="2"/>`);
+    out.push(
+      solo
+        ? `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${C.card}"/>`
+        : `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="20" fill="${C.card}" stroke="${C.border}" stroke-width="2"/>`
+    );
     const lx = x + pad;
     const ly = y + pad;
     if (logo) {
@@ -214,11 +219,14 @@ export interface SvgRede {
 // logos: id do credenciado → data URI.
 export const montarSvgRede = (credenciados: Credenciado[], { logos }: { logos: Map<string, string | null> }): SvgRede => {
   const width = 1080;
-  const margin = 40;
+  // Um credenciado só (o envio é uma imagem por credenciado): o cartão ocupa a
+  // imagem inteira, sem a moldura cinza nem a borda.
+  const solo = credenciados.length === 1;
+  const margin = solo ? 0 : 40;
   const gap = 24;
   const columns = credenciados.length > 3 ? 2 : 1;
   const colW = (width - margin * 2 - gap * (columns - 1)) / columns;
-  const cards = credenciados.map(c => card(c, colW, columns === 2, logos.get(c.id) || null));
+  const cards = credenciados.map(c => card(c, colW, columns === 2, logos.get(c.id) || null, solo));
 
   // Só os cartões: sem cabeçalho nem rodapé (a legenda da mensagem explica).
   const parts: string[] = [];
@@ -231,7 +239,7 @@ export const montarSvgRede = (credenciados: Credenciado[], { logos }: { logos: M
   }
   const height = y - gap + margin;
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="${FONT}"><rect width="${width}" height="${height}" fill="${C.page}"/>${parts.join("")}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="${FONT}"><rect width="${width}" height="${height}" fill="${solo ? C.card : C.page}"/>${parts.join("")}</svg>`;
   return { svg, width, height, columns };
 };
 

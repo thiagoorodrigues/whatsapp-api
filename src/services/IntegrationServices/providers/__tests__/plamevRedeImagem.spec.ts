@@ -36,6 +36,16 @@ describe("montarSvgRede", () => {
     expect(svg).toContain(">CK<");
   });
 
+  it("draws a single credenciado without the gray frame or the card border", () => {
+    const solo = montarSvgRede([vet("k1")], { logos: new Map() });
+    expect(solo.svg).not.toContain("#F3F6F4");
+    expect(solo.svg).not.toContain('stroke="#DCE3DF" stroke-width="2"/><clipPath');
+    expect(solo.svg).toMatch(/^<svg[^>]*><rect width="1080" height="\d+" fill="#FFFFFF"\/><rect x="0" y="0"/);
+    const varios = montarSvgRede([vet("a"), vet("b")], { logos: new Map() });
+    expect(varios.svg).toContain('fill="#F3F6F4"');
+    expect(varios.svg).toContain('rx="20"');
+  });
+
   it("uses two columns above three credenciados", () => {
     const um = montarSvgRede([vet("a"), vet("b"), vet("c")], { logos: new Map() });
     const dois = montarSvgRede([vet("a"), vet("b"), vet("c"), vet("d")], { logos: new Map() });
