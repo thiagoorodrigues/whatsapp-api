@@ -1,3 +1,4 @@
+import { existsSync } from "fs";
 import { Resvg } from "@resvg/resvg-js";
 import AppError from "../../../../errors/AppError";
 import { Credenciado } from "./rede";
@@ -9,10 +10,17 @@ import { Credenciado } from "./rede";
 
 export const MAX_CARTOES = 12;
 
-const FONTS = [
-  require.resolve("pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf"),
-  require.resolve("pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf")
-];
+// Liberation Sans: a do pdfjs-dist (vem com o pdf-parse) ou a do pacote
+// fonts-liberation do container; sem nenhuma, as fontes do sistema.
+const resolveFont = (file: string): string | null => {
+  try {
+    return require.resolve(`pdfjs-dist/standard_fonts/${file}`);
+  } catch {
+    const system = `/usr/share/fonts/truetype/liberation/${file}`;
+    return existsSync(system) ? system : null;
+  }
+};
+const FONTS = ["LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf"].map(resolveFont).filter((f): f is string => !!f);
 const FONT = "Liberation Sans";
 
 const C = {
@@ -291,7 +299,7 @@ export const gerarImagemRede = async (
   const logos = new Map(credenciados.map((c, i) => [c.id, baixadas[i]]));
   const { svg } = montarSvgRede(credenciados, { titulo, logos });
   const resvg = new Resvg(svg, {
-    font: { fontFiles: FONTS, loadSystemFonts: false, defaultFontFamily: FONT },
+    font: { fontFiles: FONTS, loadSystemFonts: FONTS.length < 2, defaultFontFamily: FONT },
     fitTo: { mode: "width", value: 1080 }
   });
   return resvg.render().asPng();
