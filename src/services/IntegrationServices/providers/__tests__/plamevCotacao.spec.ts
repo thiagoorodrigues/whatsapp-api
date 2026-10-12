@@ -102,6 +102,13 @@ describe("simularCotacao", () => {
     expect(body.CotacoesPets[0]).toEqual({ Nome: "Thor", Especie: "2", RacasId: "srd-m", DataNascimento: "2022-01-01", CoberturasId: "cob-adv", CupomDesconto: "PROMO10" });
   });
 
+  it("accepts today as birth date (less than 1 year old)", async () => {
+    const post = jest.fn(async () => resposta);
+    const hoje = new Date().toISOString().slice(0, 10);
+    await simularCotacao(post, { estadoId: "mg", formaPagamento: "cartao", pets: [{ ...pet, nascimento: hoje }] });
+    expect((post.mock.calls[0] as any)[1].CotacoesPets[0].DataNascimento).toBe(hoje);
+  });
+
   it("refuses incomplete pets before calling the Plamev", async () => {
     const post = jest.fn();
     const tenta = (over: any, extra: any = {}) => simularCotacao(post, { estadoId: "mg", formaPagamento: "cartao", pets: [{ ...pet, ...over }], ...extra });

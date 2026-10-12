@@ -111,7 +111,8 @@ const invalido = (motivo: string) => new AppError(motivo, 400);
 const dataValida = (v: string): boolean => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
   const d = new Date(`${v}T12:00:00Z`);
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v && d.getTime() <= Date.now();
+  // Até o fim de hoje em qualquer fuso (idade "menos de 1 ano" manda a data de hoje).
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v && d.getTime() <= Date.now() + 36 * 3600e3;
 };
 
 const petParaPlamev = (p: PetCotacao, i: number): Raw => {
