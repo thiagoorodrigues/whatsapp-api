@@ -3,6 +3,7 @@ import mime from "mime-types";
 import AppError from "../../errors/AppError";
 import { getContactJid } from "../../helpers/GetPhoneJid";
 import { cachedProfilePicture, getGroupMetadata } from "../../libs/whatsappCache";
+import { logger } from "../../utils/logger";
 import { markSentByPlatform } from "../sentByPlatform";
 import {
   ChatAddress,
@@ -197,6 +198,8 @@ class WhatsmeowChannel implements MessagingChannel {
       .filter(m => m.externalId && m.fromMe !== true)
       .forEach(m => {
         const { chat: jid, sender } = targetOf(chat, m);
+        // Grupo sem participant: o gateway recusa (400) e não há a quem mandar o recibo.
+        if (jid.endsWith("@g.us") && !sender) return;
         const key = `${jid}|${sender || ""}`;
         const group = groups.get(key) || { chat: jid, sender, ids: [] };
         group.ids.push(m.externalId);
@@ -204,8 +207,17 @@ class WhatsmeowChannel implements MessagingChannel {
       });
     // eslint-disable-next-line no-restricted-syntax
     for (const group of groups.values()) {
-      // eslint-disable-next-line no-await-in-loop
-      await this.client.markRead(this.connectionId, group.chat, group.ids, group.sender);
+      // Um grupo com falha não impede os demais de serem marcados.
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await this.client.markRead(this.connectionId, group.chat, group.ids, group.sender);
+      } catch (err) {
+        logger.warn(
+          `whatsmeow: leitura de ${group.ids.length} mensagem(ns) em ${group.chat} (conexão ${this.connectionId}) falhou: ${
+            (err as Error)?.message || err
+          }`
+        );
+      }
     }
   }
 

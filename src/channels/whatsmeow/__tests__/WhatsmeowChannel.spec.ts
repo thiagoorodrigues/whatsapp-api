@@ -317,6 +317,21 @@ describe("markRead", () => {
     ]);
   });
 
+  it("grupo sem participant é pulado e a falha de um grupo não impede os outros", async () => {
+    client.markRead.mockRejectedValueOnce(new AppError("ERR_GATEWAY_ERROR", 400)).mockResolvedValue(undefined);
+    await expect(
+      channel().markRead({ number: "120363222", isGroup: true }, [
+        { externalId: "G0", chatJid: "120363222@g.us", fromMe: false },
+        { externalId: "G1", chatJid: "120363222@g.us", participant: "111@lid", fromMe: false },
+        { externalId: "G2", chatJid: "120363222@g.us", participant: "222@lid", fromMe: false }
+      ])
+    ).resolves.toBeUndefined();
+    expect(client.markRead.mock.calls).toEqual([
+      [7, "120363222@g.us", ["G1"], "111@lid"],
+      [7, "120363222@g.us", ["G2"], "222@lid"]
+    ]);
+  });
+
   it("nada a marcar não chama o gateway", async () => {
     await channel().markRead({ number: "1" }, []);
     await channel().markRead({ number: "1" }, [{ externalId: "X", fromMe: true }]);
