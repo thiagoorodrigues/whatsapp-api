@@ -479,3 +479,19 @@ Janela:
 Depois:
 - [ ] Acompanhamento por dias sem alertas
 - [ ] Decisão de seguir para o Plano 4 (remover Baileys e chaves antigas)
+
+## Ensaio completo no HM (2026-10-11)
+
+Feito com as conexões 3 (número real) e 5 (número de teste), seguindo este roteiro:
+
+- [x] Backup de `Whatsapps` e `BaileysKeys` das conexões; backend parado e conferido com `pgrep -fl "dist/server"`
+- [x] Streams antigos de teste apagados (`DEL wa:events:...`) antes de ligar o consumer
+- [x] Gateway reconstruído com o `migrate-baileys` na imagem; `docker exec <gateway> /app/migrate-baileys --connection N --dry-run` e depois sem `--dry-run`, para as duas: 0 descartes
+- [x] Gateway reiniciado: as duas sessões restauradas **sem QR**
+- [x] api com `WHATSAPP_ENGINE=whatsmeow`: as duas `CONNECTED`, consumer lendo, `wa:dead` = 0
+- [x] Receber texto, foto, figurinha, documento e áudio; enviar texto, foto, áudio gravado no Wazzy; citação; edição; reação nos dois sentidos; grupo nos dois sentidos
+- [x] Lida nos dois sentidos, ack 4 sem voltar; "digitando…" na tela
+- [x] Chamada perdida com chamadas desabilitadas: aviso automático enviado e registro no ticket
+- [x] Gateway parado: conexões em "Conectando"; mensagem enviada pelo celular nesse intervalo apareceu quando o gateway voltou
+- [x] Volta atrás: gateway parado → streams sem pendência → `WHATSAPP_ENGINE=baileys` → backend reiniciado: as duas conexões voltaram pelo Baileys sem QR e receberam mensagem nova
+- [ ] Conferir se o áudio gravado no Wazzy chega como bolha de voz (chegou como áudio; formato da bolha não confirmado)
