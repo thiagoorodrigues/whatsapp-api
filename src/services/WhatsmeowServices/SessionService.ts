@@ -41,10 +41,19 @@ const expectedLogouts = new Map<number, number>();
 
 const client = () => gatewayClient();
 
+// O Whatsapp pode vir do controller com a coluna session (credenciais do
+// Baileys): nunca vai para a sala da empresa.
+const withoutSession = (whatsapp: Whatsapp): Record<string, unknown> => {
+  const plain: Record<string, unknown> =
+    typeof (whatsapp as any).toJSON === "function" ? { ...(whatsapp as any).toJSON() } : { ...(whatsapp as any) };
+  delete plain.session;
+  return plain;
+};
+
 const emitSession = (whatsapp: Whatsapp, payload: Record<string, unknown> = {}) => {
   getIO()
     .to(companyRoom(whatsapp.companyId))
-    .emit(`company-${whatsapp.companyId}-whatsappSession`, { action: "update", session: whatsapp, ...payload });
+    .emit(`company-${whatsapp.companyId}-whatsappSession`, { action: "update", session: withoutSession(whatsapp), ...payload });
 };
 
 const save = async (whatsapp: Whatsapp, values: Record<string, unknown>) => {

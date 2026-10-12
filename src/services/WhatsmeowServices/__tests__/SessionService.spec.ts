@@ -80,8 +80,23 @@ describe("start", () => {
     expect(whatsapp.update).toHaveBeenCalledWith({ status: "OPENING" });
     expect(client.connect).toHaveBeenCalledWith(7);
     expect(sessionUpdates()).toHaveLength(1);
-    expect(sessionUpdates()[0][1].session).toBe(whatsapp);
+    expect(sessionUpdates()[0][1].session).toMatchObject({ id: 7, companyId: 2, status: "OPENING" });
     whatsapp.update.mock.calls.forEach(([v]: any[]) => expect(v).not.toHaveProperty("session"));
+  });
+
+  it("Whatsapp vindo do controller com a coluna session: o payload emitido não leva session", async () => {
+    const withCreds = fakeWhatsapp({ session: '{"creds":"segredo"}' });
+    withCreds.toJSON = () => {
+      const { update, toJSON, ...plain } = withCreds;
+      return { ...plain };
+    };
+    await SessionService.start(withCreds);
+    expect(sessionUpdates().length).toBeGreaterThan(0);
+    sessionUpdates().forEach(([, p]: any[]) => {
+      expect(p.session).not.toHaveProperty("session");
+      expect(p.session).toMatchObject({ id: 7, companyId: 2 });
+      expect(JSON.stringify(p)).not.toContain("segredo");
+    });
   });
 
   it("connect que já devolve connected grava CONNECTED (nenhum evento novo vai chegar)", async () => {
