@@ -46,10 +46,11 @@ describe("Plamev cotação: apoio", () => {
 });
 
 describe("simularCotacao", () => {
+  // Advance com a campanha do site (resposta real resumida): a campanha dá
+  // desconto só na adesão; a mensalidade fica com o desconto do cartão.
   const resposta = {
     DataFidelidade: "2027-10-12",
-    ValorAdesao: 111.992,
-    ValorDescontosMensalidades: -10,
+    ValorAdesao: 119.985429,
     ValorMensalidade: 149.99,
     ValorTotalMensalidade: 139.99,
     ComposicaoMensalidade: [
@@ -59,13 +60,15 @@ describe("simularCotacao", () => {
     ],
     ComposicaoAdesao: [
       { Nome: "Taxa de Adesão  Pet Thor", Valor: "0.00" },
-      { Nome: "Desconto adesão campanha X Pet Thor", Valor: -27.998 }
+      { Nome: "Mensalidade Plano ADVANCE Pet Thor", Valor: "149.99" },
+      { Nome: "Desconto recorrente pagamento cartão de crédito Pet (Thor)", Valor: -10 },
+      { Nome: "Desconto adesão campanha ADVANCE Pet Thor", Valor: -20.004571 }
     ],
     Pets: [{ Nome: "Thor", ValorUnitario: "149.99", Planos: { Nome: "ADVANCE" } }]
   };
   const pet: PetCotacao = { nome: "Thor", especie: "cachorro", racaId: "srd-m", nascimento: "2022-01-01", coberturaId: "cob-adv", campanhaId: "c1", tabelaId: "t1" };
 
-  it("sends the pets to the simulation and summarizes the answer", async () => {
+  it("sends the pets and answers like the site checkout: 1st invoice and monthly fee", async () => {
     const post = jest.fn(async () => resposta);
     const r = await simularCotacao(post, { estadoId: "mg", formaPagamento: "cartao", pets: [pet] });
     expect(post).toHaveBeenCalledWith("Cotacoes/SimulaCotacaoPet", {
@@ -79,27 +82,48 @@ describe("simularCotacao", () => {
     });
     expect(r).toEqual({
       formaPagamento: "cartao",
-      mensalidade: 149.99,
-      desconto: 10,
-      totalMensal: 139.99,
-      primeiroPagamento: 111.99,
+      primeiraFatura: 119.99,
+      mensalidade: 139.99,
+      mesmoValor: false,
+      semDesconto: 149.99,
       fidelidadeAte: "2027-10-12",
-      mensalidadeItens: [
+      composicaoPrimeiraFatura: [
+        { nome: "Mensalidade Plano ADVANCE Pet Thor", valor: 149.99 },
+        { nome: "Desconto recorrente pagamento cartão de crédito Pet (Thor)", valor: -10 },
+        { nome: "Desconto adesão campanha ADVANCE Pet Thor", valor: -20 }
+      ],
+      composicaoMensalidade: [
         { nome: "Mensalidade Plano ADVANCE Pet Thor", valor: 149.99 },
         { nome: "Desconto recorrente pagamento cartão de crédito Pet (Thor)", valor: -10 }
       ],
-      adesaoItens: [{ nome: "Desconto adesão campanha X Pet Thor", valor: -28 }],
       pets: [{ nome: "Thor", plano: "ADVANCE", valor: 149.99 }]
     });
   });
 
-  it("uses the standard price (no NovaCampanha) when no pet has a campaign, and boleto = 1", async () => {
-    const post = jest.fn(async () => resposta);
-    await simularCotacao(post, { estadoId: "mg", formaPagamento: "boleto", pets: [{ ...pet, campanhaId: "", tabelaId: "", cupom: " PROMO10 " }] });
+  it("includes a monthly campaign discount in the monthly fee, like the site ValorComDesconto", async () => {
+    const comMensal = {
+      ...resposta,
+      ValorAdesao: 129.99,
+      ComposicaoMensalidade: [...resposta.ComposicaoMensalidade, { Nome: "*** Desconto parcela campanha PLATINUM129  Pet Thor", Valor: -10 }]
+    };
+    const r = await simularCotacao(jest.fn(async () => comMensal), { estadoId: "mg", formaPagamento: "cartao", pets: [pet] });
+    expect(r).toMatchObject({ primeiraFatura: 129.99, mensalidade: 129.99, mesmoValor: true });
+  });
+
+  it("without campaign: no NovaCampanha, boleto = 1, coupon sent", async () => {
+    const post = jest.fn(async () => ({ ...resposta, ValorAdesao: 149.99, ComposicaoMensalidade: [{ Nome: "Mensalidade", Valor: "149.99" }] }));
+    const r = await simularCotacao(post, { estadoId: "mg", formaPagamento: "boleto", pets: [{ ...pet, campanhaId: "", tabelaId: "", cupom: " PROMO10 " }] });
     const body = (post.mock.calls[0] as any)[1];
     expect(body.FormaPagamento).toBe(1);
     expect(body).not.toHaveProperty("NovaCampanha");
     expect(body.CotacoesPets[0]).toEqual({ Nome: "Thor", Especie: "2", RacasId: "srd-m", DataNascimento: "2022-01-01", CoberturasId: "cob-adv", CupomDesconto: "PROMO10" });
+    expect(r).toMatchObject({ primeiraFatura: 149.99, mensalidade: 149.99, mesmoValor: true });
+  });
+
+  it("writes 'Pet 1' once when the pet has no name", async () => {
+    const semNome = { ...resposta, ComposicaoMensalidade: [{ Nome: "Mensalidade Plano ADVANCE Pet Pet 1", Valor: "149.99" }] };
+    const r = await simularCotacao(jest.fn(async () => semNome), { estadoId: "mg", formaPagamento: "cartao", pets: [{ ...pet, nome: "" }] });
+    expect(r.composicaoMensalidade[0].nome).toBe("Mensalidade Plano ADVANCE Pet 1");
   });
 
   it("accepts today as birth date (less than 1 year old)", async () => {

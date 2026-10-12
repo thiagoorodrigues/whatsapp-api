@@ -96,13 +96,13 @@ describe("PlamevRedeService", () => {
   });
 
   it("simulates a quote with the company token through a POST", async () => {
-    plamevPost.mockResolvedValue({ ValorTotalMensalidade: 139.99 });
+    plamevPost.mockResolvedValue({ ValorAdesao: 139.99, ComposicaoMensalidade: [{ Nome: "Mensalidade", Valor: "139.99" }], Pets: [] });
     const r = await simular(7, {
       estadoId: "mg",
       formaPagamento: "cartao",
       pets: [{ especie: "cachorro", racaId: "r", nascimento: "2022-01-01", coberturaId: "c" }]
     });
-    expect(r.totalMensal).toBe(139.99);
+    expect(r).toMatchObject({ primeiraFatura: 139.99, mensalidade: 139.99, mesmoValor: true });
     expect(plamevPost.mock.calls[0][0]).toEqual({ apiUrl: "https://service.plamev-hm.com/", token: "tok-777" });
     expect(plamevPost.mock.calls[0][1]).toBe("Cotacoes/SimulaCotacaoPet");
   });

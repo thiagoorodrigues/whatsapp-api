@@ -9,9 +9,10 @@ import { C, esc, svgParaPng, wrap } from "./redeImagem";
 export interface CotacaoParaCliente {
   formaPagamento: "cartao" | "boleto";
   pets: { nome: string; especie: "gato" | "cachorro"; plano: string }[];
-  mensalidade: number | null; // sem descontos
-  totalMensal: number | null; // o que paga por mês
-  primeiroPagamento: number | null;
+  primeiraFatura: number | null;
+  mensalidade: number | null;
+  mesmoValor: boolean;
+  semDesconto: number | null; // mensalidade cheia
   fidelidadeAte: string | null; // YYYY-MM-DD
 }
 
@@ -42,27 +43,38 @@ export const montarSvgCotacao = (c: CotacaoParaCliente): { svg: string; height: 
   out.push(`<line x1="${pad}" y1="${y}" x2="${width - pad}" y2="${y}" stroke="${C.border}" stroke-width="2"/>`);
   y += 28;
 
-  if (c.totalMensal) {
-    out.push(`<text x="${pad}" y="${y + 26}" font-size="26" fill="${C.text2}">Mensalidade${c.pets.length > 1 ? " (todos os pets)" : ""}</text>`);
+  if (c.primeiraFatura) {
+    const meio = c.formaPagamento === "cartao" ? "cartão" : "boleto";
+    out.push(
+      `<text x="${pad}" y="${y + 26}" font-size="26" fill="${C.text2}">${esc(
+        c.mesmoValor ? `Mensalidade${c.pets.length > 1 ? " (todos os pets)" : ""}` : "1ª fatura (adesão)"
+      )}</text>`
+    );
     y += 26 + 8;
-    if (c.mensalidade && c.mensalidade > c.totalMensal) {
-      const de = `de ${formatReais(c.mensalidade)}`;
+    if (c.mesmoValor && c.semDesconto && c.semDesconto > c.primeiraFatura) {
+      const de = `de ${formatReais(c.semDesconto)}`;
       out.push(`<text x="${pad}" y="${y + 26}" font-size="26" fill="${C.muted}">${esc(de)}</text>`);
       out.push(`<line x1="${pad + 36}" y1="${y + 17}" x2="${pad + de.length * 26 * 0.5}" y2="${y + 17}" stroke="${C.muted}" stroke-width="2"/>`);
       y += 26 + 8;
     }
-    const total = formatReais(c.totalMensal);
-    out.push(`<text x="${pad}" y="${y + 64}" font-size="68" font-weight="bold" fill="${C.brand}">${esc(total)}</text>`);
+    const valor = formatReais(c.primeiraFatura);
+    out.push(`<text x="${pad}" y="${y + 64}" font-size="68" font-weight="bold" fill="${C.brand}">${esc(valor)}</text>`);
     out.push(
-      `<text x="${pad + total.length * 68 * 0.5 + 12}" y="${y + 64}" font-size="30" fill="${C.text2}">/mês no ${c.formaPagamento === "cartao" ? "cartão" : "boleto"}</text>`
+      `<text x="${pad + valor.length * 68 * 0.5 + 12}" y="${y + 64}" font-size="30" fill="${C.text2}">${esc(
+        c.mesmoValor ? `/mês no ${meio}` : `no ${meio}`
+      )}</text>`
     );
-    y += 64 + 26;
+    y += 64 + 20;
+    if (!c.mesmoValor && c.mensalidade) {
+      out.push(
+        `<text x="${pad}" y="${y + 32}" font-size="30" fill="${C.text}">${esc(`Mensalidade: ${formatReais(c.mensalidade)}/mês`)}</text>`
+      );
+      y += 32 + 14;
+    }
+    y += 6;
   }
 
-  const chips = [
-    c.primeiroPagamento ? `1º pagamento: ${formatReais(c.primeiroPagamento)}` : null,
-    dataBr(c.fidelidadeAte) ? `Fidelidade até ${dataBr(c.fidelidadeAte)}` : null
-  ].filter(Boolean) as string[];
+  const chips = [dataBr(c.fidelidadeAte) ? `Fidelidade até ${dataBr(c.fidelidadeAte)}` : null].filter(Boolean) as string[];
   if (chips.length) {
     y += 6;
     let x = pad;
@@ -95,13 +107,14 @@ export const cotacaoDaTela = (raw: any): CotacaoParaCliente => ({
     especie: p?.especie === "gato" ? "gato" : "cachorro",
     plano: str(p?.plano, 40) || "Plamev"
   })),
+  primeiraFatura: num(raw?.primeiraFatura),
   mensalidade: num(raw?.mensalidade),
-  totalMensal: num(raw?.totalMensal),
-  primeiroPagamento: num(raw?.primeiroPagamento),
+  mesmoValor: raw?.mesmoValor !== false,
+  semDesconto: num(raw?.semDesconto),
   fidelidadeAte: /^\d{4}-\d{2}-\d{2}$/.test(str(raw?.fidelidadeAte, 10)) ? str(raw.fidelidadeAte, 10) : null
 });
 
 export const gerarImagemCotacao = (c: CotacaoParaCliente): Buffer => {
-  if (!c.pets.length || !c.totalMensal) throw new AppError("ERR_INTEGRATION_FILTER_REQUIRED", 400);
+  if (!c.pets.length || !c.primeiraFatura) throw new AppError("ERR_INTEGRATION_FILTER_REQUIRED", 400);
   return svgParaPng(montarSvgCotacao(c).svg);
 };

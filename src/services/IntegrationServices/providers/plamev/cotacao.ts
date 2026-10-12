@@ -52,16 +52,21 @@ export interface Lancamento {
   valor: number;
 }
 
+// Os mesmos campos do checkout do site da Plamev: a mensalidade é a soma da
+// ComposicaoMensalidade (como o Cartao/Boleto.Composicao.ValorComDesconto de
+// Coberturas/BuscarCoberturasComPreco) e a 1ª fatura é o ValorAdesao ("Total
+// Adesão" na página de pagamento).
 export interface ResultadoCotacao {
   formaPagamento: "cartao" | "boleto";
+  primeiraFatura: number | null;
   mensalidade: number | null;
-  desconto: number | null;
-  totalMensal: number | null;
-  // ValorAdesao da Plamev: o primeiro pagamento (adesão + 1ª mensalidade).
-  primeiroPagamento: number | null;
+  // 1ª fatura igual à mensalidade: um valor só, "por mês".
+  mesmoValor: boolean;
+  // Mensalidade cheia, sem nenhum desconto (ValorMensalidade).
+  semDesconto: number | null;
   fidelidadeAte: string | null;
-  mensalidadeItens: Lancamento[];
-  adesaoItens: Lancamento[];
+  composicaoPrimeiraFatura: Lancamento[];
+  composicaoMensalidade: Lancamento[];
   pets: { nome: string; plano: string | null; valor: number | null }[];
 }
 
@@ -140,10 +145,26 @@ const petParaPlamev = (p: PetCotacao, i: number): Raw => {
   return out;
 };
 
-const lancamentos = (raw: unknown): Lancamento[] =>
-  asList(raw)
-    .map(l => ({ nome: text(l.Nome).replace(/\s+/g, " "), valor: money(l.Valor) ?? 0 }))
-    .filter(l => l.nome && l.valor !== 0);
+// Soma os lançamentos de mesmo nome (na ordem em que aparecem) e tira os zerados.
+const lancamentos = (raw: unknown): Lancamento[] => {
+  const soma = new Map<string, number>();
+  asList(raw).forEach(l => {
+    // Sem nome o pet vai como "Pet 1" e a Plamev escreve "Pet Pet 1".
+    const nome = text(l.Nome).replace(/\s+/g, " ").replace(/\bPet Pet\b/g, "Pet");
+    const valor = Number.parseFloat(String(l.Valor ?? ""));
+    if (nome && Number.isFinite(valor)) soma.set(nome, (soma.get(nome) || 0) + valor);
+  });
+  return [...soma.entries()]
+    .map(([nome, valor]) => ({ nome, valor: Math.round(valor * 100) / 100 }))
+    .filter(l => l.valor !== 0);
+};
+
+const somaLancamentos = (raw: unknown): number | null => {
+  const valores = asList(raw)
+    .map(l => Number.parseFloat(String(l.Valor ?? "")))
+    .filter(v => Number.isFinite(v));
+  return valores.length ? Math.round(valores.reduce((a, b) => a + b, 0) * 100) / 100 : null;
+};
 
 export const simularCotacao = async (post: PlamevPoster, pedido: PedidoCotacao): Promise<ResultadoCotacao> => {
   if (!text(pedido?.estadoId)) throw invalido("Escolha o estado do cliente.");
@@ -163,16 +184,18 @@ export const simularCotacao = async (post: PlamevPoster, pedido: PedidoCotacao):
   body.CotacoesPets = cotacoesPets;
 
   const r: Raw = ((await post("Cotacoes/SimulaCotacaoPet", body)) || {}) as Raw;
-  const desconto = money(r.ValorDescontosMensalidades);
+
+  const primeiraFatura = money(r.ValorAdesao);
+  const mensalidade = somaLancamentos(r.ComposicaoMensalidade) ?? money(r.ValorTotalMensalidade);
   return {
     formaPagamento: forma,
-    mensalidade: money(r.ValorMensalidade),
-    desconto: desconto ? Math.abs(desconto) : null,
-    totalMensal: money(r.ValorTotalMensalidade),
-    primeiroPagamento: money(r.ValorAdesao),
+    primeiraFatura,
+    mensalidade,
+    mesmoValor: primeiraFatura === null || mensalidade === null || Math.abs(primeiraFatura - mensalidade) < 0.01,
+    semDesconto: money(r.ValorMensalidade),
     fidelidadeAte: text(r.DataFidelidade) || null,
-    mensalidadeItens: lancamentos(r.ComposicaoMensalidade),
-    adesaoItens: lancamentos(r.ComposicaoAdesao),
+    composicaoPrimeiraFatura: lancamentos(r.ComposicaoAdesao),
+    composicaoMensalidade: lancamentos(r.ComposicaoMensalidade),
     pets: asList(r.Pets).map(p => ({ nome: text(p.Nome), plano: text(p.Planos?.Nome) || null, valor: money(p.ValorUnitario) }))
   };
 };

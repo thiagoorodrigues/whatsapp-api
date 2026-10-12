@@ -90,7 +90,8 @@ const fromCobertura = (c: Raw): Plano => {
     maisVendido: String(c.MaisVendido) === "1",
     precoCartao,
     precoCartaoSemDesconto: campanha && cheio && precoCartao && cheio > precoCartao ? cheio : null,
-    precoBoleto: money(boleto.ValorTotalMensalidade),
+    // O mesmo campo do checkout do site (ValorComDesconto = soma da ComposicaoMensalidade).
+    precoBoleto: money(boleto.ValorComDesconto) ?? money(boleto.ValorTotalMensalidade),
     fidelidadeMeses: int(valores.PlanosFidelidade),
     procedimentos: int(valores.CoberturasQuantidadeProcedimentos),
     resumo: resumo?.resumo || null,

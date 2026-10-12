@@ -12,7 +12,7 @@ const cobertura = (over: Record<string, any> = {}) => ({
   MaisVendido: "1",
   Valores: [{ PlanosFidelidade: "12", CoberturasQuantidadeProcedimentos: "41" }],
   Cartao: { Composicao: { ValorComDesconto: "139.99", ValorMensalidade: "149.99", CampanhasCoberturasExibeSite: "SIM" } },
-  Boleto: { Composicao: { ValorTotalMensalidade: "149.99" } },
+  Boleto: { Composicao: { ValorComDesconto: "149.99", ValorTotalMensalidade: "151.00" } },
   ...over
 });
 
