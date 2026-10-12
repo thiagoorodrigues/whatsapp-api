@@ -42,6 +42,16 @@ recibos, recusa de chamada) e espaço para recursos que só o whatsmeow tem
 - Apagar `BaileysKeys` e `Whatsapps.session`: só numa migration posterior,
   depois de alguns dias estáveis.
 
+## Decisão de 2026-10-11: chave de motor e remoção em duas etapas
+
+Substitui "o Baileys sai no mesmo deploy": o Wazzy ganha o caminho do gateway
+atrás de `WHATSAPP_ENGINE=baileys|whatsmeow` (padrão `baileys`). A virada
+continua sendo de uma vez para todas as conexões, mas voltar atrás é trocar a
+variável e reiniciar a api (com o gateway parado). Só um motor roda por vez:
+com `whatsmeow` a api não inicia nenhum socket Baileys; com `baileys` a api
+não chama o gateway. Plano 3 = integração + chave + virada; Plano 4 = remover
+o Baileys e as chaves antigas depois de alguns dias estáveis.
+
 ## Arquitetura
 
 ```
