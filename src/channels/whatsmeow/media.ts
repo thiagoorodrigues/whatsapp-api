@@ -21,15 +21,21 @@ export interface StagedMedia {
   cleanup(): Promise<void>;
 }
 
+const URL_DOWNLOAD_TIMEOUT_MS = 60 * 1000;
+const URL_MAX_REDIRECTS = 5;
+
 const safeExt = (ext: string): string => (/^\.[a-z0-9]{1,10}$/i.test(ext) ? ext : "");
 
 const readSource = async (source: MediaSource): Promise<Buffer | string> => {
   if ("buffer" in source) return source.buffer;
   if ("path" in source) return source.path;
+  // URL externa: sem timeout um servidor parado prenderia o envio para sempre.
   const res = await axios.get(source.url, {
     responseType: "arraybuffer",
     maxContentLength: MAX_UPLOAD_BYTES,
-    maxBodyLength: MAX_UPLOAD_BYTES
+    maxBodyLength: MAX_UPLOAD_BYTES,
+    timeout: URL_DOWNLOAD_TIMEOUT_MS,
+    maxRedirects: URL_MAX_REDIRECTS
   });
   return Buffer.from(res.data);
 };

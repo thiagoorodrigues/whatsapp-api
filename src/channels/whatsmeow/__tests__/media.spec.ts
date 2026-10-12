@@ -59,7 +59,9 @@ describe("stageOutgoing", () => {
     const staged = await stageOutgoing({ url: "https://x.test/a.mp4" }, ".mp4");
     expect((axios.get as jest.Mock).mock.calls[0][1]).toMatchObject({
       responseType: "arraybuffer",
-      maxContentLength: 100 * 1024 * 1024
+      maxContentLength: 100 * 1024 * 1024,
+      timeout: 60000,
+      maxRedirects: 5
     });
     expect(fs.readFileSync(path.join(root, staged.path), "utf8")).toBe("remote");
     await staged.cleanup();
