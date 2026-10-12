@@ -33,6 +33,7 @@ export const RESUMOS: Record<string, { resumo: string; itens: string[] }> = {
     resumo: "Indicado para peludinhos que precisam de mais procedimentos",
     itens: ["Toda a cobertura do Slim", "Exames laboratoriais", "Exames de imagem", "Internação", "Cirurgias"]
   },
+  "14": { resumo: "Cobertura incrível pelo melhor custo-benefício", itens: [] },
   "5": {
     resumo: "Especial para o peludinho que precisa de um pouco mais de atenção",
     itens: ["Toda a cobertura do Advance", "Exames sorológicos", "Testes hormonais", "Consultas com especialistas", "Vacinas especiais"]
@@ -42,11 +43,6 @@ export const RESUMOS: Record<string, { resumo: string; itens: string[] }> = {
     itens: ["Toda a cobertura do Advance", "Exames sorológicos", "Testes hormonais", "Consultas com especialistas", "Vacina V5", "Teste FIV/FeLV"]
   }
 };
-
-// Os tipos que o site e o checkout da Plamev oferecem (defaultPlanIds no
-// checkout do plamevpets): Slim Essencial, Advance, Platinum e Platinum Cat
-// Comfort. Os demais só entram por link direto.
-export const TIPOS_DO_SITE = ["17", "4", "5", "21"];
 
 const ESPECIES: Record<string, string> = { TODOS: "Cães e gatos", CANINO: "Cães", FELINO: "Especial gatos" };
 
@@ -102,8 +98,8 @@ const fromCobertura = (c: Raw): Plano => {
   };
 };
 
-// Planos do estado do cliente como o checkout do site: origem SITE, exibidos no
-// site, só os tipos do site e um por tipo (o primeiro na ordem).
+// Planos do estado do cliente que o site vende (origem SITE, exibidos no site),
+// na ordem do site.
 export const listPlanos = async (get: PlamevGetter, estadoId: string): Promise<Plano[]> => {
   const data: Raw = ((await get("Coberturas/BuscarCoberturasComPreco/", {
     EstadosId: estadoId,
@@ -111,16 +107,8 @@ export const listPlanos = async (get: PlamevGetter, estadoId: string): Promise<P
     order: "Ordem"
   })) || {}) as Raw;
   const lista: Raw[] = Array.isArray(data.Coberturas) ? data.Coberturas : Object.values(data.Coberturas || {});
-  const vistos = new Set<string>();
   return lista
     .filter(c => String(c.OrigemCheckout).toUpperCase() === "SITE" && String(c.ExibeSite) === "1")
-    .filter(c => TIPOS_DO_SITE.includes(String(c.TiposCoberturasId)))
     .sort((a, b) => (Number(a.Ordem) || 0) - (Number(b.Ordem) || 0))
-    .filter(c => {
-      const tipo = String(c.TiposCoberturasId);
-      if (vistos.has(tipo)) return false;
-      vistos.add(tipo);
-      return true;
-    })
     .map(fromCobertura);
 };

@@ -17,7 +17,7 @@ const cobertura = (over: Record<string, any> = {}) => ({
 });
 
 describe("listPlanos", () => {
-  it("lists the plans the site checkout offers (site types, one per type), with card and boleto prices", async () => {
+  it("lists every plan the site sells in the state (origin SITE), in the site order, with card and boleto prices", async () => {
     const get = jest.fn(async () => ({
       Coberturas: [
         cobertura(),
@@ -37,8 +37,10 @@ describe("listPlanos", () => {
     }));
     const planos = await listPlanos(get, "mg");
     expect(get).toHaveBeenCalledWith("Coberturas/BuscarCoberturasComPreco/", { EstadosId: "mg", Valores: "true", order: "Ordem" });
-    expect(planos.map(p => p.id)).toEqual(["c-slim", "c-adv", "c-cat"]);
-    expect(planos[1]).toEqual({
+    expect(planos.map(p => p.id)).toEqual(["c-slim1", "c-slim", "c-adv", "c-cat", "c-adv2", "c-port"]);
+    expect(planos.find(p => p.id === "c-port")).toMatchObject({ nome: "Advance Plus Portabilidade", resumo: "Cobertura incrível pelo melhor custo-benefício" });
+    expect(planos.find(p => p.id === "c-slim1")).toMatchObject({ nome: "Slim", resumo: null, itens: [] });
+    expect(planos[2]).toEqual({
       id: "c-adv",
       tipoId: "4",
       nome: "Advance",
@@ -52,8 +54,8 @@ describe("listPlanos", () => {
       resumo: "Indicado para peludinhos que precisam de mais procedimentos",
       itens: ["Toda a cobertura do Slim", "Exames laboratoriais", "Exames de imagem", "Internação", "Cirurgias"]
     });
-    expect(planos[0]).toMatchObject({ nome: "Slim Essencial", precoCartao: 59.99, maisVendido: false, itens: ["Consultas", "Exames preventivos", "Vacina", "Consultas emergenciais ilimitadas"] });
-    expect(planos[2]).toMatchObject({ nome: "Platinum Cat Comfort", especie: "Especial gatos", fidelidadeMeses: null, procedimentos: null });
+    expect(planos[1]).toMatchObject({ nome: "Slim Essencial", precoCartao: 59.99, maisVendido: false, itens: ["Consultas", "Exames preventivos", "Vacina", "Consultas emergenciais ilimitadas"] });
+    expect(planos[3]).toMatchObject({ nome: "Platinum Cat Comfort", especie: "Especial gatos", fidelidadeMeses: null, procedimentos: null });
 
   });
 
