@@ -49,8 +49,7 @@ export const credenciados = (companyId: number, filtros: RedeFiltros): Promise<C
 
 // PNG com os credenciados escolhidos. Passa pelo token da empresa (só gera
 // para quem tem a integração conectada e liberada no plano).
-export const imagem = async (companyId: number, body: { credenciados?: unknown; titulo?: unknown }): Promise<Buffer> => {
+export const imagem = async (companyId: number, body: { credenciados?: unknown }): Promise<Buffer> => {
   const lista = (Array.isArray(body?.credenciados) ? body.credenciados : []).map(credenciadoDaTela);
-  const titulo = typeof body?.titulo === "string" ? body.titulo.trim().slice(0, 80) : "";
-  return run(companyId, () => gerarImagemRede(lista, { titulo, imagemBase: plamevApiUrl() }));
+  return run(companyId, () => gerarImagemRede(lista, { imagemBase: plamevApiUrl() }));
 };

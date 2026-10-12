@@ -63,14 +63,13 @@ describe("PlamevRedeService", () => {
   it("draws the image only with the fields it uses, through the company token", async () => {
     gerarImagemRede.mockResolvedValue(Buffer.from("png"));
     const out = await imagem(7, {
-      titulo: " Betim/MG ",
       credenciados: [{ id: "k1", nome: "Vet", horarios: ["Seg 08h–18h", 3], plantao24h: "sim", logo: "x", extra: "ignorado" }]
     });
     expect(out.toString()).toBe("png");
     const [lista, opts] = gerarImagemRede.mock.calls[0];
     expect(lista[0]).toMatchObject({ id: "k1", nome: "Vet", horarios: ["Seg 08h–18h"], plantao24h: false, logo: "x" });
     expect(lista[0]).not.toHaveProperty("extra");
-    expect(opts).toEqual({ titulo: "Betim/MG", imagemBase: "https://service.plamev-hm.com/" });
+    expect(opts).toEqual({ imagemBase: "https://service.plamev-hm.com/" });
     await expect(imagem(8, { credenciados: [] })).rejects.toThrow("wrong company or provider");
   });
 

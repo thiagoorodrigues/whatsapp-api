@@ -206,11 +206,8 @@ export interface SvgRede {
   columns: number;
 }
 
-// titulo: onde foi a busca ("Betim/MG"). logos: id do credenciado → data URI.
-export const montarSvgRede = (
-  credenciados: Credenciado[],
-  { titulo, logos }: { titulo: string; logos: Map<string, string | null> }
-): SvgRede => {
+// logos: id do credenciado → data URI.
+export const montarSvgRede = (credenciados: Credenciado[], { logos }: { logos: Map<string, string | null> }): SvgRede => {
   const width = 1080;
   const margin = 40;
   const gap = 24;
@@ -218,28 +215,18 @@ export const montarSvgRede = (
   const colW = (width - margin * 2 - gap * (columns - 1)) / columns;
   const cards = credenciados.map(c => card(c, colW, columns === 2, logos.get(c.id) || null));
 
-  const headerH = 190;
+  // Só os cartões: sem cabeçalho nem rodapé (a legenda da mensagem explica).
   const parts: string[] = [];
-  let y = headerH + margin;
+  let y = margin;
   for (let i = 0; i < cards.length; i += columns) {
     const rowCards = cards.slice(i, i + columns);
     const rowH = Math.max(...rowCards.map(k => k.height));
     rowCards.forEach((k, j) => parts.push(k.draw(margin + j * (colW + gap), y, rowH)));
     y += rowH + gap;
   }
-  const footerH = 70;
-  const height = y - gap + margin + footerH;
+  const height = y - gap + margin;
 
-  const qtd = `${credenciados.length} ${credenciados.length === 1 ? "credenciado" : "credenciados"}`;
-  const header = [
-    `<rect width="${width}" height="${headerH}" fill="${C.brand}"/>`,
-    `<text x="${margin}" y="62" font-size="22" font-weight="bold" fill="#BFE6D3" letter-spacing="3">PLAMEV</text>`,
-    `<text x="${margin}" y="116" font-size="48" font-weight="bold" fill="#FFFFFF">Rede credenciada</text>`,
-    `<text x="${margin}" y="160" font-size="26" fill="#DDF2E6">${esc([titulo, qtd].filter(Boolean).join(" · "))}</text>`
-  ];
-  const footer = `<text x="${width / 2}" y="${height - 32}" font-size="20" fill="${C.muted}" text-anchor="middle">Rede completa em plamevpets.com.br/rede</text>`;
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="${FONT}"><rect width="${width}" height="${height}" fill="${C.page}"/>${header.join("")}${parts.join("")}${footer}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="${FONT}"><rect width="${width}" height="${height}" fill="${C.page}"/>${parts.join("")}</svg>`;
   return { svg, width, height, columns };
 };
 
@@ -291,13 +278,13 @@ export const credenciadoDaTela = (raw: any): Credenciado => ({
 
 export const gerarImagemRede = async (
   credenciados: Credenciado[],
-  { titulo, imagemBase, fetchFn = (globalThis as any).fetch }: { titulo: string; imagemBase: string; fetchFn?: FetchFn }
+  { imagemBase, fetchFn = (globalThis as any).fetch }: { imagemBase: string; fetchFn?: FetchFn }
 ): Promise<Buffer> => {
   if (!credenciados.length) throw new AppError("ERR_INTEGRATION_FILTER_REQUIRED", 400);
   if (credenciados.length > MAX_CARTOES) throw new AppError("ERR_PLAMEV_IMAGE_TOO_MANY", 400);
   const baixadas = await Promise.all(credenciados.map(c => baixarLogo(c.logo, imagemBase, fetchFn)));
   const logos = new Map(credenciados.map((c, i) => [c.id, baixadas[i]]));
-  const { svg } = montarSvgRede(credenciados, { titulo, logos });
+  const { svg } = montarSvgRede(credenciados, { logos });
   const resvg = new Resvg(svg, {
     font: { fontFiles: FONTS, loadSystemFonts: FONTS.length < 2, defaultFontFamily: FONT },
     fitTo: { mode: "width", value: 1080 }
