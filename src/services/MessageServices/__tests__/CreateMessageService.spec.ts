@@ -67,6 +67,16 @@ describe("CreateMessageService", () => {
     expect(rows[0].ack).toBe(2);
   });
 
+  it("an echo saved again does not lower the delivery status already reached", async () => {
+    await CreateMessageService({ companyId: 1, messageData: { ...base, id: "uuid-1", messagesWhatsappsId: "WA9", ack: 4 } });
+    await CreateMessageService({
+      companyId: 1,
+      messageData: { ...base, id: "uuid-2", messagesWhatsappsId: "WA9", ack: 2 }
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ack).toBe(4);
+  });
+
   it("does not merge across companies or messages without a WhatsApp id", async () => {
     await CreateMessageService({ companyId: 1, messageData: { ...base, id: "a", messagesWhatsappsId: "WA1" } });
     await CreateMessageService({ companyId: 2, messageData: { ...base, id: "b", messagesWhatsappsId: "WA1" } });
