@@ -91,8 +91,13 @@ const initials = (nome: string): string =>
 const avatarColor = (id: string): string =>
   C.avatar[[...id].reduce((n, ch) => n + ch.charCodeAt(0), 0) % C.avatar.length];
 
-const placeOf = (c: Credenciado): string =>
-  [c.bairro, [c.cidade, c.uf].filter(Boolean).join("/")].filter(Boolean).join(", ") || "Endereço não informado";
+// "Rua A, 1 – Centro, Betim/MG – CEP 32600-050"; sem rua, bairro e cidade.
+export const enderecoCompleto = (c: Credenciado): string => {
+  const cep = (c.cep || "").replace(/\D/g, "");
+  const local = [c.bairro, [c.cidade, c.uf].filter(Boolean).join("/")].filter(Boolean).join(", ");
+  return [c.endereco, local, cep.length === 8 ? `CEP ${cep.slice(0, 5)}-${cep.slice(5)}` : null].filter(Boolean).join(" – ");
+};
+const placeOf = (c: Credenciado): string => enderecoCompleto(c) || "Endereço não informado";
 
 interface Card {
   height: number;
@@ -114,7 +119,7 @@ const card = (c: Credenciado, width: number, compact: boolean, logo: string | nu
   const textW = width - textX - pad;
 
   const name = wrap(c.nome, textW - (nota ? notaW + 12 : 0), nameSize, true);
-  const place = wrap(placeOf(c), textW - size - 8, size, false, 2);
+  const place = wrap(placeOf(c), textW - size - 8, size, false, 3);
   const horarios = (c.horarios.length ? c.horarios : ["Horário não informado"]).flatMap(h => wrap(h, textW - size - 8, size, false, 2));
   const badges = [c.horaMarcada && "Hora marcada", c.plantao24h && "Plantão 24h"].filter(Boolean) as string[];
   const planos = c.coberturas.length ? wrap(`Planos: ${c.coberturas.join(", ")}`, textW, size - 3, false, 3) : [];
@@ -266,7 +271,7 @@ export const credenciadoDaTela = (raw: any): Credenciado => ({
   bairro: str(raw?.bairro, 80),
   cidade: str(raw?.cidade, 80),
   uf: str(raw?.uf, 30),
-  cep: null,
+  cep: str(raw?.cep, 12),
   telefone: str(raw?.telefone, 30),
   plantao24h: raw?.plantao24h === true,
   horaMarcada: raw?.horaMarcada === true,

@@ -1,4 +1,4 @@
-import { gerarImagemRede, montarSvgRede, MAX_CARTOES } from "../plamev/redeImagem";
+import { enderecoCompleto, gerarImagemRede, montarSvgRede, MAX_CARTOES } from "../plamev/redeImagem";
 import { Credenciado } from "../plamev/rede";
 
 const BASE = "https://service.plamev-hm.com/";
@@ -10,7 +10,7 @@ const vet = (id: string, extra: Partial<Credenciado> = {}): Credenciado => ({
   bairro: "Centro",
   cidade: "Betim",
   uf: "MG",
-  cep: null,
+  cep: "32600050",
   telefone: "(31) 99710-4439",
   plantao24h: false,
   horaMarcada: true,
@@ -29,7 +29,7 @@ describe("montarSvgRede", () => {
     expect(svg).toContain("4,8");
     expect(svg).toContain("Seg a Sex 08h–18h");
     expect(svg).toContain("Hora marcada");
-    expect(svg).toContain("Centro, Betim/MG");
+    expect(svg).toContain("Rua A, 1 – Centro, Betim/MG – CEP 32600-050");
     expect(svg).not.toContain("Rede credenciada");
     expect(svg).not.toContain("plamevpets");
     // Sem logo: as iniciais.
@@ -48,6 +48,13 @@ describe("montarSvgRede", () => {
     const { svg } = montarSvgRede([vet("k1")], { logos: new Map([["k1", "data:image/jpeg;base64,AAAA"]]) });
     expect(svg).toContain('href="data:image/jpeg;base64,AAAA"');
     expect(svg).not.toContain(">CK<");
+  });
+});
+
+describe("enderecoCompleto", () => {
+  it("joins street, neighborhood, city/UF and CEP, skipping what is missing", () => {
+    expect(enderecoCompleto(vet("k1"))).toBe("Rua A, 1 – Centro, Betim/MG – CEP 32600-050");
+    expect(enderecoCompleto(vet("k2", { endereco: "", bairro: null, cep: null }))).toBe("Betim/MG");
   });
 });
 
