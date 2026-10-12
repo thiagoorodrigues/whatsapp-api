@@ -336,10 +336,11 @@ describe("handlers do gateway", () => {
       expect(state.getStatus(CONN)).toBe("logged_out");
     });
 
-    it("delega para onConnection quando informado", async () => {
+    it("delega para onConnection quando informado, com o ts do envelope", async () => {
       const onConnection = jest.fn();
-      await handleEnvelope(env("connection", { status: "qr", qr: "2@abc" }), deps({ onConnection }));
-      expect(onConnection).toHaveBeenCalledWith(CONN, { status: "qr", qr: "2@abc" });
+      const e = env("connection", { status: "qr", qr: "2@abc" }, CONN, 1700000000000);
+      await handleEnvelope(e, deps({ onConnection }));
+      expect(onConnection).toHaveBeenCalledWith(CONN, { status: "qr", qr: "2@abc" }, 1700000000000);
       expect(state.getStatus(CONN)).toBe("unknown");
     });
   });

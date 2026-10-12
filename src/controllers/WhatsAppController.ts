@@ -4,6 +4,8 @@ import { getIO } from "../libs/socket";
 import { removeWbot } from "../libs/wbot";
 import { requestContext } from "../libs/requestContext";
 import { StartWhatsAppSession } from "../services/WbotServices/StartWhatsAppSession";
+import { isWhatsmeow } from "../config/whatsappEngine";
+import SessionService from "../services/WhatsmeowServices/SessionService";
 
 import CreateWhatsAppService from "../services/WhatsappService/CreateWhatsAppService";
 import DeleteWhatsAppService from "../services/WhatsappService/DeleteWhatsAppService";
@@ -101,7 +103,14 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   });
 
   // Fora do contexto da requisição: a sessão vive além dela.
-  requestContext.exit(() => StartWhatsAppSession(whatsapp, companyId));
+  if (isWhatsmeow()) {
+    // O consumer passa a ler wa:events:{id} antes do connect (para não perder o QR).
+    requestContext.exit(() =>
+      SessionService.add(whatsapp).catch(err => logger.error(`whatsmeow: conexão ${whatsapp.id} não iniciou: ${err}`))
+    );
+  } else {
+    requestContext.exit(() => StartWhatsAppSession(whatsapp, companyId));
+  }
 
   const io = getIO();
   io.to(companyRoom(companyId)).emit(`company-${companyId}-whatsapp`, {
@@ -175,7 +184,12 @@ export const remove = async (
   await ShowWhatsAppService(whatsappId, companyId);
 
   await DeleteWhatsAppService(whatsappId);
-  removeWbot(+whatsappId);
+  if (isWhatsmeow()) {
+    // Desparelha no gateway, para de ler o stream e esquece a conexão.
+    await SessionService.remove(+whatsappId);
+  } else {
+    removeWbot(+whatsappId);
+  }
 
   const io = getIO();
   io.to(companyRoom(companyId)).emit(`company-${companyId}-whatsapp`, {

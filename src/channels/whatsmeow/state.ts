@@ -50,12 +50,24 @@ export const refresh = async (
   }
 };
 
+// onRecover: chamado quando o gateway volta a responder depois de uma falha
+// (a camada de sessão reconfirma quem está conectado; nenhum evento novo
+// chega se o gateway não reiniciou).
 export const checkHealth = async (
-  client: GatewayClient = gatewayClient()
+  client: GatewayClient = gatewayClient(),
+  onRecover?: () => Promise<void> | void
 ): Promise<void> => {
   try {
     await client.health();
+    const recovered = !up;
     up = true;
+    if (recovered && onRecover) {
+      try {
+        await onRecover();
+      } catch {
+        // A próxima volta (ou um evento) corrige.
+      }
+    }
   } catch {
     up = false;
     // Estado "connected" deixa de valer: na volta, só um evento (ou refresh)
@@ -68,11 +80,12 @@ export const checkHealth = async (
 
 export const startHealthPoll = (
   client: GatewayClient = gatewayClient(),
-  intervalMs: number = POLL_INTERVAL
+  intervalMs: number = POLL_INTERVAL,
+  onRecover?: () => Promise<void> | void
 ): void => {
   if (timer) return;
-  checkHealth(client);
-  timer = setInterval(() => checkHealth(client), intervalMs);
+  checkHealth(client, onRecover);
+  timer = setInterval(() => checkHealth(client, onRecover), intervalMs);
   timer.unref?.();
 };
 

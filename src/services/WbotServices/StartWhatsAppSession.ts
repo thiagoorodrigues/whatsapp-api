@@ -8,11 +8,19 @@ import * as Sentry from "@sentry/node";
 import SyncSessionContactsService from "../WhatsappContactServices/SyncSessionContactsService";
 import { readKeysOfType } from "../../models/BaileysKey";
 import { companyRoom } from "../../libs/socketRooms";
+import { isWhatsmeow } from "../../config/whatsappEngine";
+import SessionService from "../WhatsmeowServices/SessionService";
 
 export const StartWhatsAppSession = async (
   whatsapp: Whatsapp,
   companyId: number
 ): Promise<void> => {
+  // Motor whatsmeow: a sessão vive no gateway (POST /connect); nada de socket Baileys.
+  if (isWhatsmeow()) {
+    await SessionService.start(whatsapp);
+    return;
+  }
+
   await whatsapp.update({ status: "OPENING" });
 
   const io = getIO();

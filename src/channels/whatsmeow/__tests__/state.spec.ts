@@ -84,4 +84,26 @@ describe("estado das conexões whatsmeow", () => {
     jest.advanceTimersByTime(5000);
     expect(c.health).toHaveBeenCalledTimes(2);
   });
+
+  it("onRecover só roda na volta do gateway (queda -> ok)", async () => {
+    const onRecover = jest.fn();
+    const ok = client();
+    const down = client({ health: jest.fn().mockRejectedValue(new Error("x")) });
+    await checkHealth(ok, onRecover);
+    expect(onRecover).not.toHaveBeenCalled();
+    await checkHealth(down, onRecover);
+    await checkHealth(down, onRecover);
+    expect(onRecover).not.toHaveBeenCalled();
+    await checkHealth(ok, onRecover);
+    expect(onRecover).toHaveBeenCalledTimes(1);
+    await checkHealth(ok, onRecover);
+    expect(onRecover).toHaveBeenCalledTimes(1);
+  });
+
+  it("falha no onRecover não derruba o poll", async () => {
+    const down = client({ health: jest.fn().mockRejectedValue(new Error("x")) });
+    await checkHealth(down);
+    await expect(checkHealth(client(), () => Promise.reject(new Error("boom")))).resolves.toBeUndefined();
+    expect(gatewayUp()).toBe(true);
+  });
 });

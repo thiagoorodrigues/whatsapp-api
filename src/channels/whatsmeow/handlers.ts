@@ -90,8 +90,8 @@ export interface ConnectionData {
 }
 
 export interface HandlerDeps {
-  /** Evento `connection`; a camada de sessão (Task 11) pluga o SessionService. */
-  onConnection?: (connectionId: number, data: ConnectionData) => Promise<void> | void;
+  /** Evento `connection` (com o `ts` do envelope); a camada de sessão pluga o SessionService. */
+  onConnection?: (connectionId: number, data: ConnectionData, ts?: number) => Promise<void> | void;
   inbound?: ToInboundDeps;
   history?: { pauseMs?: number; idleMs?: number };
 }
@@ -330,7 +330,7 @@ const defaultOnConnection = (connectionId: number, data: ConnectionData) => {
 const handleConnection = async (env: GatewayEnvelope<ConnectionData>, { connectionId, deps }: Context) => {
   const status = env.data?.status;
   if (status === "disconnected" || status === "logged_out") importers.get(connectionId)?.cancel();
-  await (deps.onConnection || defaultOnConnection)(connectionId, env.data);
+  await (deps.onConnection || defaultOnConnection)(connectionId, env.data, Number(env.ts));
 };
 
 const HANDLERS: Record<string, (env: GatewayEnvelope, ctx: Context) => Promise<void>> = {
