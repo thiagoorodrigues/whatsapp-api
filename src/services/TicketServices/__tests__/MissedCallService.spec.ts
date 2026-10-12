@@ -53,4 +53,10 @@ describe("MissedCallService", () => {
     expect(send).toHaveBeenCalledWith({ jid: "5531999990000@s.whatsapp.net" }, expect.objectContaining({ type: "text" }));
     expect(CreateMessageService).not.toHaveBeenCalled();
   });
+
+  it("telefone com sufixo de dispositivo: busca só pelos dígitos do usuário", async () => {
+    await MissedCallService({ whatsappId: 3, companyId: 1, from: "5531999990000:12@s.whatsapp.net", callId: "c1" });
+
+    expect((Contact.findOne as jest.Mock).mock.calls[0][0].where).toEqual({ companyId: 1, number: "5531999990000" });
+  });
 });

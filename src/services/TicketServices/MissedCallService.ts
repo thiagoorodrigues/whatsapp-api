@@ -4,7 +4,7 @@ import Ticket from "../../models/Ticket";
 import CreateMessageService from "../MessageServices/CreateMessageService";
 import SendTicketMessageService from "../MessageServices/SendTicketMessageService";
 import { getChannel } from "../../channels";
-import { isLidJid, toUserLid } from "../../helpers/GetPhoneJid";
+import { isLidJid, toPhoneNumber, toUserLid } from "../../helpers/GetPhoneJid";
 
 interface Request {
   whatsappId: number;
@@ -23,11 +23,13 @@ const MissedCallService = async ({ whatsappId, companyId, from, callId }: Reques
   const sendMsgCall = await Setting.findOne({ where: { key: "call", companyId } });
   if (sendMsgCall?.value !== "disabled") return;
 
-  // Calls come from a LID or a phone JID.
+  // Calls come from a LID or a phone JID (o gateway pode mandar com sufixo de
+  // dispositivo, "5531...:12@s.whatsapp.net").
   const userLid = isLidJid(from) ? toUserLid(from) : undefined;
-  const contact = await Contact.findOne({
-    where: userLid ? { companyId, lid: userLid } : { companyId, number: from.replace(/\D/g, "") }
-  });
+  const number = userLid ? undefined : toPhoneNumber(from);
+  const contact = userLid || number
+    ? await Contact.findOne({ where: userLid ? { companyId, lid: userLid } : { companyId, number } })
+    : null;
 
   const ticket = contact
     ? await Ticket.findOne({
