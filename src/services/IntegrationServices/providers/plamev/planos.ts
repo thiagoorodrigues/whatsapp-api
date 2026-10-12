@@ -14,9 +14,39 @@ export interface Plano {
   precoBoleto: number | null;
   fidelidadeMeses: number | null;
   procedimentos: number | null;
+  // Resumo comercial do plano (a API não traz: vem do material da Plamev).
+  resumo: string | null;
+  itens: string[];
 }
 
 type Raw = Record<string, any>;
+
+// Resumo por tipo de plano (TiposCoberturasId), do material de divulgação da
+// Plamev e das descrições do site; a API não tem esse texto. Tipo sem entrada
+// fica sem resumo.
+export const RESUMOS: Record<string, { resumo: string; itens: string[] }> = {
+  "17": {
+    resumo: "Para quem busca uma assistência preventiva para o seu peludinho",
+    itens: ["Consultas", "Exames preventivos", "Vacina", "Consultas emergenciais ilimitadas"]
+  },
+  "4": {
+    resumo: "Indicado para peludinhos que precisam de mais procedimentos",
+    itens: ["Toda a cobertura do Slim", "Exames laboratoriais", "Exames de imagem", "Internação", "Cirurgias"]
+  },
+  "5": {
+    resumo: "Especial para o peludinho que precisa de um pouco mais de atenção",
+    itens: ["Toda a cobertura do Advance", "Exames sorológicos", "Testes hormonais", "Consultas com especialistas", "Vacinas especiais"]
+  },
+  "21": {
+    resumo: "Um plano pensado para você cuidar do seu gatinho",
+    itens: ["Toda a cobertura do Advance", "Exames sorológicos", "Testes hormonais", "Consultas com especialistas", "Vacina V5", "Teste FIV/FeLV"]
+  }
+};
+
+// Os tipos que o site e o checkout da Plamev oferecem (defaultPlanIds no
+// checkout do plamevpets): Slim Essencial, Advance, Platinum e Platinum Cat
+// Comfort. Os demais só entram por link direto.
+export const TIPOS_DO_SITE = ["17", "4", "5", "21"];
 
 const ESPECIES: Record<string, string> = { TODOS: "Cães e gatos", CANINO: "Cães", FELINO: "Especial gatos" };
 
@@ -55,6 +85,7 @@ const fromCobertura = (c: Raw): Plano => {
   const precoCartao = money(cartao.ValorComDesconto) ?? money(cartao.ValorTotalMensalidade);
   const cheio = money(cartao.ValorMensalidade);
   const campanha = String(cartao.CampanhasCoberturasExibeSite || "").toUpperCase() === "SIM";
+  const resumo = RESUMOS[String(c.TiposCoberturasId ?? "")];
   return {
     id: String(c.Id),
     tipoId: String(c.TiposCoberturasId ?? ""),
@@ -65,11 +96,14 @@ const fromCobertura = (c: Raw): Plano => {
     precoCartaoSemDesconto: campanha && cheio && precoCartao && cheio > precoCartao ? cheio : null,
     precoBoleto: money(boleto.ValorTotalMensalidade),
     fidelidadeMeses: int(valores.PlanosFidelidade),
-    procedimentos: int(valores.CoberturasQuantidadeProcedimentos)
+    procedimentos: int(valores.CoberturasQuantidadeProcedimentos),
+    resumo: resumo?.resumo || null,
+    itens: resumo?.itens || []
   };
 };
 
-// Planos do estado do cliente, na ordem do site.
+// Planos do estado do cliente como o checkout do site: origem SITE, exibidos no
+// site, só os tipos do site e um por tipo (o primeiro na ordem).
 export const listPlanos = async (get: PlamevGetter, estadoId: string): Promise<Plano[]> => {
   const data: Raw = ((await get("Coberturas/BuscarCoberturasComPreco/", {
     EstadosId: estadoId,
@@ -77,8 +111,16 @@ export const listPlanos = async (get: PlamevGetter, estadoId: string): Promise<P
     order: "Ordem"
   })) || {}) as Raw;
   const lista: Raw[] = Array.isArray(data.Coberturas) ? data.Coberturas : Object.values(data.Coberturas || {});
+  const vistos = new Set<string>();
   return lista
     .filter(c => String(c.OrigemCheckout).toUpperCase() === "SITE" && String(c.ExibeSite) === "1")
+    .filter(c => TIPOS_DO_SITE.includes(String(c.TiposCoberturasId)))
     .sort((a, b) => (Number(a.Ordem) || 0) - (Number(b.Ordem) || 0))
+    .filter(c => {
+      const tipo = String(c.TiposCoberturasId);
+      if (vistos.has(tipo)) return false;
+      vistos.add(tipo);
+      return true;
+    })
     .map(fromCobertura);
 };

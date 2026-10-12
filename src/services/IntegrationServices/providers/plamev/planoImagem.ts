@@ -30,7 +30,15 @@ export const montarSvgPlano = (p: Plano): { svg: string; width: number; height: 
   y += 44 + (nome.length - 1) * 54 + 16;
 
   out.push(`<text x="${pad}" y="${y + 26}" font-size="26" fill="${C.text2}">${esc(p.especie)}</text>`);
-  y += 26 + 32;
+  y += 26 + 14;
+  if (p.resumo) {
+    wrap(p.resumo, width - pad * 2, 26, false, 2).forEach(line => {
+      y += 34;
+      out.push(`<text x="${pad}" y="${y}" font-size="26" font-style="italic" fill="${C.muted}">${esc(line)}</text>`);
+    });
+    y += 4;
+  }
+  y += 18;
 
   if (p.precoCartao) {
     if (p.precoCartaoSemDesconto) {
@@ -50,6 +58,26 @@ export const montarSvgPlano = (p: Plano): { svg: string; width: number; height: 
   if (p.precoBoleto) {
     out.push(`<text x="${pad}" y="${y + 30}" font-size="28" fill="${C.text2}">${esc(`${formatReais(p.precoBoleto)}/mês no boleto`)}</text>`);
     y += 30 + 22;
+  }
+
+  // O que inclui: duas colunas com check.
+  if (p.itens.length) {
+    y += 14;
+    out.push(`<text x="${pad}" y="${y + 26}" font-size="24" font-weight="bold" fill="${C.text}">O que inclui</text>`);
+    y += 26 + 8;
+    const colW = (width - pad * 2) / 2;
+    const rows = Math.ceil(p.itens.length / 2);
+    p.itens.forEach((item, i) => {
+      const col = i < rows ? 0 : 1;
+      const row = i < rows ? i : i - rows;
+      const x = pad + col * colW;
+      const iy = y + row * 40;
+      out.push(`<path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="${C.brand}" transform="translate(${x} ${iy + 8}) scale(1.1)"/>`);
+      wrap(item, colW - 44, 25, false, 1).forEach(line =>
+        out.push(`<text x="${x + 36}" y="${iy + 31}" font-size="25" fill="${C.text2}">${esc(line)}</text>`)
+      );
+    });
+    y += rows * 40 + 6;
   }
 
   const chips = [
@@ -89,7 +117,9 @@ export const planoDaTela = (raw: any): Plano => ({
   precoCartaoSemDesconto: num(raw?.precoCartaoSemDesconto),
   precoBoleto: num(raw?.precoBoleto),
   fidelidadeMeses: num(raw?.fidelidadeMeses),
-  procedimentos: num(raw?.procedimentos)
+  procedimentos: num(raw?.procedimentos),
+  resumo: str(raw?.resumo, 140) || null,
+  itens: (Array.isArray(raw?.itens) ? raw.itens : []).map((i: unknown) => str(i, 50)).filter(Boolean).slice(0, 10)
 });
 
 export const gerarImagemPlano = (plano: Plano | null): Buffer => {

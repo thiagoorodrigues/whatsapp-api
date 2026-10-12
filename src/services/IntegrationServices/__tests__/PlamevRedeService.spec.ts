@@ -75,8 +75,10 @@ describe("PlamevRedeService", () => {
 
   it("requires the client state for plans and reads them with the company token", async () => {
     await expect(planos(7, "")).rejects.toMatchObject({ message: "ERR_INTEGRATION_FILTER_REQUIRED" });
-    plamevGet.mockResolvedValue({ Coberturas: [{ Id: "c1", Nome: "SLIM", TiposCoberturasNome: "Slim", OrigemCheckout: "SITE", ExibeSite: "1" }] });
-    expect((await planos(7, "mg")).map(p => p.nome)).toEqual(["Slim"]);
+    plamevGet.mockResolvedValue({
+      Coberturas: [{ Id: "c1", Nome: "SLIM ESSENCIAL (PADRÃO)", TiposCoberturasId: "17", TiposCoberturasNome: "Slim Essencial", OrigemCheckout: "SITE", ExibeSite: "1" }]
+    });
+    expect((await planos(7, "mg")).map(p => p.nome)).toEqual(["Slim Essencial"]);
     expect(plamevGet.mock.calls[0][1]).toBe("Coberturas/BuscarCoberturasComPreco/");
     expect(plamevGet.mock.calls[0][2]).toMatchObject({ EstadosId: "mg" });
   });

@@ -17,7 +17,7 @@ const cobertura = (over: Record<string, any> = {}) => ({
 });
 
 describe("listPlanos", () => {
-  it("lists the site plans of the state, in the site order, with card and boleto prices", async () => {
+  it("lists the plans the site checkout offers (site types, one per type), with card and boleto prices", async () => {
     const get = jest.fn(async () => ({
       Coberturas: [
         cobertura(),
@@ -25,7 +25,9 @@ describe("listPlanos", () => {
           Cartao: { Composicao: { ValorComDesconto: "59.989999999999995", ValorMensalidade: "69.99", CampanhasCoberturasExibeSite: null } },
           Boleto: { Composicao: { ValorTotalMensalidade: "69.99" } } }),
         cobertura({ Id: "c-port", Nome: "ADVANCE PLUS PORTABILIDADE", TiposCoberturasNome: "Advance Plus", TiposCoberturasId: "14", Ordem: "14", MaisVendido: "0" }),
-        cobertura({ Id: "c-cat", Nome: "PLATINUM CAT COMFORT", TiposCoberturasNome: "Platinum Cat Comfort", Ordem: "4", Especie: "FELINO", Valores: [], MaisVendido: "0" }),
+        cobertura({ Id: "c-slim1", Nome: "SLIM (PADRÃO)", TiposCoberturasNome: "Slim", TiposCoberturasId: "1", Ordem: "0", MaisVendido: "0" }),
+        cobertura({ Id: "c-adv2", Nome: "ADVANCE 2", Ordem: "11", MaisVendido: "0" }),
+        cobertura({ Id: "c-cat", Nome: "PLATINUM CAT COMFORT", TiposCoberturasNome: "Platinum Cat Comfort", TiposCoberturasId: "21", Ordem: "4", Especie: "FELINO", Valores: [], MaisVendido: "0" }),
         cobertura({ Id: "c-lp", OrigemCheckout: "LP" }),
         cobertura({ Id: "c-caixa", OrigemCheckout: "CAIXA" }),
         cobertura({ Id: "c-oculto", ExibeSite: "0" })
@@ -35,7 +37,7 @@ describe("listPlanos", () => {
     }));
     const planos = await listPlanos(get, "mg");
     expect(get).toHaveBeenCalledWith("Coberturas/BuscarCoberturasComPreco/", { EstadosId: "mg", Valores: "true", order: "Ordem" });
-    expect(planos.map(p => p.id)).toEqual(["c-slim", "c-adv", "c-cat", "c-port"]);
+    expect(planos.map(p => p.id)).toEqual(["c-slim", "c-adv", "c-cat"]);
     expect(planos[1]).toEqual({
       id: "c-adv",
       tipoId: "4",
@@ -46,11 +48,13 @@ describe("listPlanos", () => {
       precoCartaoSemDesconto: 149.99,
       precoBoleto: 149.99,
       fidelidadeMeses: 12,
-      procedimentos: 41
+      procedimentos: 41,
+      resumo: "Indicado para peludinhos que precisam de mais procedimentos",
+      itens: ["Toda a cobertura do Slim", "Exames laboratoriais", "Exames de imagem", "Internação", "Cirurgias"]
     });
-    expect(planos[0]).toMatchObject({ nome: "Slim Essencial", precoCartao: 59.99, maisVendido: false });
+    expect(planos[0]).toMatchObject({ nome: "Slim Essencial", precoCartao: 59.99, maisVendido: false, itens: ["Consultas", "Exames preventivos", "Vacina", "Consultas emergenciais ilimitadas"] });
     expect(planos[2]).toMatchObject({ nome: "Platinum Cat Comfort", especie: "Especial gatos", fidelidadeMeses: null, procedimentos: null });
-    expect(planos[3].nome).toBe("Advance Plus Portabilidade");
+
   });
 
   it("shows the full price only when the card discount is a site campaign", async () => {
