@@ -10,12 +10,20 @@ import cron from "node-cron";
 import { resumeInterruptedIndexing } from "./services/AiAgentServices/knowledge/KnowledgeService";
 import { flushLogs } from "./libs/systemLog";
 import PurgeSystemLogsService from "./services/SystemLogServices/PurgeSystemLogsService";
+import { validateEngineConfig } from "./config/whatsappEngine";
 import { purgeServerMetrics, recordServerMetrics } from "./services/ServerMonitorServices/metricsHistory";
 
 // Without these the code would sign tokens with a public default secret.
 const missing = ["JWT_SECRET", "JWT_REFRESH_SECRET"].filter(k => !process.env[k]);
 if (missing.length) {
   console.error(`Missing required environment variables: ${missing.join(", ")}`);
+  process.exit(1);
+}
+
+// Motor inválido ou gateway sem URL/token: melhor não subir do que falhar no primeiro envio.
+const engineError = validateEngineConfig();
+if (engineError) {
+  console.error(engineError);
   process.exit(1);
 }
 
