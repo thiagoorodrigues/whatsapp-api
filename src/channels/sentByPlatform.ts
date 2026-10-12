@@ -1,6 +1,6 @@
 import crypto from "crypto";
 
-// WhatsApp Web echoes every message the account sends (messages.upsert,
+// WhatsApp Web (and the whatsmeow gateway) echoes every message the account sends (messages.upsert,
 // fromMe). Messages sent through the channel are saved by whoever sent them,
 // so their echo must not go through the inbound pipeline again; messages
 // typed on the phone still do. Kept per connection: the same number paired on

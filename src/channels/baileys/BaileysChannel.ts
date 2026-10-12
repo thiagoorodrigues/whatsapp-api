@@ -2,7 +2,7 @@ import fs from "fs";
 import type { AnyMessageContent, WAMessage, WASocket } from "@whiskeysockets/baileys";
 import { getWbot } from "../../libs/wbot";
 import { getContactJid, isLidJid, toPhoneNumber, toUserLid } from "../../helpers/GetPhoneJid";
-import { markSentByPlatform, newMessageId } from "./sentByPlatform";
+import { markSentByPlatform, newMessageId } from "../sentByPlatform";
 import { logger } from "../../utils/logger";
 import { cachedProfilePicture, getGroupMetadata } from "../../libs/whatsappCache";
 import {

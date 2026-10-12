@@ -45,11 +45,13 @@ export const messageRef = (message: {
   remoteJid?: string | null;
   participant?: string | null;
   fromMe?: boolean;
+  body?: string | null;
   dataJson?: string | null;
 }): MessageRef => ({
   externalId: message.messagesWhatsappsId,
   chatJid: message.remoteJid,
   participant: message.participant,
   fromMe: message.fromMe,
+  text: message.body,
   raw: message.dataJson
 });

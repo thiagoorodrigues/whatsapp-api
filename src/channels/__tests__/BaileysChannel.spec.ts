@@ -11,7 +11,7 @@ import BaileysChannel, { jidOf, toBaileysContent } from "../baileys/BaileysChann
 // eslint-disable-next-line import/first
 import { contentFromFile, contentFromUpload } from "../media";
 // eslint-disable-next-line import/first
-import { newMessageId, wasSentByPlatform } from "../baileys/sentByPlatform";
+import { newMessageId, wasSentByPlatform } from "../sentByPlatform";
 
 const sent = { key: { id: "WA_SENT", fromMe: true, remoteJid: "5511999999999@s.whatsapp.net" } };
 

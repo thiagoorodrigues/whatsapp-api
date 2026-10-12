@@ -9,7 +9,7 @@ import {
   WAMessageUpdate,
   WASocket
 } from "@whiskeysockets/baileys";
-import { wasSentByPlatform } from "../../channels/baileys/sentByPlatform";
+import { wasSentByPlatform } from "../../channels/sentByPlatform";
 import { filterMessages } from "../../channels/baileys/parse";
 import toInbound from "../../channels/baileys/toInbound";
 import { queueFor } from "../../helpers/serialQueue";
