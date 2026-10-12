@@ -1,4 +1,4 @@
-import { buscarCredenciados, listCidades, listEstados, MAX_CREDENCIADOS } from "../plamev/rede";
+import { buscarCredenciados, horariosLegiveis, listBairros, listCidades, listEstados, MAX_CREDENCIADOS } from "../plamev/rede";
 
 const getter = (data: unknown) => jest.fn(async () => data);
 
@@ -13,30 +13,52 @@ describe("Plamev rede credenciada", () => {
     expect(await listEstados(getter(null))).toEqual([]);
   });
 
-  it("lists the cities of a state", async () => {
-    const get = getter({ "1": { Id: "c1", Nome: "Juiz de Fora", EstadosId: "b" } });
-    expect(await listCidades(get, "b")).toEqual([{ id: "c1", nome: "Juiz de Fora" }]);
-    expect(get).toHaveBeenCalledWith("Cidades/consultar", { EstadosId: "b" });
+  it("lists only the cities of a state that have credenciados", async () => {
+    const get = getter([{ Id: "c2", Nome: "Uberlândia" }, { Id: "c1", Nome: "Juiz de Fora" }]);
+    expect(await listCidades(get, "b")).toEqual([
+      { id: "c1", nome: "Juiz de Fora" },
+      { id: "c2", nome: "Uberlândia" }
+    ]);
+    expect(get).toHaveBeenCalledWith("Credenciados/BuscarCredenciadosCidades/", { EstadosId: "b" });
+  });
+
+  it("lists the neighborhoods of a city: filters by the raw value, shows a capitalized name", async () => {
+    const get = getter([
+      { Id: "santa efigênia", Nome: "santa efigênia" },
+      { Id: "barro preto", Nome: "barro preto" },
+      { Id: "vila da serra", Nome: "vila da serra" },
+      { Id: "", Nome: "" }
+    ]);
+    expect(await listBairros(get, "c1")).toEqual([
+      { id: "barro preto", nome: "Barro Preto" },
+      { id: "santa efigênia", nome: "Santa Efigênia" },
+      { id: "vila da serra", nome: "Vila da Serra" }
+    ]);
+    expect(get).toHaveBeenCalledWith("Credenciados/BuscarCredenciadosBairros/", { CidadesId: "c1" });
   });
 
   it("maps a credenciado, tolerating an empty address and no phone", async () => {
     const get = getter([
       {
-        Credenciados: { Id: "k1", NomeCredenciado: "Vet JF", Plantao24h: "1" },
-        Individuos: { NomeFantasia: "Clínica Vet JF", Nome: "Vet JF Ltda" },
-        IndividuosEnderecos: { Logradouro: "Rua Halfeld", Numero: "100", Bairro: "Centro", Cep: "36010000", CidadesNome: "Juiz de Fora", EstadosNome: "MG" },
+        Credenciados: { Id: "k1", NomeCredenciado: "Vet JF", Plantao24h: "1", HoraMarcada: "1" },
+        Individuos: { NomeFantasia: "Clínica Vet JF", Nome: "Vet JF Ltda", Imagem: "abc/123+x" },
+        IndividuosEnderecos: { Logradouro: "Rua Halfeld", Numero: "100", Bairro: "Centro", Cep: "36010000", CidadesNome: "Juiz de Fora", EstadosNome: "Minas Gerais", EstadosUF: "MG" },
+        CredenciadosHorarioAtendimento: {
+          "9": { dias: "1,2,3,4,5", HorarioInicio: "08:00:00", HorarioFim: "18:00:00" },
+          "75": { dias: "6", HorarioInicio: "08:00:00", HorarioFim: "13:00:00" }
+        },
         IndividuosContatos: { Ddd: "32", Telefone: "32110000" },
         CredenciadosCoberturas: [{ CoberturasNome: "Consultas" }, { CoberturasNome: "Exames" }],
         MediaAvaliacoes: "4.8"
       },
       {
         Credenciados: { Id: "k2", NomeCredenciado: "Pet Sem Endereço", Plantao24h: "0" },
-        Individuos: {},
+        Individuos: { Imagem: "onE5HCfRtC1BZO09" },
         IndividuosEnderecos: [],
         IndividuosContatos: {}
       }
     ]);
-    const list = await buscarCredenciados(get, { cep: "36015-350", cidadeId: "c1" });
+    const list = await buscarCredenciados(get, { cep: "36015-350", cidadeId: "c1" }, "https://service.plamev-hm.com");
     expect(get).toHaveBeenCalledWith("Credenciados/BuscarCredenciadosFiltros/", {
       Cep: "36015350",
       EstadosId: undefined,
@@ -51,12 +73,28 @@ describe("Plamev rede credenciada", () => {
       cidade: "Juiz de Fora",
       uf: "MG",
       cep: "36010000",
-      telefone: "(32) 32110000",
+      telefone: "(32) 3211-0000",
       plantao24h: true,
+      horaMarcada: true,
+      horarios: ["Seg a Sex, 08:00 às 18:00", "Sáb, 08:00 às 13:00"],
       coberturas: ["Consultas", "Exames"],
-      avaliacao: "4.8"
+      avaliacao: "4.8",
+      logo: "https://service.plamev-hm.com/bancoImagens/abc/123+x"
     });
-    expect(list[1]).toMatchObject({ id: "k2", nome: "Pet Sem Endereço", endereco: "", telefone: null, plantao24h: false, coberturas: [] });
+    expect(list[1]).toMatchObject({ id: "k2", nome: "Pet Sem Endereço", endereco: "", telefone: null, plantao24h: false, horaMarcada: false, horarios: [], coberturas: [], logo: null });
+  });
+
+  it("groups the opening hours like the Plamev site", () => {
+    expect(
+      horariosLegiveis({
+        a: { dias: "1,3", HorarioInicio: "09:00:00", HorarioFim: "17:00:00" },
+        b: { dias: "6,7", HorarioInicio: "10:00:00", HorarioFim: "14:00:00" },
+        c: { dias: "2", HorarioInicio: "09:00:00", HorarioFim: "12:00:00" }
+      })
+    ).toEqual(["Seg, 09:00 às 17:00", "Ter, 09:00 às 12:00", "Qua, 09:00 às 17:00", "Sáb e Dom, 10:00 às 14:00"]);
+    // 00:00 às 00:00 é dia sem atendimento cadastrado: não aparece.
+    expect(horariosLegiveis([{ dias: "7", HorarioInicio: "00:00:00", HorarioFim: "00:00:00" }])).toEqual([]);
+    expect(horariosLegiveis(null)).toEqual([]);
   });
 
   it("requires a city or a CEP", async () => {

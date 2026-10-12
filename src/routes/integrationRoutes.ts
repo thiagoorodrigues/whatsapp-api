@@ -11,6 +11,7 @@ integrationRoutes.get("/integrations", isAuth, IntegrationController.index);
 // Plamev tools: any user of the company; plan and connection are checked in the service.
 integrationRoutes.get("/integrations/plamev/estados", isAuth, IntegrationController.plamevEstados);
 integrationRoutes.get("/integrations/plamev/cidades", isAuth, IntegrationController.plamevCidades);
+integrationRoutes.get("/integrations/plamev/bairros", isAuth, IntegrationController.plamevBairros);
 integrationRoutes.get("/integrations/plamev/credenciados", isAuth, IntegrationController.plamevCredenciados);
 integrationRoutes.put("/integrations/:provider", isAuth, isAdmin, IntegrationController.update);
 integrationRoutes.post("/integrations/:provider/test", isAuth, isAdmin, IntegrationController.test);

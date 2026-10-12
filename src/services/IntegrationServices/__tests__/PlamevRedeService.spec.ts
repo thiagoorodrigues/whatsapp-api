@@ -8,7 +8,7 @@ jest.mock("../CompanyIntegrationService", () => ({
 }));
 
 // eslint-disable-next-line import/first
-import { credenciados, cidades, estados } from "../PlamevRedeService";
+import { bairros, credenciados, cidades, estados } from "../PlamevRedeService";
 
 beforeEach(() => {
   plamevGet.mockReset();
@@ -24,6 +24,13 @@ describe("PlamevRedeService", () => {
 
   it("requires the state for cities", async () => {
     await expect(cidades(7, "")).rejects.toMatchObject({ message: "ERR_INTEGRATION_FILTER_REQUIRED" });
+  });
+
+  it("requires the city for neighborhoods and reads them with the company token", async () => {
+    await expect(bairros(7, "")).rejects.toMatchObject({ message: "ERR_INTEGRATION_FILTER_REQUIRED" });
+    plamevGet.mockResolvedValue([{ Id: "centro", Nome: "centro" }]);
+    expect(await bairros(7, "c1")).toEqual([{ id: "centro", nome: "Centro" }]);
+    expect(plamevGet.mock.calls[0][2]).toEqual({ CidadesId: "c1" });
   });
 
   it("passes the filters to the credenciados search", async () => {
