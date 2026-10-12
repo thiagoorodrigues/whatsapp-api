@@ -30,6 +30,9 @@ export const plamevCidades = async (req: Request, res: Response): Promise<Respon
 export const plamevBairros = async (req: Request, res: Response): Promise<Response> =>
   res.json(await PlamevRede.bairros(req.user.companyId, str(req.query.cidadeId) || ""));
 
+export const plamevCep = async (req: Request, res: Response): Promise<Response> =>
+  res.json(await PlamevRede.cep(req.user.companyId, str(req.query.cep) || ""));
+
 export const plamevCredenciados = async (req: Request, res: Response): Promise<Response> =>
   res.json(
     await PlamevRede.credenciados(req.user.companyId, {

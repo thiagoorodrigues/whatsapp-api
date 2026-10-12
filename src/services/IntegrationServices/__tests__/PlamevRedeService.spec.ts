@@ -1,4 +1,6 @@
 const plamevGet = jest.fn();
+const consultarCep = jest.fn();
+jest.mock("../../../helpers/consultaCep", () => ({ consultarCep: (...a: any[]) => consultarCep(...a) }));
 jest.mock("../providers/plamev/client", () => ({ plamevGet: (...a: any[]) => plamevGet(...a) }));
 jest.mock("../CompanyIntegrationService", () => ({
   withSavedToken: async (companyId: number, key: string, fn: (t: string) => Promise<unknown>) => {
@@ -8,7 +10,7 @@ jest.mock("../CompanyIntegrationService", () => ({
 }));
 
 // eslint-disable-next-line import/first
-import { bairros, credenciados, cidades, estados } from "../PlamevRedeService";
+import { bairros, cep, credenciados, cidades, estados } from "../PlamevRedeService";
 
 beforeEach(() => {
   plamevGet.mockReset();
@@ -31,6 +33,26 @@ describe("PlamevRedeService", () => {
     plamevGet.mockResolvedValue([{ Id: "centro", Nome: "centro" }]);
     expect(await bairros(7, "c1")).toEqual([{ id: "centro", nome: "Centro" }]);
     expect(plamevGet.mock.calls[0][2]).toEqual({ CidadesId: "c1" });
+  });
+
+  it("turns the client CEP into the city with credenciados", async () => {
+    consultarCep.mockResolvedValue({ cep: "32600000", cidade: "Betim", uf: "MG", bairro: "Angola" });
+    plamevGet.mockImplementation(async (_o: unknown, path: string) =>
+      path === "Estados/consultar" ? [{ Id: "mg", Nome: "Minas Gerais", UF: "MG" }] : [{ Id: "bt", Nome: "Betim" }]
+    );
+    expect(await cep(7, "32600-000")).toEqual({
+      cep: "32600000",
+      cidade: "Betim",
+      uf: "MG",
+      bairro: "Angola",
+      estado: { id: "mg", nome: "Minas Gerais", uf: "MG" },
+      cidadeRede: { id: "bt", nome: "Betim" }
+    });
+  });
+
+  it("says when the CEP does not exist", async () => {
+    consultarCep.mockResolvedValue(null);
+    await expect(cep(7, "99999999")).rejects.toMatchObject({ message: "ERR_CEP_NOT_FOUND", statusCode: 404 });
   });
 
   it("passes the filters to the credenciados search", async () => {

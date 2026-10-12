@@ -1,4 +1,5 @@
 import AppError from "../../errors/AppError";
+import { consultarCep } from "../../helpers/consultaCep";
 import { withSavedToken } from "./CompanyIntegrationService";
 import { plamevGet } from "./providers/plamev/client";
 import { plamevApiUrl } from "./providers/plamev";
@@ -11,6 +12,7 @@ import {
   listBairros,
   listCidades,
   listEstados,
+  localizarCidade,
   PlamevGetter,
   RedeFiltros
 } from "./providers/plamev/rede";
@@ -31,6 +33,14 @@ export const cidades = async (companyId: number, estadoId: string): Promise<Cida
 export const bairros = async (companyId: number, cidadeId: string): Promise<Bairro[]> => {
   if (!cidadeId) throw new AppError("ERR_INTEGRATION_FILTER_REQUIRED", 400);
   return run(companyId, get => listBairros(get, cidadeId));
+};
+
+// CEP do cliente → cidade dele e, se houver rede lá, a cidade da Plamev (cidadeRede).
+export const cep = async (companyId: number, valor: string) => {
+  const endereco = await consultarCep(valor);
+  if (!endereco) throw new AppError("ERR_CEP_NOT_FOUND", 404);
+  const { estado, cidade } = await run(companyId, get => localizarCidade(get, endereco));
+  return { ...endereco, estado, cidadeRede: cidade };
 };
 
 export const credenciados = (companyId: number, filtros: RedeFiltros): Promise<Credenciado[]> =>

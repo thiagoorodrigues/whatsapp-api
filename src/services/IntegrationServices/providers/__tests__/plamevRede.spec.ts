@@ -1,4 +1,4 @@
-import { buscarCredenciados, horariosLegiveis, listBairros, listCidades, listEstados, MAX_CREDENCIADOS } from "../plamev/rede";
+import { buscarCredenciados, horariosLegiveis, listBairros, listCidades, listEstados, localizarCidade, MAX_CREDENCIADOS } from "../plamev/rede";
 
 const getter = (data: unknown) => jest.fn(async () => data);
 
@@ -76,7 +76,7 @@ describe("Plamev rede credenciada", () => {
       telefone: "(32) 3211-0000",
       plantao24h: true,
       horaMarcada: true,
-      horarios: ["Seg a Sex, 08:00 às 18:00", "Sáb, 08:00 às 13:00"],
+      horarios: ["Seg a Sex 08h–18h", "Sáb 08h–13h"],
       coberturas: ["Consultas", "Exames"],
       avaliacao: "4.8",
       logo: "https://service.plamev-hm.com/bancoImagens/abc/123+x"
@@ -84,17 +84,37 @@ describe("Plamev rede credenciada", () => {
     expect(list[1]).toMatchObject({ id: "k2", nome: "Pet Sem Endereço", endereco: "", telefone: null, plantao24h: false, horaMarcada: false, horarios: [], coberturas: [], logo: null });
   });
 
-  it("groups the opening hours like the Plamev site", () => {
+  it("groups the days that share the same hours, compactly", () => {
     expect(
       horariosLegiveis({
-        a: { dias: "1,3", HorarioInicio: "09:00:00", HorarioFim: "17:00:00" },
-        b: { dias: "6,7", HorarioInicio: "10:00:00", HorarioFim: "14:00:00" },
-        c: { dias: "2", HorarioInicio: "09:00:00", HorarioFim: "12:00:00" }
+        a: { dias: "1,3,5", HorarioInicio: "08:00:00", HorarioFim: "20:00:00" },
+        b: { dias: "2,4", HorarioInicio: "15:00:00", HorarioFim: "20:00:00" },
+        c: { dias: "6", HorarioInicio: "08:00:00", HorarioFim: "12:00:00" }
       })
-    ).toEqual(["Seg, 09:00 às 17:00", "Ter, 09:00 às 12:00", "Qua, 09:00 às 17:00", "Sáb e Dom, 10:00 às 14:00"]);
+    ).toEqual(["Seg, Qua, Sex 08h–20h", "Ter, Qui 15h–20h", "Sáb 08h–12h"]);
+    expect(
+      horariosLegiveis([
+        { dias: "1,2,3,5", HorarioInicio: "09:30:00", HorarioFim: "18:00:00" },
+        { dias: "6,7", HorarioInicio: "10:00:00", HorarioFim: "14:00:00" }
+      ])
+    ).toEqual(["Seg a Qua, Sex 09h30–18h", "Sáb, Dom 10h–14h"]);
     // 00:00 às 00:00 é dia sem atendimento cadastrado: não aparece.
     expect(horariosLegiveis([{ dias: "7", HorarioInicio: "00:00:00", HorarioFim: "00:00:00" }])).toEqual([]);
     expect(horariosLegiveis(null)).toEqual([]);
+  });
+
+  it("finds the state and the city with credenciados of an address, ignoring accents and case", async () => {
+    const get = jest.fn(async (path: string) =>
+      path === "Estados/consultar"
+        ? [{ Id: "mg", Nome: "Minas Gerais", UF: "MG" }]
+        : [{ Id: "bh", Nome: "Belo Horizonte" }, { Id: "jf", Nome: "Juiz de Fora" }]
+    );
+    expect(await localizarCidade(get, { uf: "mg", cidade: "BELO HORIZONTE" })).toEqual({
+      estado: { id: "mg", nome: "Minas Gerais", uf: "MG" },
+      cidade: { id: "bh", nome: "Belo Horizonte" }
+    });
+    expect(await localizarCidade(get, { uf: "MG", cidade: "Uberlândia" })).toMatchObject({ cidade: null });
+    expect(await localizarCidade(get, { uf: "SP", cidade: "Santos" })).toEqual({ estado: null, cidade: null });
   });
 
   it("requires a city or a CEP", async () => {
