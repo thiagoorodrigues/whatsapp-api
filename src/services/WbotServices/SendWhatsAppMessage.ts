@@ -5,7 +5,7 @@ import Ticket from "../../models/Ticket";
 import { getTicketChannel, messageRef, ticketAddress } from "../../channels";
 import SaveSentMessageService from "../MessageServices/SaveSentMessageService";
 
-import formatBody from "../../helpers/Mustache";
+import { formatForTicket } from "../../helpers/Mustache";
 import { logger } from "../../utils/logger";
 
 interface Request {
@@ -28,7 +28,8 @@ const SendWhatsAppMessage = async ({ body, ticket, quotedMsg, ratingMsg, closeTi
   }
 
   try {
-    const text = formatBody(body, ticket.contact);
+    // Todas as variáveis, também as do atendimento (respostas rápidas usam).
+    const text = await formatForTicket(body, ticket);
     // Only members of the group can be mentioned.
     let mentioned: string[] = [];
     if (ticket.isGroup && mentions?.length) {

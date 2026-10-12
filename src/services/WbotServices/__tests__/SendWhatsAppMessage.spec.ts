@@ -9,7 +9,7 @@ jest.mock("../../../channels", () => ({
 }));
 jest.mock("../../MessageServices/SaveSentMessageService", () => ({ __esModule: true, default: (a: any) => saveSent(a) }));
 jest.mock("../../../models/Message", () => ({ __esModule: true, default: { findOne: jest.fn() } }));
-jest.mock("../../../helpers/Mustache", () => ({ __esModule: true, default: (body: string) => body }));
+jest.mock("../../../helpers/Mustache", () => ({ __esModule: true, formatForTicket: async (body: string) => body }));
 
 // eslint-disable-next-line import/first
 import SendWhatsAppMessage from "../SendWhatsAppMessage";
