@@ -4,16 +4,18 @@ import { getIO } from "../libs/socket";
 
 import ListService from "../services/QuickMessageService/ListService";
 import CreateService from "../services/QuickMessageService/CreateService";
-import ShowService from "../services/QuickMessageService/ShowService";
 import UpdateService from "../services/QuickMessageService/UpdateService";
 import DeleteService from "../services/QuickMessageService/DeleteService";
 import FindService from "../services/QuickMessageService/FindService";
+import {
+  findCompanyQuickMessage,
+  removeQuickMessageMedia,
+  saveQuickMessageMedia
+} from "../services/QuickMessageService/MediaService";
 
 import QuickMessage from "../models/QuickMessage";
 
 import { head } from "lodash";
-import fs from "fs";
-import path from "path";
 
 import AppError from "../errors/AppError";
 import { companyRoom } from "../libs/socketRooms";
@@ -55,7 +57,8 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
 
   const schema = Yup.object().shape({
     shortcode: Yup.string().required(),
-    message: Yup.string().required()
+    // Pode ficar vazio quando a resposta é só um anexo (o painel confere).
+    message: Yup.string()
   });
 
   try {
@@ -64,8 +67,10 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     throw new AppError(err.message);
   }
 
+  // Só o texto: o anexo entra pela rota media-upload.
   const record = await CreateService({
-    ...data,
+    shortcode: data.shortcode,
+    message: data.message || "",
     companyId,
     userId: req.user.id
   });
@@ -82,7 +87,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
 export const show = async (req: Request, res: Response): Promise<Response> => {
   const { id } = req.params;
 
-  const record = await ShowService(id);
+  const record = await findCompanyQuickMessage(id, req.user.companyId);
 
   return res.status(200).json(record);
 };
@@ -96,7 +101,8 @@ export const update = async (
 
   const schema = Yup.object().shape({
     shortcode: Yup.string().required(),
-    message: Yup.string().required()
+    // Pode ficar vazio quando a resposta é só um anexo (o painel confere).
+    message: Yup.string()
   });
 
   try {
@@ -107,8 +113,10 @@ export const update = async (
 
   const { id } = req.params;
 
+  await findCompanyQuickMessage(id, companyId);
   const record = await UpdateService({
-    ...data,
+    shortcode: data.shortcode,
+    message: data.message || "",
     userId: req.user.id,
     id,
   });
@@ -129,6 +137,8 @@ export const remove = async (
   const { id } = req.params;
   const { companyId } = req.user;
 
+  const record = await findCompanyQuickMessage(id, companyId);
+  await removeQuickMessageMedia(record);
   await DeleteService(id);
 
   const io = getIO();
@@ -145,54 +155,27 @@ export const findList = async (
   res: Response
 ): Promise<Response> => {
   const params = req.query as FindParams;
-  const records: QuickMessage[] = await FindService(params);
+  const records: QuickMessage[] = await FindService({ userId: params.userId, companyId: String(req.user.companyId) });
 
   return res.status(200).json(records);
 };
 
-export const mediaUpload = async (
-  req: Request,
-  res: Response
-): Promise<Response> => {
-  const { id } = req.params;
-  const files = req.files as Express.Multer.File[];
-  const file = head(files);
+const emitUpdate = (companyId: number, record: QuickMessage) =>
+  getIO().to(companyRoom(companyId)).emit(`company-${companyId}-quickmessage`, { action: "update", record });
 
-  try {
-    const quickmessage = await QuickMessage.findByPk(id);
-    
-    quickmessage.update ({
-      mediaPath: file.filename,
-      mediaName: file.originalname
-    });
-
-    return res.send({ mensagem: "Arquivo Anexado" });
-    } catch (err: any) {
-      throw new AppError(err.message);
-  }
+export const mediaUpload = async (req: Request, res: Response): Promise<Response> => {
+  const { companyId } = req.user;
+  const record = await findCompanyQuickMessage(req.params.id, companyId);
+  const file = head(req.files as Express.Multer.File[]);
+  await saveQuickMessageMedia(record, file);
+  emitUpdate(companyId, record);
+  return res.json(record);
 };
 
-export const deleteMedia = async (
-  req: Request,
-  res: Response
-): Promise<Response> => {
-  const { id } = req.params;
-  const { companyId } = req.user
-
-  try {
-    const quickmessage = await QuickMessage.findByPk(id);
-    const filePath = path.resolve("public","quickMessage",quickmessage.mediaName);
-    const fileExists = fs.existsSync(filePath);
-    if (fileExists) {
-      fs.unlinkSync(filePath);
-    }
-    quickmessage.update ({
-      mediaPath: null,
-      mediaName: null
-    });
-
-    return res.send({ mensagem: "Arquivo Excluído" });
-    } catch (err: any) {
-      throw new AppError(err.message);
-  }
+export const deleteMedia = async (req: Request, res: Response): Promise<Response> => {
+  const { companyId } = req.user;
+  const record = await findCompanyQuickMessage(req.params.id, companyId);
+  await removeQuickMessageMedia(record);
+  emitUpdate(companyId, record);
+  return res.json(record);
 };

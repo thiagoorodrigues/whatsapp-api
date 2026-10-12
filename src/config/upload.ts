@@ -19,7 +19,10 @@ export default {
   storage: multer.diskStorage({
     destination: async function (req, file, cb) {
 
-      const { typeArch, fileId } = req.body;      
+      const { typeArch, fileId } = req.body;
+      // Vêm do corpo da requisição e viram pasta: só letras, números, _ e -.
+      const unsafe = (v: unknown) => v !== undefined && v !== "" && !/^[\w-]{1,64}$/.test(String(v));
+      if (unsafe(typeArch) || unsafe(fileId)) return cb(new Error("ERR_INVALID_UPLOAD_FOLDER"), "");
 
       let folder;
 

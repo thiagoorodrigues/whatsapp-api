@@ -17,8 +17,6 @@ const CreateService = async (data: Data): Promise<QuickMessage> => {
       .min(3, "ERR_QUICKMESSAGE_INVALID_NAME")
       .required("ERR_QUICKMESSAGE_REQUIRED"),
     message: Yup.string()
-      .min(3, "ERR_QUICKMESSAGE_INVALID_NAME")
-      .required("ERR_QUICKMESSAGE_REQUIRED")
   });
 
   try {

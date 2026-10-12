@@ -9,7 +9,7 @@ import uploadConfig from "../config/upload";
 export const companyFolder = (companyId: number): string =>
   path.join(uploadConfig.directory, `company${companyId}`);
 
-const safeName = (fileName: string, mimetype?: string): string => {
+export const safeName = (fileName: string, mimetype?: string): string => {
   const ext = path.extname(fileName) || (mimetype ? `.${mimetype.split("/")[1]?.split(";")[0] || "bin"}` : "");
   const base = path
     .basename(fileName, path.extname(fileName))

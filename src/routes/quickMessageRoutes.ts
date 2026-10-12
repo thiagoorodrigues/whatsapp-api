@@ -2,10 +2,7 @@ import express from "express";
 import isAuth from "../middleware/isAuth";
 
 import * as QuickMessageController from "../controllers/QuickMessageController";
-import multer from "multer";
-import uploadConfig from "../config/upload";
-
-const upload = multer(uploadConfig);
+import { memoryUpload } from "../config/upload";
 
 const routes = express.Router();
 
@@ -24,7 +21,7 @@ routes.delete("/quick-messages/:id", isAuth, QuickMessageController.remove);
 routes.post(
     "/quick-messages/:id/media-upload",
     isAuth,
-    upload.array("file"),
+    memoryUpload.array("file", 1),
     QuickMessageController.mediaUpload
   );
   
