@@ -247,15 +247,123 @@ describe("onConnection", () => {
     whatsapp.update.mock.calls.forEach(([v]: any[]) => expect(v).not.toHaveProperty("session"));
   });
 
-  it("evento connection com mais de 10 minutos é ignorado (replay não reconecta nem abre QR)", async () => {
+  it("evento connection com mais de 10 minutos não age por si: reconsulta o gateway (sem QR nem reconexão)", async () => {
     jest.useFakeTimers();
+    whatsapp.status = "CONNECTED";
+    client.status.mockResolvedValue({ state: "connected", me: ME });
     const old = Date.now() - 11 * 60 * 1000;
     await SessionService.onConnection(7, { status: "logged_out" }, old);
     await SessionService.onConnection(7, { status: "qr", qr: "2@old" }, old);
     await SessionService.onConnection(7, { status: "disconnected", reason: "connect_failed" }, old);
     jest.advanceTimersByTime(120000);
+    expect(client.status).toHaveBeenCalledWith(7);
     expect(whatsapp.update).not.toHaveBeenCalled();
     expect(client.connect).not.toHaveBeenCalled();
+    expect(state.isReady(7)).toBe(true);
+  });
+
+  it("logged_out atrasado (stream represado) com o gateway sem a sessão: DISCONNECTED, sem novo QR", async () => {
+    jest.useFakeTimers();
+    whatsapp.status = "CONNECTED";
+    state.setStatus(7, "connected");
+    client.status.mockRejectedValue(new AppError("ERR_WAPP_NOT_INITIALIZED"));
+    await SessionService.onConnection(7, { status: "logged_out" }, Date.now() - 11 * 60 * 1000);
+    expect(whatsapp.update).toHaveBeenCalledWith({ status: "DISCONNECTED", qrcode: "" });
+    expect(state.isReady(7)).toBe(false);
+    jest.advanceTimersByTime(120000);
+    expect(client.connect).not.toHaveBeenCalled();
+    expect(whatsapp.status).toBe("DISCONNECTED");
+  });
+
+  it("disconnected atrasado com o gateway reconectando: estado deixa de ser connected, banco OPENING", async () => {
+    whatsapp.status = "CONNECTED";
+    state.setStatus(7, "connected");
+    client.status.mockResolvedValue({ state: "connecting" });
+    await SessionService.onConnection(7, { status: "disconnected" }, Date.now() - 11 * 60 * 1000);
+    expect(state.isReady(7)).toBe(false);
+    expect(whatsapp.update).toHaveBeenCalledWith({ status: "OPENING" });
+    expect(client.connect).not.toHaveBeenCalled();
+  });
+
+  it("evento atrasado com o gateway fora do ar: não muda nada", async () => {
+    whatsapp.status = "CONNECTED";
+    client.status.mockRejectedValue(new AppError("ERR_GATEWAY_UNAVAILABLE", 503));
+    await SessionService.onConnection(7, { status: "logged_out" }, Date.now() - 11 * 60 * 1000);
+    expect(whatsapp.update).not.toHaveBeenCalled();
+    expect(client.connect).not.toHaveBeenCalled();
+  });
+
+  it("dois logged_out seguidos depois do nosso logout: nenhum reabre QR", async () => {
+    jest.useFakeTimers();
+    whatsapp.status = "CONNECTED";
+    await SessionService.logout(whatsapp);
+    await SessionService.onConnection(7, { status: "logged_out" });
+    await SessionService.onConnection(7, { status: "logged_out" });
+    jest.advanceTimersByTime(10000);
+    expect(client.connect).not.toHaveBeenCalled();
+    expect(whatsapp.status).toBe("DISCONNECTED");
+  });
+
+  it("depois de um qr/connected o logout esperado acaba: logged_out pelo celular volta a pedir QR", async () => {
+    jest.useFakeTimers();
+    await SessionService.logout(whatsapp);
+    await SessionService.onConnection(7, { status: "logged_out" });
+    await SessionService.onConnection(7, { status: "connected", me: ME });
+    await SessionService.onConnection(7, { status: "logged_out" });
+    expect(whatsapp.update).toHaveBeenLastCalledWith({ status: "PENDING", qrcode: "" });
+  });
+
+  it("logout esperado expira em 2 minutos", async () => {
+    jest.useFakeTimers();
+    await SessionService.logout(whatsapp);
+    jest.setSystemTime(Date.now() + 2 * 60 * 1000 + 1);
+    await SessionService.onConnection(7, { status: "logged_out" });
+    expect(whatsapp.update).toHaveBeenLastCalledWith({ status: "PENDING", qrcode: "" });
+  });
+
+  it("connect_failed com o connect também falhando: espera cresce uma vez por tentativa (2 s, 5 s, 15 s)", async () => {
+    jest.useFakeTimers();
+    const delays: number[] = [];
+    const realSetTimeout = global.setTimeout;
+    const spy = jest.spyOn(global, "setTimeout").mockImplementation(((fn: any, ms?: number) => {
+      delays.push(Number(ms));
+      return realSetTimeout(fn, ms);
+    }) as any);
+    // O gateway devolve erro no connect e também publica connect_failed.
+    client.connect.mockRejectedValue(new AppError("ERR_GATEWAY_ERROR", 502));
+    const fail = () => SessionService.onConnection(7, { status: "disconnected", reason: "connect_failed" });
+    const fire = async () => {
+      jest.advanceTimersToNextTimer();
+      for (let i = 0; i < 10; i += 1) await Promise.resolve(); // eslint-disable-line no-await-in-loop
+    };
+    await fail();
+    await fire(); // 1ª nova tentativa falha: o caminho do timer reagenda
+    await fail(); // ...e o evento da mesma falha não conta de novo
+    await fire();
+    await fail();
+    spy.mockRestore();
+    expect(delays).toEqual([2000, 5000, 15000]);
+    expect(client.connect).toHaveBeenCalledTimes(2);
+  });
+
+  it("connect_failed com o evento chegando enquanto a nova tentativa ainda roda: conta uma vez", async () => {
+    jest.useFakeTimers();
+    const delays: number[] = [];
+    const realSetTimeout = global.setTimeout;
+    const spy = jest.spyOn(global, "setTimeout").mockImplementation(((fn: any, ms?: number) => {
+      delays.push(Number(ms));
+      return realSetTimeout(fn, ms);
+    }) as any);
+    client.connect.mockImplementation(async () => {
+      // O evento da falha é processado antes de o connect responder.
+      await SessionService.onConnection(7, { status: "disconnected", reason: "connect_failed" });
+      throw new AppError("ERR_GATEWAY_ERROR", 502);
+    });
+    await SessionService.onConnection(7, { status: "disconnected", reason: "connect_failed" });
+    jest.advanceTimersToNextTimer();
+    for (let i = 0; i < 20; i += 1) await Promise.resolve(); // eslint-disable-line no-await-in-loop
+    spy.mockRestore();
+    expect(delays).toEqual([2000, 5000]);
   });
 
   it("conexão que não existe mais: ignora", async () => {

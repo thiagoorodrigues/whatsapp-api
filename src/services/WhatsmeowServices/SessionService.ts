@@ -20,8 +20,8 @@ import SyncSessionContactsService from "../WhatsappContactServices/SyncSessionCo
 // para o Baileys depende deles intactos.
 
 // Evento `connection` mais velho que isso é replay (api parada, consumer
-// atrasado): não pode reabrir QR, reconectar nem rebaixar o status. O estado
-// atual vem do GET /sessions/{id} no boot.
+// atrasado): não pode reabrir QR nem reconectar por si; no lugar dele vale o
+// GET /sessions/{id} (refreshFromGateway).
 export const CONNECTION_MAX_AGE_MS = 10 * 60 * 1000;
 // Logout pedido por nós (Desconectar, Novo QR, número em uso, exclusão): o
 // logged_out que o gateway publica em seguida não deve abrir QR.
@@ -72,10 +72,15 @@ const schedule = (id: number, delayMs: number, run: () => Promise<unknown>) => {
 
 const expectLogout = (id: number) => expectedLogouts.set(id, Date.now() + EXPECTED_LOGOUT_MS);
 
-const takeExpectedLogout = (id: number): boolean => {
+// Não é consumido na leitura: o gateway pode publicar logged_out duas vezes
+// para um logout só (resposta do Logout + evento LoggedOut do whatsmeow). Vale
+// até expirar ou até o próximo qr/connected da conexão.
+const isExpectedLogout = (id: number): boolean => {
   const until = expectedLogouts.get(id);
+  if (until === undefined) return false;
+  if (until >= Date.now()) return true;
   expectedLogouts.delete(id);
-  return until !== undefined && until >= Date.now();
+  return false;
 };
 
 const isNotFound = (err: unknown) => err instanceof AppError && err.message === "ERR_WAPP_NOT_INITIALIZED";
@@ -154,8 +159,9 @@ const scheduleRetry = (whatsapp: Whatsapp) => {
     const fresh = await load(id);
     if (!fresh) return;
     const ok = await connectSession(fresh);
-    // Gateway fora do ar: segue tentando com espera maior.
-    if (!ok) scheduleRetry(fresh);
+    // Gateway fora do ar: segue tentando com espera maior, a não ser que o
+    // evento connect_failed desta mesma tentativa já tenha agendado a próxima.
+    if (!ok && !timers.has(id)) scheduleRetry(fresh);
   });
 };
 
@@ -172,7 +178,9 @@ const applyDisconnected = async (whatsapp: Whatsapp, reason?: string): Promise<v
   pairing.delete(id);
   await save(whatsapp, { status: "DISCONNECTED", qrcode: "" });
   if (reason === "connect_failed") {
-    scheduleRetry(whatsapp);
+    // Nova tentativa já agendada (o caminho do timer contou esta falha): uma
+    // contagem por tentativa.
+    if (!timers.has(id)) scheduleRetry(whatsapp);
     return;
   }
   if (reason === "stream_replaced") {
@@ -196,7 +204,7 @@ const applyLoggedOut = async (whatsapp: Whatsapp): Promise<void> => {
   pairing.delete(id);
   attempts.delete(id);
   // Logout pedido por nós: quem pediu já gravou o status.
-  if (takeExpectedLogout(id)) return;
+  if (isExpectedLogout(id)) return;
   cancelTimer(id);
   // Logout pelo celular: igual ao Baileys, volta a pedir QR (decisão 4).
   await save(whatsapp, { status: "PENDING", qrcode: "" });
@@ -279,18 +287,67 @@ const remove = async (connectionId: number): Promise<void> => {
   state.setStatus(connectionId, "logged_out");
 };
 
+// Um backlog de eventos atrasados da mesma conexão gera uma consulta só.
+const REFRESH_THROTTLE_MS = 30 * 1000;
+const lastRefresh = new Map<number, number>();
+
+/** Aplica o GET /sessions/{id} sem efeitos de QR/reconexão (eventos atrasados). */
+const refreshFromGateway = async (whatsapp: Whatsapp): Promise<void> => {
+  const { id } = whatsapp;
+  const last = lastRefresh.get(id);
+  if (last !== undefined && Date.now() - last < REFRESH_THROTTLE_MS) return;
+  lastRefresh.set(id, Date.now());
+  let status: Status | null = null;
+  try {
+    status = await client().status(id);
+  } catch (err) {
+    if (!isNotFound(err)) {
+      // Gateway fora: o health rebaixa o estado; os eventos corrigem na volta.
+      logger.warn(`whatsmeow: estado da conexão ${id} indisponível: ${errText(err)}`);
+      return;
+    }
+  }
+  const gatewayState = status?.state;
+  if (gatewayState === "connected") {
+    if (whatsapp.status === "CONNECTED") state.setStatus(id, "connected");
+    else await applyConnected(whatsapp, status?.me);
+    return;
+  }
+  if (gatewayState === "connecting") {
+    state.setStatus(id, "unknown");
+    if (whatsapp.status === "CONNECTED") await save(whatsapp, { status: "OPENING" });
+    return;
+  }
+  if (gatewayState === "qr") {
+    // QR no ar no gateway: os eventos qr ao vivo atualizam o banco.
+    state.setStatus(id, "qr");
+    return;
+  }
+  // 404, logged_out ou disconnected: não está no ar. Sem abrir QR.
+  state.setStatus(id, gatewayState === "logged_out" ? "logged_out" : "disconnected");
+  if (whatsapp.status === "CONNECTED" || whatsapp.status === "qrcode") {
+    await save(whatsapp, { status: "DISCONNECTED", qrcode: "" });
+  }
+};
+
 /** Evento `connection` do stream (plugado nos handlers pelo consumer). */
 const onConnection = async (connectionId: number, data: ConnectionData, ts?: number): Promise<void> => {
   const at = Number(ts);
-  if (at > 0 && Date.now() - at > CONNECTION_MAX_AGE_MS) {
-    logger.debug(`whatsmeow: connection ${data?.status} da conexão ${connectionId} com ${Math.round((Date.now() - at) / 1000)} s ignorado`);
-    return;
-  }
+  const stale = at > 0 && Date.now() - at > CONNECTION_MAX_AGE_MS;
   const whatsapp = await load(connectionId);
   if (!whatsapp) return;
+  if (stale) {
+    // Replay ou stream represado: o evento em si não reabre QR nem reconecta,
+    // mas o estado real vem do gateway (um logged_out atrasado não pode deixar
+    // a conexão "connected").
+    logger.debug(`whatsmeow: connection ${data?.status} da conexão ${connectionId} com ${Math.round((Date.now() - at) / 1000)} s; reconsultando o gateway`);
+    await refreshFromGateway(whatsapp);
+    return;
+  }
 
   switch (data?.status) {
     case "qr":
+      expectedLogouts.delete(connectionId);
       pairing.add(connectionId);
       state.setStatus(connectionId, "qr");
       await save(whatsapp, { qrcode: data.qr || "", status: "qrcode", retries: 0 });
@@ -301,6 +358,7 @@ const onConnection = async (connectionId: number, data: ConnectionData, ts?: num
       logger.info(`whatsmeow: código de pareamento gerado para a conexão ${connectionId}`);
       return;
     case "connected":
+      expectedLogouts.delete(connectionId);
       await applyConnected(whatsapp, data.me);
       return;
     case "disconnected":
@@ -425,6 +483,7 @@ const resetForTests = (): void => {
   attempts.clear();
   pairing.clear();
   expectedLogouts.clear();
+  lastRefresh.clear();
 };
 
 const SessionService = {
