@@ -189,7 +189,16 @@ const notifyTicketWebhook = async (inbound: InboundMessage, ticket: Ticket, conn
   }
 };
 
-const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => {
+interface ProcessOptions {
+  /**
+   * Lança o erro depois de registrá-lo (motor whatsmeow: o consumer não
+   * confirma o evento e tenta de novo). Sem isto (Baileys) o erro só é
+   * registrado, como sempre foi.
+   */
+  rethrow?: boolean;
+}
+
+const ProcessInboundMessage = async (inbound: InboundMessage, options: ProcessOptions = {}): Promise<void> => {
   const { companyId } = inbound;
 
   try {
@@ -623,6 +632,7 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
     console.log(err)
     Sentry.captureException(err);
     logger.error(`Error handling whatsapp message: Err: ${err}`);
+    if (options.rethrow) throw err;
   }
 };
 

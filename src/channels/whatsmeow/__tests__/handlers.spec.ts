@@ -77,7 +77,7 @@ const deps = (over: Partial<HandlerDeps> = {}): HandlerDeps => ({
 
 describe("handlers do gateway", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     resetHandlers();
     state.resetState();
     (Whatsapp.findByPk as jest.Mock).mockResolvedValue({ id: CONN, companyId: COMPANY });
@@ -117,6 +117,8 @@ describe("handlers do gateway", () => {
       expect(ProcessInboundMessage).toHaveBeenCalledTimes(1);
       const inbound = (ProcessInboundMessage as jest.Mock).mock.calls[0][0];
       expect(inbound).toMatchObject({ connectionId: CONN, companyId: COMPANY, externalId: "ABC123", history: false });
+      // Erro ao gravar volta para o consumer (retry), ao contrário do Baileys.
+      expect((ProcessInboundMessage as jest.Mock).mock.calls[0][1]).toEqual({ rethrow: true });
       expect(verifyRecentCampaign).toHaveBeenCalledWith(inbound);
     });
 
@@ -181,6 +183,29 @@ describe("handlers do gateway", () => {
         [["R3"], COMPANY, CONN]
       ]);
       expect(UpdateMessageAckService).not.toHaveBeenCalled();
+    });
+
+    it("não espera o ack (fila da conexão não trava)", async () => {
+      (UpdateMessageAckService as jest.Mock).mockReturnValue(new Promise(() => undefined));
+      (MarkReadOnDeviceService as jest.Mock).mockReturnValue(new Promise(() => undefined));
+      await expect(
+        handleEnvelope(env("receipt", { ids: ["A"], chat: PHONE, sender: PHONE, isGroup: false, status: "read" }), deps())
+      ).resolves.toBeUndefined();
+      await expect(
+        handleEnvelope(env("receipt", { ids: ["A"], chat: PHONE, sender: PHONE, isGroup: false, status: "read_self" }), deps())
+      ).resolves.toBeUndefined();
+      (Message.findAll as jest.Mock).mockResolvedValue([{ messagesWhatsappsId: "T", fromMe: false }]);
+      await expect(
+        handleEnvelope(env("receipt", { ids: ["T", "O"], chat: GROUP, sender: PHONE, isGroup: true, status: "read" }), deps())
+      ).resolves.toBeUndefined();
+    });
+
+    it("rejeição do ack só é registrada", async () => {
+      (UpdateMessageAckService as jest.Mock).mockRejectedValue(new Error("x"));
+      (MarkReadOnDeviceService as jest.Mock).mockRejectedValue(new Error("y"));
+      await handleEnvelope(env("receipt", { ids: ["A"], chat: PHONE, sender: PHONE, isGroup: false, status: "read" }), deps());
+      await handleEnvelope(env("receipt", { ids: ["A"], chat: PHONE, sender: PHONE, isGroup: false, status: "read_self" }), deps());
+      await new Promise(r => setImmediate(r));
     });
 
     it("status desconhecido é ignorado", async () => {
@@ -263,15 +288,15 @@ describe("handlers do gateway", () => {
   describe("call", () => {
     it("terminate com from em LID chama MissedCallService", async () => {
       await handleEnvelope(env("call", { event: "terminate", callId: "C1", from: "123:4@lid", isVideo: false, isGroup: false, ts: 1 }), deps());
-      expect(MissedCallService).toHaveBeenCalledWith({ whatsappId: CONN, companyId: COMPANY, from: "123:4@lid", callId: "C1" });
+      expect(MissedCallService).toHaveBeenCalledWith({ whatsappId: CONN, companyId: COMPANY, from: "123@lid", callId: "C1" });
     });
 
-    it("terminate com telefone com sufixo de dispositivo passa o from cru", async () => {
+    it("terminate com telefone com sufixo de dispositivo: from sem o sufixo", async () => {
       await handleEnvelope(
         env("call", { event: "terminate", callId: "C2", from: "5511999990000:12@s.whatsapp.net", isVideo: true, isGroup: false, ts: 1 }),
         deps()
       );
-      expect(MissedCallService).toHaveBeenCalledWith(expect.objectContaining({ from: "5511999990000:12@s.whatsapp.net", callId: "C2" }));
+      expect(MissedCallService).toHaveBeenCalledWith(expect.objectContaining({ from: "5511999990000@s.whatsapp.net", callId: "C2" }));
     });
 
     it("offer e chamada de grupo são ignorados; erro do serviço não lança", async () => {

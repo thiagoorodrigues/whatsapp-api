@@ -145,7 +145,11 @@ const handleMessage = async (env: GatewayEnvelope<GatewayMessageData>, { connect
 
   const inbound = await toInbound(asMessageEnvelope(connectionId, env.ts, data), companyId, deps.inbound);
   if (!inbound) return;
-  await ProcessInboundMessage(inbound);
+  // Com rethrow, erro ao gravar (banco/rede) volta para o consumer, que não
+  // confirma e tenta de novo; se a mensagem já tinha sido gravada, a checagem
+  // acima a descarta. Custo conhecido: se a falha vier depois de somar o
+  // contador de não lidas, a nova tentativa pode contá-la duas vezes.
+  await ProcessInboundMessage(inbound, { rethrow: true });
   // Já gravada: repetir o evento não refaria a campanha (a duplicidade o
   // descarta), então a falha aqui só é registrada.
   try {
@@ -156,17 +160,25 @@ const handleMessage = async (env: GatewayEnvelope<GatewayMessageData>, { connect
 };
 
 const RECEIPT_ACK: Record<string, number> = { delivered: 3, read: 4, played: 5 };
-
 // Recibos casam pelo id + conexão, então chat/remetente em LID não atrapalham.
-// O ack nunca volta (UpdateMessageAckService).
+// O ack nunca volta (UpdateMessageAckService). Os serviços de recibo esperam
+// 500 ms e engolem os próprios erros: esperar por eles só travaria a fila da
+// conexão sem ganho de retry, então rodam soltos, como no listener do Baileys.
+const detach = (connectionId: number, what: string, p: Promise<unknown>) => {
+  void Promise.resolve(p).catch(err => logger.warn(`${what} (whatsapp ${connectionId}): ${(err as Error)?.message || err}`));
+};
+
 const handleReceipt = async (env: GatewayEnvelope<ReceiptData>, { connectionId, companyId }: Context) => {
   const { status, isGroup } = env.data || ({} as ReceiptData);
   const ids = (env.data?.ids || []).filter(Boolean);
   if (!ids.length) return;
 
+  const updateAck = (id: string, ack: number) => detach(connectionId, "ack", UpdateMessageAckService(id, ack, connectionId));
+  const markRead = (list: string[]) => detach(connectionId, "lidas no aparelho", MarkReadOnDeviceService(list, companyId, connectionId));
+
   // Lidas por nós no celular ou em outro aparelho.
   if (status === "read_self" || status === "played_self") {
-    await MarkReadOnDeviceService(ids, companyId, connectionId);
+    markRead(ids);
     return;
   }
 
@@ -174,7 +186,7 @@ const handleReceipt = async (env: GatewayEnvelope<ReceiptData>, { connectionId, 
   if (!ack) return;
 
   if (!isGroup) {
-    await Promise.all(ids.map(id => UpdateMessageAckService(id, ack, connectionId)));
+    ids.forEach(id => updateAck(id, ack));
     return;
   }
 
@@ -187,8 +199,8 @@ const handleReceipt = async (env: GatewayEnvelope<ReceiptData>, { connectionId, 
   });
   const received = new Set(saved.filter(m => !m.fromMe).map(m => m.messagesWhatsappsId));
   const readByUs = ids.filter(id => received.has(id));
-  if (readByUs.length && ack >= 4) await MarkReadOnDeviceService(readByUs, companyId, connectionId);
-  await Promise.all(ids.filter(id => !received.has(id)).map(id => UpdateMessageAckService(id, ack, connectionId)));
+  if (readByUs.length && ack >= 4) markRead(readByUs);
+  ids.filter(id => !received.has(id)).forEach(id => updateAck(id, ack));
 };
 
 // O gateway já manda "me" ou o endereço cru de quem reagiu, como o Baileys.
@@ -254,7 +266,8 @@ const importerFor = ({ connectionId, companyId, deps }: Context): HistoryImporte
     exists: id => messageExists(id, connectionId),
     handle: async item => {
       const inbound = await toInbound(item.env, companyId, deps.inbound);
-      if (inbound) await ProcessInboundMessage({ ...inbound, history: true });
+      // rethrow: a falha conta como "com erro" no progresso da importação.
+      if (inbound) await ProcessInboundMessage({ ...inbound, history: true }, { rethrow: true });
     },
     finish: () => FinishHistoryImportService(connectionId, companyId),
     log: line => logger.info(`importação de histórico (whatsapp ${connectionId}): ${line}`),
@@ -287,14 +300,22 @@ const handleHistory = async (env: GatewayEnvelope<HistoryData>, ctx: Context) =>
   if (d.final) importer.receivedAll();
 };
 
+const withoutDevice = (jid: string): string => {
+  const [user, server] = jid.split("@");
+  return server ? `${user.split(":")[0]}@${server}` : jid;
+};
+
 // Chamada encerrada (wbotMonitor, CB:call terminate). O serviço confere a
 // configuração `call` e avisa o contato; repetir mandaria o aviso de novo,
 // então a falha só é registrada.
 const handleCall = async (env: GatewayEnvelope<CallData>, { connectionId, companyId }: Context) => {
   const d = env.data;
   if (!d || d.event !== "terminate" || d.isGroup || !d.from) return;
+  // Sem o sufixo de dispositivo: sem ticket, o aviso vai direto para este
+  // endereço ("123:4@lid" -> "123@lid", "5531...:12@s.whatsapp.net" -> "5531...@s.whatsapp.net").
+  const from = withoutDevice(d.from);
   try {
-    await MissedCallService({ whatsappId: connectionId, companyId, from: d.from, callId: d.callId });
+    await MissedCallService({ whatsappId: connectionId, companyId, from, callId: d.callId });
   } catch (err) {
     logger.warn(`chamada perdida (whatsapp ${connectionId}, ${d.callId}): ${(err as Error)?.message || err}`);
   }

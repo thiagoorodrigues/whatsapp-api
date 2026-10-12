@@ -172,4 +172,16 @@ describe("ProcessInboundMessage", () => {
       expect(send.mock.invocationCallOrder[0]).toBeLessThan(followUpAgent.mock.invocationCallOrder[0]);
     });
   });
+
+  describe("erro ao gravar", () => {
+    it("padrão (Baileys): registra e não lança", async () => {
+      findOrCreateTicket.mockRejectedValueOnce(new Error("db down"));
+      await expect(ProcessInboundMessage(inbound())).resolves.toBeUndefined();
+    });
+
+    it("rethrow (gateway): registra e lança, para o consumer tentar de novo", async () => {
+      findOrCreateTicket.mockRejectedValueOnce(new Error("db down"));
+      await expect(ProcessInboundMessage(inbound(), { rethrow: true })).rejects.toThrow("db down");
+    });
+  });
 });
