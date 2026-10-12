@@ -111,6 +111,8 @@ interface Lane {
   ready: boolean;
   /** Acorda a espera entre tentativas (removeConnection, desligamento). */
   wake: (() => void) | null;
+  /** Muda a cada attach: uma tentativa antiga em segundo plano desiste. */
+  attachRun: number;
 }
 
 type StreamReply = [string, [string, string[]][]][] | null;
@@ -272,24 +274,69 @@ class StreamConsumer {
         known: new Set(),
         worker: null,
         ready: false,
-        wake: null
+        wake: null,
+        attachRun: 0
       };
       this.lanes.set(connectionId, lane);
     }
     lane.active = true;
     lane.ready = false;
+    lane.attachRun += 1;
+    const run = lane.attachRun;
+    if (await this.prepare(lane)) {
+      lane.ready = lane.active;
+      return;
+    }
+    // Redis fora: não lê com ">" antes de pegar os pendentes; tenta de novo
+    // em segundo plano, com backoff, sem travar a partida da api.
+    this.retryPrepare(lane, run);
+  }
+
+  /**
+   * Cria o grupo e pega para este consumidor os pendentes de TODOS os
+   * consumidores (deploy novo = nome novo, reinício, conexão que voltou),
+   * antes da primeira leitura com ">", para manter a ordem. Vale pela
+   * invariante de uma instância por vez. Só conta como pronto quando o
+   * XPENDING não mostra mais nada com outro consumidor.
+   */
+  private async prepare(lane: Lane): Promise<boolean> {
     try {
       await this.ensureGroup(lane.key);
-      // Pendentes de todos os consumidores do grupo (deploy novo = nome novo,
-      // reinício, conexão que voltou): antes da primeira leitura com ">",
-      // para manter a ordem. Vale pela invariante de uma instância por vez.
-      await this.claim(lane, 0);
+      for (let pass = 0; pass < 3 && lane.active && !this.stopping; pass += 1) {
+        // eslint-disable-next-line no-await-in-loop
+        await this.claim(lane, 0, { full: true });
+        // eslint-disable-next-line no-await-in-loop
+        const summary = (await this.redis.call("XPENDING", lane.key, this.opts.group)) as any[];
+        const owners = ((summary?.[3] as [string, string][]) || []).filter(
+          ([name, count]) => name !== this.name && Number(count) > 0
+        );
+        if (!owners.length) return true;
+      }
+      throw new Error("ainda há pendentes com outro consumidor");
     } catch (err) {
-      // Redis fora: a leitura tenta de novo e recria o grupo (NOGROUP); os
-      // pendentes voltam pela varredura.
       logger.warn(`consumer whatsmeow: falha ao preparar ${lane.key}: ${errorText(err)}`);
+      return false;
     }
-    lane.ready = lane.active;
+  }
+
+  private async retryPrepare(lane: Lane, run: number): Promise<void> {
+    let backoff = 500;
+    const current = () => lane.active && !this.stopping && lane.attachRun === run;
+    while (current()) {
+      const until = Date.now() + backoff;
+      // eslint-disable-next-line no-await-in-loop
+      while (current() && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 100));
+      if (!current()) return;
+      // eslint-disable-next-line no-await-in-loop
+      if (await this.prepare(lane)) {
+        if (current()) {
+          lane.ready = true;
+          this.interrupt();
+        }
+        return;
+      }
+      backoff = Math.min(backoff * 2, 10000);
+    }
   }
 
   private async ensureGroup(key: string): Promise<void> {
@@ -488,10 +535,12 @@ class StreamConsumer {
    */
   private async reclaim(lane: Lane, id: string, attempt: number): Promise<number | null> {
     const delays = this.opts.retryDelaysMs;
+    const gone = () => !lane.active || this.stopping;
     for (let step = attempt; ; step += 1) {
+      if (gone()) return null;
       // eslint-disable-next-line no-await-in-loop
       await this.lanePause(lane, delays[Math.min(step, delays.length - 1)]);
-      if (!lane.active || this.stopping) return null;
+      if (gone()) return null;
       try {
         // eslint-disable-next-line no-await-in-loop
         const claimed = (await this.redis.call("XCLAIM", lane.key, this.opts.group, this.name, "0", id)) as any[];
@@ -501,6 +550,8 @@ class StreamConsumer {
         }
         // eslint-disable-next-line no-await-in-loop
         const rows = (await this.redis.call("XPENDING", lane.key, this.opts.group, id, id, "1")) as any[][];
+        // Removida/desligando durante os comandos: não roda o handler de novo.
+        if (gone()) return null;
         return Number(rows?.[0]?.[3]) || attempt + 2;
       } catch (err) {
         // Redis fora: espera mais e tenta tomar de novo, sem rodar o handler.
@@ -588,7 +639,8 @@ class StreamConsumer {
 
   private async sweep(): Promise<void> {
     for (const lane of this.lanes.values()) {
-      if (!lane.active || this.stopping) continue;
+      // Durante o attach quem pega os pendentes é o prepare.
+      if (!lane.active || !lane.ready || this.stopping) continue;
       try {
         // eslint-disable-next-line no-await-in-loop
         await this.claim(lane, this.opts.claimMinIdleMs);
@@ -600,12 +652,15 @@ class StreamConsumer {
     }
   }
 
-  /** Pega para este consumidor as pendentes paradas há `minIdle` (de `consumer`, se dado) e enfileira. */
-  private async claim(lane: Lane, minIdle: number, consumer?: string): Promise<void> {
+  /**
+   * Pega para este consumidor as pendentes paradas há `minIdle` e enfileira,
+   * em páginas na ordem do id. `full` (attach): vai até o fim, sem limite de
+   * rodadas nem da fila local, porque o ">" só começa depois.
+   */
+  private async claim(lane: Lane, minIdle: number, { full = false } = {}): Promise<void> {
     let start = "-";
-    for (let round = 0; round < 20 && !this.stopping && lane.active; round += 1) {
+    for (let round = 0; (full || round < 20) && !this.stopping && lane.active; round += 1) {
       const args = ["XPENDING", lane.key, this.opts.group, "IDLE", String(minIdle), start, "+", String(this.opts.batchSize)];
-      if (consumer) args.push(consumer);
       // eslint-disable-next-line no-await-in-loop
       const rows = (await this.redis.call(...(args as [string, ...string[]]))) as [string, string, number, number][];
       if (!rows || !rows.length) return;
@@ -634,7 +689,7 @@ class StreamConsumer {
           rawLogger.warn(`consumer whatsmeow: ${lost.length} pendente(s) de ${lane.key} não recuperada(s) (retenção ou outro consumidor)`);
         }
       }
-      if (rows.length < this.opts.batchSize || lane.items.length >= this.opts.laneHighWater) return;
+      if (rows.length < this.opts.batchSize || (!full && lane.items.length >= this.opts.laneHighWater)) return;
       start = `(${rows[rows.length - 1][0]}`;
     }
   }

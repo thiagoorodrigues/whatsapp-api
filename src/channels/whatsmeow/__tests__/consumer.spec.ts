@@ -204,6 +204,22 @@ describe("consumer de Redis Streams do gateway", () => {
     expect(handle).toHaveBeenCalledTimes(1);
   });
 
+  it("stop durante um handler que depois falha não espera o backoff", async () => {
+    const handle = jest.fn(async () => {
+      await sleep(200);
+      throw new Error("falha");
+    });
+    await startConsumer([1], deps(handle, { retryDelaysMs: [10000] }));
+    await publish(1, envelope(1, 1));
+    await waitFor(() => handle.mock.calls.length === 1);
+
+    const started = Date.now();
+    await stopConsumer();
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(handle).toHaveBeenCalledTimes(1);
+    expect(await pendingCount(1)).toBe(1);
+  });
+
   it("handler que passa do timeout não roda de novo em paralelo; a fila espera ele terminar", async () => {
     let running = 0;
     let maxRunning = 0;
@@ -319,6 +335,26 @@ describe("consumer de Redis Streams do gateway", () => {
     expect(order).toEqual([1, 2, 3]);
     await sleep(400);
     expect(handle).toHaveBeenCalledTimes(3);
+  });
+
+  it("deploy com mais pendentes que a fila local comporta: todos os antigos antes de qualquer novo", async () => {
+    await redis.xgroup("CREATE", streamKey(1), "wazzy-api", "0", "MKSTREAM");
+    const pipeline = redis.pipeline();
+    for (let n = 1; n <= 260; n += 1) pipeline.xadd(streamKey(1), "*", "e", JSON.stringify(envelope(1, n)));
+    await pipeline.exec();
+    await redis.xreadgroup("GROUP", "wazzy-api", "antigo", "COUNT", 1000, "STREAMS", streamKey(1), ">");
+    for (let n = 261; n <= 265; n += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await publish(1, envelope(1, n));
+    }
+
+    const order: number[] = [];
+    const handle = jest.fn(async (env: any) => { order.push(env.data.n); });
+    await startConsumer([1], deps(handle, { consumerName: "novo", claimMinIdleMs: 60000, laneHighWater: 200, batchSize: 50 }));
+
+    await waitFor(() => order.length === 265);
+    expect(order).toEqual(Array.from({ length: 265 }, (_, i) => i + 1));
+    await waitFor(async () => (await pendingCount(1)) === 0);
   });
 
   it("reinício com o mesmo nome processa os próprios pendentes antes das novas entradas", async () => {
