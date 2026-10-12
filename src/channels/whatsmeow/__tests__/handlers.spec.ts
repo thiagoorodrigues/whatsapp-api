@@ -50,7 +50,7 @@ const PHONE = "5511999990000@s.whatsapp.net";
 const LID = "1234567890123@lid";
 const GROUP = "120363000000000000@g.us";
 
-const env = (type: string, data: any, connectionId = CONN) => ({ type, connectionId, ts: 1760000000000, data });
+const env = (type: string, data: any, connectionId = CONN, ts = Date.now()) => ({ type, connectionId, ts, data });
 
 const messageData = (over: Record<string, any> = {}) => ({
   id: "ABC123",
@@ -259,6 +259,24 @@ describe("handlers do gateway", () => {
     expect(handleContactTyping).toHaveBeenCalledWith({ companyId: COMPANY, whatsappId: CONN, chatJid: LID, state: "composing" });
     (handleContactTyping as jest.Mock).mockRejectedValueOnce(new Error("db"));
     await expect(handleEnvelope(env("presence", { chat: LID, sender: LID, state: "paused" }), deps())).resolves.toBeUndefined();
+  });
+
+  it("call e presence com mais de 10 minutos (replay do stream) são ignorados; os demais tipos não", async () => {
+    const old = Date.now() - 11 * 60 * 1000;
+    await handleEnvelope(env("presence", { chat: LID, sender: LID, state: "composing" }, CONN, old), deps());
+    await handleEnvelope(
+      env("call", { event: "terminate", callId: "C9", from: PHONE, isGroup: false }, CONN, old),
+      deps()
+    );
+    expect(handleContactTyping).not.toHaveBeenCalled();
+    expect(MissedCallService).not.toHaveBeenCalled();
+
+    const recent = Date.now() - 9 * 60 * 1000;
+    await handleEnvelope(env("presence", { chat: LID, sender: LID, state: "composing" }, CONN, recent), deps());
+    expect(handleContactTyping).toHaveBeenCalledTimes(1);
+
+    await handleEnvelope(env("lid_mapping", { lid: LID, pn: PHONE }, CONN, old), deps());
+    expect(ApplyLidMappingService).toHaveBeenCalledTimes(1);
   });
 
   it("lid_mapping", async () => {

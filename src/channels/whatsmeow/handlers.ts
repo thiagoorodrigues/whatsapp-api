@@ -348,10 +348,21 @@ const HANDLERS: Record<string, (env: GatewayEnvelope, ctx: Context) => Promise<v
   connection: handleConnection
 };
 
+// Eventos que só valem na hora: num replay do stream (api parada, consumer
+// atrasado) não podem reenviar o aviso de chamada perdida nem o "digitando"
+// dias depois.
+const LIVE_ONLY_TYPES = new Set(["call", "presence"]);
+export const LIVE_ONLY_MAX_AGE_MS = 10 * 60 * 1000;
+
 /** Trata um envelope do stream; lançar = o consumer tenta de novo. */
 export const handleEnvelope = async (env: GatewayEnvelope, deps: HandlerDeps = {}): Promise<void> => {
   const handler = HANDLERS[env?.type];
   if (!handler) return;
+  const ts = Number(env.ts);
+  if (LIVE_ONLY_TYPES.has(env.type) && ts > 0 && Date.now() - ts > LIVE_ONLY_MAX_AGE_MS) {
+    logger.debug(`evento ${env.type} do gateway com ${Math.round((Date.now() - ts) / 1000)} s ignorado (conexão ${env.connectionId})`);
+    return;
+  }
   const connectionId = Number(env.connectionId);
   const companyId = await companyOf(connectionId);
   if (!companyId) {

@@ -68,6 +68,7 @@ const deps = (handle: ConsumerDeps["handle"], extra: Partial<ConsumerDeps> = {})
   claimIntervalMs: 100,
   claimMinIdleMs: 150,
   handlerTimeoutMs: 5000,
+  retryDelaysMs: [80, 80, 80, 80],
   stopTimeoutMs: 2000,
   ...extra
 });
@@ -145,30 +146,101 @@ describe("consumer de Redis Streams do gateway", () => {
     await waitFor(async () => (await pendingCount(1)) === 0);
   });
 
-  it("falha deixa pendente e é processado de novo depois", async () => {
-    const handle = jest
-      .fn()
-      .mockRejectedValueOnce(new Error("banco fora"))
-      .mockResolvedValue(undefined);
-    await startConsumer([1], deps(handle));
+  it("falha segura a fila da conexão: tenta de novo a mesma entrada antes das seguintes", async () => {
+    const calls: number[] = [];
+    let failed = false;
+    const handle = jest.fn(async (env: any) => {
+      calls.push(env.data.n);
+      if (env.data.n === 1 && !failed) {
+        failed = true;
+        throw new Error("banco fora");
+      }
+    });
+    await startConsumer([1], deps(handle, { retryDelaysMs: [300] }));
     await publish(1, envelope(1, 1));
 
-    await waitFor(() => handle.mock.calls.length === 1);
-    await sleep(50);
-    expect(await pendingCount(1)).toBe(1);
+    await waitFor(() => calls.length === 1);
+    // Reação que depende da mensagem 1 chega durante a espera.
+    await publish(1, envelope(1, 2, "reaction"));
+    await sleep(150);
+    expect(calls).toEqual([1]);
+    expect(await pendingCount(1)).toBeGreaterThanOrEqual(1);
 
-    await waitFor(() => handle.mock.calls.length === 2);
+    await waitFor(() => calls.length === 3);
+    expect(calls).toEqual([1, 1, 2]);
     await waitFor(async () => (await pendingCount(1)) === 0);
     expect(await redis.exists(deadKey())).toBe(0);
   });
 
+  it("antes de cada nova tentativa faz XCLAIM (contador de entregas persistido)", async () => {
+    let fails = 2;
+    const counts: number[] = [];
+    const handle = jest.fn(async () => {
+      const rows = (await redis.xpending(streamKey(1), "wazzy-api", "-", "+", 10)) as any[];
+      counts.push(Number(rows[0][3]));
+      if (fails > 0) {
+        fails -= 1;
+        throw new Error("falha");
+      }
+    });
+    await startConsumer([1], deps(handle));
+    await publish(1, envelope(1, 1));
+
+    await waitFor(() => counts.length === 3);
+    expect(counts).toEqual([1, 2, 3]);
+    await waitFor(async () => (await pendingCount(1)) === 0);
+  });
+
+  it("stopConsumer interrompe a espera entre tentativas e a entrada fica pendente", async () => {
+    const handle = jest.fn().mockRejectedValue(new Error("falha"));
+    await startConsumer([1], deps(handle, { retryDelaysMs: [10000] }));
+    await publish(1, envelope(1, 1));
+    await waitFor(() => handle.mock.calls.length === 1);
+
+    const started = Date.now();
+    await stopConsumer();
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(await pendingCount(1)).toBe(1);
+    expect(handle).toHaveBeenCalledTimes(1);
+  });
+
+  it("handler que passa do timeout não roda de novo em paralelo; a fila espera ele terminar", async () => {
+    let running = 0;
+    let maxRunning = 0;
+    const calls: number[] = [];
+    const handle = jest.fn(async (env: any) => {
+      running += 1;
+      maxRunning = Math.max(maxRunning, running);
+      calls.push(env.data.n);
+      if (env.data.n === 1) await sleep(600);
+      running -= 1;
+    });
+    await startConsumer([1], deps(handle, { handlerTimeoutMs: 50, claimMinIdleMs: 100, claimIntervalMs: 50 }));
+    await publish(1, envelope(1, 1));
+    await publish(1, envelope(1, 2));
+
+    await waitFor(() => calls.length === 2);
+    expect(calls).toEqual([1, 2]);
+    expect(maxRunning).toBe(1);
+    await waitFor(async () => (await pendingCount(1)) === 0);
+    await sleep(300);
+    expect(handle).toHaveBeenCalledTimes(2);
+  });
+
   it("na 5ª falha manda para o dead letter, confirma e grava log do sistema com protocolo", async () => {
-    const handle = jest.fn().mockRejectedValue(new Error("sempre falha"));
+    const calls: number[] = [];
+    const handle = jest.fn(async (env: any) => {
+      calls.push(env.data.n);
+      if (env.data.n === 1) throw new Error("sempre falha");
+    });
     await startConsumer([1], deps(handle));
     const id = await publish(1, envelope(1, 1));
+    await publish(1, envelope(1, 2));
 
     await waitFor(async () => (await redis.xlen(deadKey())) === 1);
-    expect(handle).toHaveBeenCalledTimes(5);
+    // Depois do dead letter a fila da conexão segue.
+    await waitFor(() => calls.length === 6);
+    expect(calls).toEqual([1, 1, 1, 1, 1, 2]);
     // XADD no dead letter vem antes do XACK (se o XADD falhar, segue pendente).
     await waitFor(async () => (await pendingCount(1)) === 0);
 
@@ -177,8 +249,9 @@ describe("consumer de Redis Streams do gateway", () => {
     for (let i = 0; i < fields.length; i += 2) dead[fields[i]] = fields[i + 1];
     expect(dead.stream).toBe(streamKey(1));
     expect(dead.id).toBe(id);
-    expect(JSON.parse(dead.envelope)).toMatchObject({ connectionId: 1, data: { n: 1 } });
+    expect(JSON.parse(dead.e)).toMatchObject({ connectionId: 1, data: { n: 1 } });
     expect(dead.error).toContain("sempre falha");
+    expect(dead.connectionId).toBe("1");
     expect(dead.deliveries).toBe("5");
 
     expect(recordLog).toHaveBeenCalledWith(
@@ -186,7 +259,7 @@ describe("consumer de Redis Streams do gateway", () => {
     );
 
     await sleep(400);
-    expect(handle).toHaveBeenCalledTimes(5);
+    expect(handle).toHaveBeenCalledTimes(6);
   });
 
   it("envelope com JSON inválido vai direto para o dead letter sem chamar o handler", async () => {
@@ -215,31 +288,35 @@ describe("consumer de Redis Streams do gateway", () => {
 
     await waitFor(async () => (await redis.xlen(deadKey())) === 1);
     expect(handle).not.toHaveBeenCalled();
-    expect(await pendingCount(1)).toBe(0);
+    await waitFor(async () => (await pendingCount(1)) === 0);
   });
 
-  it("depois de uma queda, outro consumidor recupera os pendentes e o handler idempotente não duplica", async () => {
+  it("deploy: o consumidor novo processa antes os pendentes do antigo (outro nome) e o handler idempotente não duplica", async () => {
     // Primeira instância: lê 1 e 2, trava no 1 e "cai".
     const hang = jest.fn(() => new Promise<void>(() => undefined));
-    await startConsumer([1], deps(hang, { consumerName: "instancia-a" }));
+    await startConsumer([1], deps(hang, { consumerName: "instancia-a", claimMinIdleMs: 60000 }));
     await publish(1, envelope(1, 1));
     await publish(1, envelope(1, 2));
     await waitFor(() => hang.mock.calls.length === 1);
     await waitFor(async () => (await pendingCount(1)) === 2);
     await stopConsumer({ timeoutMs: 50 });
 
-    // Segunda instância, com outro nome: recupera por XPENDING/XCLAIM.
-    const applied = new Map<number, number>();
-    const handle = jest.fn(async (env: any) => {
-      if (applied.has(env.data.n)) return; // idempotente (como Message.count por id)
-      applied.set(env.data.n, 1);
-    });
-    await startConsumer([1], deps(handle, { consumerName: "instancia-b" }));
     await publish(1, envelope(1, 3));
+
+    // Segunda instância, com outro nome e min-idle alto: pega os pendentes de
+    // todos os consumidores do grupo antes da primeira leitura com ">".
+    const order: number[] = [];
+    const applied = new Set<number>();
+    const handle = jest.fn(async (env: any) => {
+      order.push(env.data.n);
+      if (applied.has(env.data.n)) return; // idempotente (como Message.count por id)
+      applied.add(env.data.n);
+    });
+    await startConsumer([1], deps(handle, { consumerName: "instancia-b", claimMinIdleMs: 60000 }));
 
     await waitFor(() => applied.size === 3);
     await waitFor(async () => (await pendingCount(1)) === 0);
-    expect([...applied.keys()].sort()).toEqual([1, 2, 3]);
+    expect(order).toEqual([1, 2, 3]);
     await sleep(400);
     expect(handle).toHaveBeenCalledTimes(3);
   });

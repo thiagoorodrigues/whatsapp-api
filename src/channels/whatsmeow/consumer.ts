@@ -15,23 +15,33 @@ import { logger, rawLogger } from "../../utils/logger";
 //   idempotentes, então reprocessar eventos antigos não duplica nada).
 // - Em série por conexão (uma entrada por vez, na ordem do stream); conexões
 //   diferentes andam em paralelo.
-// - XACK só depois que o handler termina sem lançar. Falha = fica pendente e
-//   volta pela varredura (XPENDING IDLE + XCLAIM) depois de `claimMinIdleMs`.
-//   Na 5ª entrega sem sucesso: XADD wa:dead + XACK + Log do sistema com
-//   protocolo. Envelope ilegível vai direto para wa:dead.
+// - XACK só depois que o handler termina sem lançar. Falha segura a fila da
+//   conexão (head-of-line): a mesma entrada é tentada de novo depois de 1 s,
+//   3 s, 10 s e 30 s, antes das seguintes, para que uma reação/recibo nunca
+//   rode antes da mensagem de que depende nem um evento `connection` antigo
+//   seja aplicado depois de um novo. Antes de cada nova tentativa,
+//   `XCLAIM ... 0 <id>` grava o contador de entregas no Redis e zera o idle
+//   (a varredura não pega a entrada). Na 5ª entrega sem sucesso: XADD wa:dead
+//   (`stream`, `id`, `e`, `error`, + `connectionId`, `deliveries`) + XACK +
+//   Log do sistema com protocolo, e a fila segue. Envelope ilegível vai
+//   direto para wa:dead.
+// - Handler que passa de `handlerTimeoutMs` não é abandonado: só gera aviso
+//   (e um XCLAIM JUSTID para zerar o idle); a fila espera a promessa terminar
+//   e o resultado dela decide (XACK ou nova tentativa). Abandonar e rodar de
+//   novo arriscaria o mesmo evento em paralelo consigo mesmo.
 //
-// Ordem x falhas: uma entrada que falhou não trava a conexão; as seguintes
-// seguem e ela volta para o fim da fila na varredura. Travar a conexão
-// esperando a nova tentativa (até ~5 min) atrasaria todas as conversas por
-// causa de um evento ruim; os handlers toleram a troca (ack nunca volta,
-// mensagem deduplicada por id). Na volta da api com o mesmo nome de
-// consumidor (container reiniciado), os pendentes do próprio consumidor são
-// processados antes das entradas novas; os de outro nome (deploy novo) só
-// voltam pela varredura, depois de ficarem `claimMinIdleMs` parados.
+// Invariante: uma instância da api por vez (atualização stop-first do Swarm).
+// Cada deploy usa um nome de consumidor novo (hostname-pid); ao começar a ler
+// um stream, o consumer pega os pendentes de TODOS os consumidores do grupo
+// (XPENDING completo + XCLAIM com min-idle 0, em ordem de id) e os processa
+// antes da primeira leitura com ">". Com duas instâncias vivas ao mesmo tempo
+// elas tomariam as entradas uma da outra.
 //
-// A varredura usa XPENDING + XCLAIM em vez de XAUTOCLAIM porque precisa do
-// contador de entregas (o XAUTOCLAIM não devolve) e porque não pode tomar de
-// volta uma entrada que ainda está rodando aqui (handler lento > min-idle).
+// A varredura periódica (XPENDING IDLE + XCLAIM, entradas paradas há
+// `claimMinIdleMs`) fica só para recuperar quedas no meio do caminho; o que
+// ela pega entra na fila na ordem do id do stream. Usa XPENDING + XCLAIM em
+// vez de XAUTOCLAIM porque precisa do contador de entregas (o XAUTOCLAIM não
+// devolve) e não pode tomar de volta uma entrada que ainda roda aqui.
 
 export const CONSUMER_GROUP = "wazzy-api";
 export const DEAD_LETTER_STREAM = "wa:dead";
@@ -53,6 +63,8 @@ export interface ConsumerDeps {
   claimMinIdleMs?: number;
   maxDeliveries?: number;
   handlerTimeoutMs?: number;
+  /** Esperas entre tentativas da mesma entrada (a última se repete). */
+  retryDelaysMs?: number[];
   stopTimeoutMs?: number;
   deadMaxLen?: number;
   /** Consumidores sem pendentes e parados há mais que isso saem do grupo. */
@@ -95,6 +107,10 @@ interface Lane {
   /** Ids na fila local ou rodando: a varredura não pega de novo. */
   known: Set<string>;
   worker: Promise<void> | null;
+  /** Só lê com ">" depois de pegar os pendentes do grupo. */
+  ready: boolean;
+  /** Acorda a espera entre tentativas (removeConnection, desligamento). */
+  wake: (() => void) | null;
 }
 
 type StreamReply = [string, [string, string[]][]][] | null;
@@ -114,14 +130,15 @@ const idMs = (id: string): number => Number(String(id).split("-")[0]) || 0;
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
-const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
-  let timer: NodeJS.Timeout;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`handler não terminou em ${ms} ms`)), ms);
-    // Não segura o processo no desligamento por causa de um handler travado.
-    if (typeof timer.unref === "function") timer.unref();
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+const idParts = (id: string): [number, number] => {
+  const [ms, seq] = String(id).split("-");
+  return [Number(ms) || 0, Number(seq) || 0];
+};
+
+const compareIds = (a: string, b: string): number => {
+  const [am, as] = idParts(a);
+  const [bm, bs] = idParts(b);
+  return am - bm || as - bs;
 };
 
 class StreamConsumer {
@@ -164,6 +181,7 @@ class StreamConsumer {
       claimMinIdleMs: deps.claimMinIdleMs ?? 60000,
       maxDeliveries: deps.maxDeliveries ?? MAX_DELIVERIES,
       handlerTimeoutMs: deps.handlerTimeoutMs ?? 180000,
+      retryDelaysMs: deps.retryDelaysMs && deps.retryDelaysMs.length ? deps.retryDelaysMs : [1000, 3000, 10000, 30000],
       stopTimeoutMs: deps.stopTimeoutMs ?? 15000,
       deadMaxLen: deps.deadMaxLen ?? 10000,
       staleConsumerMs: deps.staleConsumerMs ?? 24 * 60 * 60 * 1000
@@ -198,6 +216,8 @@ class StreamConsumer {
     // A entrada em andamento termina; as que estavam na fila local ficam
     // pendentes no Redis e voltam se a conexão for adicionada de novo.
     lane.active = false;
+    lane.ready = false;
+    lane.wake?.();
     this.interrupt();
   }
 
@@ -205,6 +225,7 @@ class StreamConsumer {
     this.stopping = true;
     if (this.sweepTimer) clearTimeout(this.sweepTimer);
     this.sweepTimer = null;
+    this.lanes.forEach(lane => lane.wake?.());
     this.interrupt();
     const workers = [...this.lanes.values()].map(lane => lane.worker).filter(Boolean) as Promise<void>[];
     const done = Promise.all([this.readLoop, this.sweeping, ...workers]).then(() => true);
@@ -249,20 +270,26 @@ class StreamConsumer {
         active: true,
         items: [],
         known: new Set(),
-        worker: null
+        worker: null,
+        ready: false,
+        wake: null
       };
       this.lanes.set(connectionId, lane);
     }
     lane.active = true;
+    lane.ready = false;
     try {
       await this.ensureGroup(lane.key);
-      // Pendentes do próprio consumidor (reinício com o mesmo nome, ou a
-      // conexão voltou): antes das entradas novas, para manter a ordem.
-      await this.claim(lane, 0, this.name);
+      // Pendentes de todos os consumidores do grupo (deploy novo = nome novo,
+      // reinício, conexão que voltou): antes da primeira leitura com ">",
+      // para manter a ordem. Vale pela invariante de uma instância por vez.
+      await this.claim(lane, 0);
     } catch (err) {
-      // Redis fora: a leitura tenta de novo e recria o grupo (NOGROUP).
+      // Redis fora: a leitura tenta de novo e recria o grupo (NOGROUP); os
+      // pendentes voltam pela varredura.
       logger.warn(`consumer whatsmeow: falha ao preparar ${lane.key}: ${errorText(err)}`);
     }
+    lane.ready = lane.active;
   }
 
   private async ensureGroup(key: string): Promise<void> {
@@ -278,7 +305,7 @@ class StreamConsumer {
   private async read(): Promise<void> {
     let backoff = 0;
     while (!this.stopping) {
-      const lanes = [...this.lanes.values()].filter(l => l.active && l.items.length < this.opts.laneHighWater);
+      const lanes = [...this.lanes.values()].filter(l => l.active && l.ready && l.items.length < this.opts.laneHighWater);
       if (!lanes.length) {
         // eslint-disable-next-line no-await-in-loop
         await this.pause(this.opts.blockMs);
@@ -304,7 +331,7 @@ class StreamConsumer {
         for (const [key, entries] of reply || []) {
           const lane = lanes.find(l => l.key === key);
           // Conexão removida durante a leitura: as entradas ficam pendentes.
-          if (lane) for (const [id, fields] of entries) this.enqueue(lane, { id, fields: fields || [], deliveries: 1 });
+          if (lane && lane.active && lane.ready) for (const [id, fields] of entries) this.enqueue(lane, { id, fields: fields || [], deliveries: 1 });
         }
       } catch (err) {
         if (this.stopping) break;
@@ -359,7 +386,11 @@ class StreamConsumer {
   private enqueue(lane: Lane, entry: Entry): void {
     if (lane.known.has(entry.id)) return;
     lane.known.add(entry.id);
-    lane.items.push(entry);
+    // Na ordem do id: pendentes recuperados pela varredura podem ser mais
+    // antigos que entradas já na fila.
+    let at = lane.items.length;
+    while (at > 0 && compareIds(lane.items[at - 1].id, entry.id) > 0) at -= 1;
+    lane.items.splice(at, 0, entry);
     this.pump(lane);
   }
 
@@ -404,19 +435,91 @@ class StreamConsumer {
       await this.deadLetter(lane, entry, raw, `envelope inválido: ${errorText(err)}`);
       return;
     }
-    try {
-      await withTimeout(Promise.resolve().then(() => this.opts.handle(env)), this.opts.handlerTimeoutMs);
-    } catch (err) {
-      if (entry.deliveries >= max) {
-        await this.deadLetter(lane, entry, raw, err);
+    let { deliveries } = entry;
+    for (let attempt = 0; ; attempt += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      const error = await this.runHandler(lane, entry.id, env);
+      if (error === null) {
+        // eslint-disable-next-line no-await-in-loop
+        await this.ack(lane, entry.id);
+        return;
+      }
+      if (deliveries >= max) {
+        // eslint-disable-next-line no-await-in-loop
+        await this.deadLetter(lane, { ...entry, deliveries }, raw, error);
         return;
       }
       rawLogger.warn(
-        `consumer whatsmeow: ${lane.key} ${entry.id} (${env.type}) falhou na tentativa ${entry.deliveries}/${max}: ${errorText(err)}`
+        `consumer whatsmeow: ${lane.key} ${entry.id} (${env.type}) falhou na tentativa ${deliveries}/${max}: ${errorText(error)}`
       );
-      return;
+      // Espera e toma a entrada de novo; sai se a conexão saiu ou a api está
+      // desligando (a entrada fica pendente e volta no próximo attach).
+      // eslint-disable-next-line no-await-in-loop
+      const next = await this.reclaim(lane, entry.id, attempt);
+      if (next === null) return;
+      deliveries = next;
     }
-    await this.ack(lane, entry.id);
+  }
+
+  /** Roda o handler até a promessa terminar; devolve o erro ou null. */
+  private async runHandler(lane: Lane, id: string, env: GatewayEnvelope): Promise<unknown | null> {
+    const timer = setTimeout(() => {
+      logger.warn(
+        `consumer whatsmeow: handler de ${lane.key} ${id} (${env.type}) passou de ${this.opts.handlerTimeoutMs} ms; a fila espera ele terminar`
+      );
+      // Zera o idle sem contar entrega: a varredura não toma a entrada.
+      this.redis.call("XCLAIM", lane.key, this.opts.group, this.name, "0", id, "JUSTID").catch(() => undefined);
+    }, this.opts.handlerTimeoutMs);
+    if (typeof timer.unref === "function") timer.unref();
+    try {
+      await this.opts.handle(env);
+      return null;
+    } catch (err) {
+      return err ?? new Error("handler falhou");
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Espera o backoff e faz `XCLAIM ... 0 <id>` (conta a entrega e zera o idle).
+   * Devolve o novo contador de entregas, ou null para largar a entrada
+   * (conexão removida, desligamento, entrada que sumiu do stream).
+   */
+  private async reclaim(lane: Lane, id: string, attempt: number): Promise<number | null> {
+    const delays = this.opts.retryDelaysMs;
+    for (let step = attempt; ; step += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await this.lanePause(lane, delays[Math.min(step, delays.length - 1)]);
+      if (!lane.active || this.stopping) return null;
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const claimed = (await this.redis.call("XCLAIM", lane.key, this.opts.group, this.name, "0", id)) as any[];
+        if (!claimed || !claimed.length || !claimed[0]) {
+          rawLogger.warn(`consumer whatsmeow: ${lane.key} ${id} não está mais pendente (retenção do stream?)`);
+          return null;
+        }
+        // eslint-disable-next-line no-await-in-loop
+        const rows = (await this.redis.call("XPENDING", lane.key, this.opts.group, id, id, "1")) as any[][];
+        return Number(rows?.[0]?.[3]) || attempt + 2;
+      } catch (err) {
+        // Redis fora: espera mais e tenta tomar de novo, sem rodar o handler.
+        rawLogger.warn(`consumer whatsmeow: XCLAIM de ${lane.key} ${id} falhou: ${errorText(err)}`);
+      }
+    }
+  }
+
+  private lanePause(lane: Lane, ms: number): Promise<void> {
+    return new Promise(resolve => {
+      const done = () => {
+        clearTimeout(timer);
+        lane.wake = null;
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      if (typeof timer.unref === "function") timer.unref();
+      lane.wake = done;
+    });
   }
 
   private async ack(lane: Lane, id: string): Promise<void> {
@@ -440,12 +543,12 @@ class StreamConsumer {
       lane.key,
       "id",
       entry.id,
-      "connectionId",
-      String(lane.connectionId),
-      "envelope",
+      "e",
       raw ?? "",
       "error",
       error,
+      "connectionId",
+      String(lane.connectionId),
       "deliveries",
       String(entry.deliveries)
     );
