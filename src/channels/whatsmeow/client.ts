@@ -65,6 +65,13 @@ export interface Health {
   sessions: number;
 }
 
+export interface GatewayContact {
+  jid: string;
+  lid?: string;
+  name?: string;
+  notify?: string;
+}
+
 export interface NumberCheck {
   number: string;
   exists: boolean;
@@ -209,6 +216,11 @@ export const gatewayClient = () => {
       call<GroupInfo>("GET", `${s(id)}/groups/${seg(jid)}`),
     rejectCall: (id: number, callId: string, from: string) =>
       call<{}>("POST", `${s(id)}/calls/${seg(callId)}/reject`, { data: { from } }),
+
+    // Baixa de novo a agenda do celular e devolve os contatos (nome da agenda
+    // e de perfil).
+    syncContacts: (id: number) =>
+      call<{ contacts: GatewayContact[] | null }>("POST", `${s(id)}/contacts/sync`, { long: true }),
 
     // raw = `raw.message` do evento; null quando o WhatsApp já não tem o arquivo.
     downloadMedia: (id: number, rawMessage: unknown) =>

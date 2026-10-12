@@ -4,6 +4,7 @@ import Message from "../../models/Message";
 import { wasSentByPlatform } from "../sentByPlatform";
 import { toInbound, GatewayMessageData, GatewayMessageEnvelope, ToInboundDeps } from "./toInbound";
 import { setStatus, WhatsmeowStatus } from "./state";
+import { GatewayContact } from "./client";
 import ProcessInboundMessage from "../../services/InboundServices/ProcessInboundMessage";
 import { verifyRecentCampaign } from "../../services/InboundServices/CampaignReplyService";
 import UpdateMessageAckService from "../../services/MessageServices/UpdateMessageAckService";
@@ -56,13 +57,6 @@ export interface PresenceData {
   chat: string;
   sender: string;
   state: string;
-}
-
-export interface GatewayContact {
-  jid: string;
-  lid?: string;
-  name?: string;
-  notify?: string;
 }
 
 export interface HistoryData {
@@ -233,7 +227,7 @@ const handleLidMapping = async (env: GatewayEnvelope<{ lid: string; pn: string }
   await ApplyLidMappingService({ whatsappId: connectionId, companyId, lid, pn });
 };
 
-const toSyncedContacts = (contacts: GatewayContact[] | null | undefined): SyncedContact[] =>
+export const toSyncedContacts = (contacts: GatewayContact[] | null | undefined): SyncedContact[] =>
   (contacts || [])
     .filter(c => c?.jid)
     .map(c => ({ id: c.jid, lid: c.lid || undefined, name: c.name || undefined, notify: c.notify || undefined }));

@@ -2,7 +2,17 @@ const findAllSynced = jest.fn();
 const findContact = jest.fn();
 const createContact = jest.fn();
 
+const engine = { whatsmeow: false };
+const syncContacts = jest.fn();
+const upsert = jest.fn();
+
 jest.mock("../../../channels", () => ({ getDefaultChannel: async () => ({ connectionId: 3 }) }));
+jest.mock("../../../config/whatsappEngine", () => ({ isWhatsmeow: () => engine.whatsmeow }));
+jest.mock("../../../channels/whatsmeow/client", () => ({ gatewayClient: () => ({ syncContacts }) }));
+jest.mock("../../../channels/whatsmeow/handlers", () => ({
+  toSyncedContacts: (cs: any[]) => (cs || []).map(c => ({ id: c.jid, name: c.name }))
+}));
+jest.mock("../../WhatsappContactServices/UpsertWhatsappContactsService", () => ({ __esModule: true, default: (a: any) => upsert(a) }));
 jest.mock("../../../models/WhatsappContact", () => ({ __esModule: true, default: { findAll: (...a: any[]) => findAllSynced(...a) } }));
 jest.mock("../../../models/Contact", () => ({ __esModule: true, default: { findOne: (...a: any[]) => findContact(...a) } }));
 jest.mock("../../ContactServices/CreateContactService", () => ({ __esModule: true, default: (a: any) => createContact(a) }));
@@ -11,6 +21,9 @@ jest.mock("../../ContactServices/CreateContactService", () => ({ __esModule: tru
 import ImportContactsService from "../ImportContactsService";
 
 beforeEach(() => {
+  engine.whatsmeow = false;
+  syncContacts.mockReset();
+  upsert.mockReset();
   findAllSynced.mockReset();
   findContact.mockReset().mockResolvedValue(null);
   createContact.mockReset();
@@ -78,5 +91,38 @@ describe("ImportContactsService", () => {
     findAllSynced.mockResolvedValue([{ jid: "999@lid", lid: "999@lid", number: null, name: "Só LID" }]);
     await ImportContactsService(1);
     expect(createContact).not.toHaveBeenCalled();
+  });
+
+  it("with whatsmeow, refreshes the phone agenda from the gateway before importing", async () => {
+    engine.whatsmeow = true;
+    syncContacts.mockResolvedValue({ contacts: [{ jid: "5511999999999@s.whatsapp.net", name: "Maria Agenda" }] });
+    findAllSynced.mockResolvedValue([]);
+
+    await ImportContactsService(1);
+
+    expect(syncContacts).toHaveBeenCalledWith(3);
+    expect(upsert).toHaveBeenCalledWith({
+      whatsappId: 3,
+      companyId: 1,
+      contacts: [{ id: "5511999999999@s.whatsapp.net", name: "Maria Agenda" }]
+    });
+    expect(upsert.mock.invocationCallOrder[0]).toBeLessThan(findAllSynced.mock.invocationCallOrder[0]);
+  });
+
+  it("with whatsmeow, still imports what is saved when the gateway fails", async () => {
+    engine.whatsmeow = true;
+    syncContacts.mockRejectedValue(new Error("not_connected"));
+    findAllSynced.mockResolvedValue([{ number: "5511999999999", name: "Maria Agenda" }]);
+
+    await ImportContactsService(1);
+
+    expect(upsert).not.toHaveBeenCalled();
+    expect(createContact).toHaveBeenCalledWith({ number: "5511999999999", name: "Maria Agenda", companyId: 1 });
+  });
+
+  it("with Baileys, does not call the gateway", async () => {
+    findAllSynced.mockResolvedValue([]);
+    await ImportContactsService(1);
+    expect(syncContacts).not.toHaveBeenCalled();
   });
 });
