@@ -6,12 +6,12 @@ export const contentFromFile = (fileName: string, path: string, caption?: string
   const mimeType = mime.lookup(path);
   if (!mimeType) throw new Error("Invalid mimetype");
   const kind = mimeType.split("/")[0];
-  if (kind === "video") return { type: "video", path, caption: caption || "", fileName };
+  if (kind === "video") return { type: "video", path, caption: caption || "", fileName, mimetype: mimeType };
   if (kind === "audio") return { type: "audio", path, mimetype: "audio/mp4", voice: true };
   if (kind === "document" || kind === "application") {
     return { type: "document", path, caption: caption || undefined, fileName, mimetype: mimeType };
   }
-  return { type: "image", path, caption: caption || undefined };
+  return { type: "image", path, caption: caption || undefined, mimetype: mimeType };
 };
 
 /**
@@ -23,10 +23,12 @@ export const contentFromUpload = (
   caption?: string
 ): OutgoingContent => {
   const kind = file.mimetype.split("/")[0];
-  if (kind === "video") return { type: "video", buffer: file.buffer, caption, fileName: file.originalname };
+  if (kind === "video") {
+    return { type: "video", buffer: file.buffer, caption, fileName: file.originalname, mimetype: file.mimetype };
+  }
   if (kind === "audio") return { type: "audio", buffer: file.buffer, mimetype: "audio/mp4", voice: true };
   if (kind === "document" || kind === "text" || kind === "application") {
     return { type: "document", buffer: file.buffer, caption, fileName: file.originalname, mimetype: file.mimetype };
   }
-  return { type: "image", buffer: file.buffer, caption };
+  return { type: "image", buffer: file.buffer, caption, mimetype: file.mimetype };
 };

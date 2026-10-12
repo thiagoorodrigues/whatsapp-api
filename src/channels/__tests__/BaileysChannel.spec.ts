@@ -11,7 +11,7 @@ import BaileysChannel, { jidOf, toBaileysContent } from "../baileys/BaileysChann
 // eslint-disable-next-line import/first
 import { contentFromFile, contentFromUpload } from "../media";
 // eslint-disable-next-line import/first
-import { newMessageId, wasSentByPlatform } from "../baileys/sentByPlatform";
+import { newMessageId, wasSentByPlatform } from "../sentByPlatform";
 
 const sent = { key: { id: "WA_SENT", fromMe: true, remoteJid: "5511999999999@s.whatsapp.net" } };
 
@@ -182,7 +182,7 @@ describe("BaileysChannel", () => {
 
 describe("media content", () => {
   it("builds content from files like the old getMessageOptions", () => {
-    expect(contentFromFile("v.mp4", "/tmp/v.mp4", "oi")).toEqual({ type: "video", path: "/tmp/v.mp4", caption: "oi", fileName: "v.mp4" });
+    expect(contentFromFile("v.mp4", "/tmp/v.mp4", "oi")).toEqual({ type: "video", path: "/tmp/v.mp4", caption: "oi", fileName: "v.mp4", mimetype: "video/mp4" });
     expect(contentFromFile("a.ogg", "/tmp/a.ogg")).toEqual({ type: "audio", path: "/tmp/a.ogg", mimetype: "audio/mp4", voice: true });
     expect(contentFromFile("d.pdf", "/tmp/d.pdf", "")).toEqual({
       type: "document",
@@ -191,7 +191,7 @@ describe("media content", () => {
       fileName: "d.pdf",
       mimetype: "application/pdf"
     });
-    expect(contentFromFile("i.png", "/tmp/i.png", "c")).toEqual({ type: "image", path: "/tmp/i.png", caption: "c" });
+    expect(contentFromFile("i.png", "/tmp/i.png", "c")).toEqual({ type: "image", path: "/tmp/i.png", caption: "c", mimetype: "image/png" });
     expect(() => contentFromFile("x", "/tmp/sem-extensao")).toThrow("Invalid mimetype");
   });
 

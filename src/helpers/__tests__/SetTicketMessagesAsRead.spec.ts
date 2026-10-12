@@ -27,8 +27,6 @@ const ticket: any = {
   update: jest.fn()
 };
 
-const raw = { key: { id: "WA1", fromMe: false, remoteJid: "140716097450191@lid" }, messageTimestamp: 1700000000 };
-
 beforeEach(() => {
   readMessages.mockReset();
   findAll.mockReset();
@@ -38,8 +36,8 @@ beforeEach(() => {
 describe("SetTicketMessagesAsRead", () => {
   it("sends read receipts for the unread received messages", async () => {
     findAll.mockResolvedValue([
-      { messagesWhatsappsId: "WA1", fromMe: false, dataJson: JSON.stringify(raw) },
-      { messagesWhatsappsId: null, fromMe: false, dataJson: null }
+      { messagesWhatsappsId: "WA1", fromMe: false, remoteJid: "140716097450191@lid", participant: null },
+      { messagesWhatsappsId: null, fromMe: false }
     ]);
     await SetTicketMessagesAsRead(ticket);
     expect(readMessages).toHaveBeenCalledWith([
@@ -49,11 +47,17 @@ describe("SetTicketMessagesAsRead", () => {
   });
 
   it("marks messages read in the system even when WhatsApp fails", async () => {
-    findAll.mockResolvedValue([{ messagesWhatsappsId: "WA1", fromMe: false, dataJson: JSON.stringify(raw) }]);
+    findAll.mockResolvedValue([{ messagesWhatsappsId: "WA1", fromMe: false, remoteJid: "140716097450191@lid" }]);
     readMessages.mockRejectedValue(new Error("App state key not present!"));
     await SetTicketMessagesAsRead(ticket);
     expect(update).toHaveBeenCalled();
     expect(ticket.update).toHaveBeenCalledWith({ unreadMessages: 0 });
+  });
+
+  it("não lê dataJson das mensagens (funciona só com as colunas)", async () => {
+    findAll.mockResolvedValue([]);
+    await SetTicketMessagesAsRead(ticket);
+    expect(findAll.mock.calls[0][0].attributes).not.toContain("dataJson");
   });
 
   it("resets the counter new messages are added to", async () => {

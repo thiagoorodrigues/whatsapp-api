@@ -53,7 +53,8 @@ jest.mock("../../CrmServices/ApplyFunnelRulesService", () => ({ __esModule: true
 jest.mock("../../QueueIntegrationServices/ShowQueueIntegrationService", () => ({ __esModule: true, default: (...a: any[]) => integration(...a) }));
 jest.mock("../../TypebotServices/typebotListener", () => ({ __esModule: true, default: (...a: any[]) => typebot(...a) }));
 jest.mock("../../WhatsappService/ShowWhatsAppService", () => ({ __esModule: true, default: async () => whatsapp }));
-jest.mock("../../TicketServices/FindOrCreateTicketService", () => ({ __esModule: true, default: async () => ticket }));
+const findOrCreateTicket = jest.fn(async (..._a: any[]) => ticket);
+jest.mock("../../TicketServices/FindOrCreateTicketService", () => ({ __esModule: true, default: (...a: any[]) => findOrCreateTicket(...a) }));
 jest.mock("../../TicketServices/FindOrCreateATicketTrakingService", () => ({ __esModule: true, default: async () => traking }));
 jest.mock("../../TicketServices/UpdateTicketService", () => ({ __esModule: true, default: jest.fn() }));
 jest.mock("../../CompanyService/VerifyCurrentSchedule", () => ({ __esModule: true, default: () => currentSchedule() }));
@@ -111,6 +112,23 @@ describe("ProcessInboundMessage", () => {
     expect(typebot).not.toHaveBeenCalled();
   });
 
+  it("a history message does not touch the conversation (its date would become now)", async () => {
+    await ProcessInboundMessage(inbound({ history: true, fromMe: true }));
+    expect(ticket.update).not.toHaveBeenCalledWith({ fromMe: true });
+  });
+
+  it("history conversations are filed closed by default", async () => {
+    await ProcessInboundMessage(inbound({ history: true }));
+    expect(findOrCreateTicket.mock.calls[0][7]).toBe("closed");
+  });
+
+  it("history conversations wait in the queue when the connection asks for it", async () => {
+    whatsapp.closeImportedTickets = false;
+    await ProcessInboundMessage(inbound({ history: true }));
+    expect(findOrCreateTicket.mock.calls[0][7]).toBe("pending");
+    delete whatsapp.closeImportedTickets;
+  });
+
   describe("follow-up", () => {
     it("a customer message stops the follow-up", async () => {
       await ProcessInboundMessage(inbound({ fromMe: false }));
@@ -152,6 +170,18 @@ describe("ProcessInboundMessage", () => {
       expect(send).toHaveBeenCalledWith(ticket, { type: "text", text: "Olá, sou o assistente" });
       expect(followUpAgent).toHaveBeenCalledWith(ticket);
       expect(send.mock.invocationCallOrder[0]).toBeLessThan(followUpAgent.mock.invocationCallOrder[0]);
+    });
+  });
+
+  describe("erro ao gravar", () => {
+    it("padrão (Baileys): registra e não lança", async () => {
+      findOrCreateTicket.mockRejectedValueOnce(new Error("db down"));
+      await expect(ProcessInboundMessage(inbound())).resolves.toBeUndefined();
+    });
+
+    it("rethrow (gateway): registra e lança, para o consumer tentar de novo", async () => {
+      findOrCreateTicket.mockRejectedValueOnce(new Error("db down"));
+      await expect(ProcessInboundMessage(inbound(), { rethrow: true })).rejects.toThrow("db down");
     });
   });
 });

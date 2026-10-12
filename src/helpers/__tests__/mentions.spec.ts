@@ -97,3 +97,31 @@ describe("previewWithMentions", () => {
     expect(previewWithMentions("oi", "oi", [])).toBeNull();
   });
 });
+
+describe("getMentionedJids (protojson do gateway)", () => {
+  it("lê mentionedJID de um texto estendido", () => {
+    const message = { extendedTextMessage: { text: "oi @123", contextInfo: { mentionedJID: ["123@lid"] } } };
+    expect(getMentionedJids(message)).toEqual(["123@lid"]);
+  });
+
+  it("lê mentionedJID em conteúdo embrulhado e em edições", () => {
+    const wrapped = {
+      ephemeralMessage: { message: { imageMessage: { caption: "@1", contextInfo: { mentionedJID: ["1@lid"] } } } }
+    };
+    expect(getMentionedJids(wrapped)).toEqual(["1@lid"]);
+    const edited = {
+      editedMessage: {
+        message: { protocolMessage: { editedMessage: { extendedTextMessage: { contextInfo: { mentionedJID: ["2@lid"] } } } } }
+      }
+    };
+    expect(getMentionedJids(edited)).toEqual(["2@lid"]);
+  });
+
+  it("junta as duas grafias sem repetir", () => {
+    const message = {
+      a: { contextInfo: { mentionedJid: ["1@lid", "2@lid"] } },
+      b: { contextInfo: { mentionedJID: ["2@lid", "3@lid"] } }
+    };
+    expect(getMentionedJids(message)).toEqual(["1@lid", "2@lid", "3@lid"]);
+  });
+});

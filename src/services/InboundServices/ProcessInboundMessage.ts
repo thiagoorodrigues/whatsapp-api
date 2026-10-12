@@ -189,7 +189,16 @@ const notifyTicketWebhook = async (inbound: InboundMessage, ticket: Ticket, conn
   }
 };
 
-const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => {
+interface ProcessOptions {
+  /**
+   * Lança o erro depois de registrá-lo (motor whatsmeow: o consumer não
+   * confirma o evento e tenta de novo). Sem isto (Baileys) o erro só é
+   * registrado, como sempre foi.
+   */
+  rethrow?: boolean;
+}
+
+const ProcessInboundMessage = async (inbound: InboundMessage, options: ProcessOptions = {}): Promise<void> => {
   const { companyId } = inbound;
 
   try {
@@ -275,7 +284,9 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
       unreadMessages,
       companyId,
       groupContact,
-      inbound.history
+      inbound.history,
+      inbound.history ? new Date(inbound.timestamp) : undefined,
+      whatsapp.closeImportedTickets === false ? "pending" : "closed"
     );
 
     // CRM rules run alongside the message; the service logs its own failures.
@@ -330,8 +341,10 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
     }
 
     // Atualiza o ticket se a ultima mensagem foi enviada por mim, para que possa ser finalizado. 
+    // History messages leave the conversation alone: an update here would
+    // move its date to now and break the list order.
     try {
-      await ticket.update({ fromMe: inbound.fromMe, });
+      if (!inbound.history) await ticket.update({ fromMe: inbound.fromMe, });
     } catch (e) {
       Sentry.captureException(e);
       console.log(e);
@@ -619,6 +632,7 @@ const ProcessInboundMessage = async (inbound: InboundMessage): Promise<void> => 
     console.log(err)
     Sentry.captureException(err);
     logger.error(`Error handling whatsapp message: Err: ${err}`);
+    if (options.rethrow) throw err;
   }
 };
 

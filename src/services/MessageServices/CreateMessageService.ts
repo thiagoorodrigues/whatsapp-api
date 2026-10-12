@@ -48,9 +48,13 @@ const CreateMessageService = async ({ messageData: data, companyId }: Request): 
   if (data.messagesWhatsappsId) {
     const existing = await Message.findOne({
       where: { messagesWhatsappsId: data.messagesWhatsappsId, companyId, whatsappId: whatsappId ?? null },
-      attributes: ["id"]
+      attributes: ["id", "ack"]
     });
     if (existing && existing.id !== data.id) messageData = { ...messageData, id: existing.id };
+    // Saving the echo again must not lower the delivery status already reached.
+    if (existing && messageData.ack !== undefined && Number(existing.ack) > messageData.ack) {
+      messageData = { ...messageData, ack: Number(existing.ack) };
+    }
   }
 
   await Message.upsert({ ...messageData, companyId });

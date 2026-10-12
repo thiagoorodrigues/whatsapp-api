@@ -11,6 +11,8 @@ whatsappRoutes.post("/whatsapp/", isAuth, WhatsAppController.store);
 
 whatsappRoutes.get("/whatsapp/:whatsappId", isAuth, WhatsAppController.show);
 
+whatsappRoutes.get("/whatsapp/:whatsappId/import-progress", isAuth, WhatsAppController.importProgress);
+
 whatsappRoutes.put("/whatsapp/:whatsappId", isAuth, WhatsAppController.update);
 
 whatsappRoutes.delete(

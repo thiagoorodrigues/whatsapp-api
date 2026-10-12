@@ -9,7 +9,9 @@ jest.mock("../../MessageServices/UpdateMessageService", () => ({ __esModule: tru
 jest.mock("../../../helpers/mediaStorage", () => ({ saveCompanyMedia: (...a: any[]) => saveMedia(...a) }));
 jest.mock("../../../libs/socket", () => ({ getIO: () => ({ to: () => ({ emit, to: () => ({ emit }) }) }) }));
 jest.mock("../../../models/Message", () => ({ __esModule: true, default: { findOne: (...a: any[]) => findQuoted(...a) } }));
-["Contact", "Queue", "Ticket", "User"].forEach(m => jest.mock(`../../../models/${m}`, () => ({})));
+const ticketUpdate = jest.fn();
+jest.mock("../../../models/Ticket", () => ({ __esModule: true, default: { update: (...a: any[]) => ticketUpdate(...a) } }));
+["Contact", "Queue", "User"].forEach(m => jest.mock(`../../../models/${m}`, () => ({})));
 
 // eslint-disable-next-line import/first
 import SaveInboundMessageService from "../SaveInboundMessageService";
@@ -46,6 +48,7 @@ beforeEach(() => {
   saveMedia.mockReset();
   findQuoted.mockReset().mockResolvedValue(null);
   emit.mockClear();
+  ticketUpdate.mockReset();
 });
 
 describe("SaveInboundMessageService", () => {
@@ -129,5 +132,29 @@ describe("SaveInboundMessageService", () => {
     await SaveInboundMessageService(inbound({ history: true, raw: { key: { id: "A1" }, status: null } }), closed, contact);
     expect(closed.status).toBe("closed");
     expect(create.mock.calls[0][0].messageData).toEqual(expect.objectContaining({ fromMe: false, read: true, ack: 0 }));
+  });
+
+  it("a history message newer than the conversation moves its date and last message", async () => {
+    const t: any = { ...ticket("closed"), updatedAt: new Date("2023-11-01T00:00:00Z") };
+    await SaveInboundMessageService(inbound({ history: true, text: "Mais nova" }), t, contact);
+    expect(ticketUpdate).toHaveBeenCalledWith(
+      { lastMessage: "Mais nova", updatedAt: new Date(1700000000000) },
+      { where: { id: 8 }, silent: true }
+    );
+    expect(t.update).not.toHaveBeenCalledWith(expect.objectContaining({ lastMessage: expect.anything() }));
+  });
+
+  it("an older history message does not overwrite the conversation", async () => {
+    const t: any = { ...ticket("closed"), updatedAt: new Date("2023-12-01T00:00:00Z") };
+    await SaveInboundMessageService(inbound({ history: true, text: "Antiga" }), t, contact);
+    expect(ticketUpdate).not.toHaveBeenCalled();
+    expect(t.update).not.toHaveBeenCalledWith(expect.objectContaining({ lastMessage: expect.anything() }));
+    expect(create).toHaveBeenCalled();
+  });
+
+  it("the message that created the conversation (same time) is its last message", async () => {
+    const t: any = { ...ticket("closed"), updatedAt: new Date(1700000000000) };
+    await SaveInboundMessageService(inbound({ history: true, text: "Primeira" }), t, contact);
+    expect(ticketUpdate).toHaveBeenCalledWith(expect.objectContaining({ lastMessage: "Primeira" }), expect.anything());
   });
 });

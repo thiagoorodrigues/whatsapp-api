@@ -1,5 +1,5 @@
 // Messaging channel of a connection (Whatsapp row), independent of how it
-// talks to WhatsApp. Today the only channel is Baileys (WhatsApp Web);
+// talks to WhatsApp. Hoje há dois canais, Baileys (WhatsApp Web) e o gateway whatsmeow;
 // the Meta Cloud API will be a second implementation of the same interface.
 
 /** Who to talk to: a contact (phone and, on WhatsApp Web, its LID) or a group. */
@@ -15,8 +15,8 @@ export type MediaSource = { buffer: Buffer } | { path: string } | { url: string 
 
 export type OutgoingContent =
   | { type: "text"; text: string; /** Ids of the people mentioned ("@name" in groups). */ mentions?: string[] }
-  | ({ type: "image"; caption?: string } & MediaSource)
-  | ({ type: "video"; caption?: string; fileName?: string } & MediaSource)
+  | ({ type: "image"; caption?: string; mimetype?: string } & MediaSource)
+  | ({ type: "video"; caption?: string; fileName?: string; mimetype?: string } & MediaSource)
   | ({ type: "audio"; mimetype?: string; voice?: boolean } & MediaSource)
   | ({ type: "document"; caption?: string; fileName?: string; mimetype?: string } & MediaSource);
 
@@ -26,6 +26,8 @@ export interface MessageRef {
   chatJid?: string | null;
   fromMe?: boolean;
   participant?: string | null;
+  /** Texto da mensagem (Message.body), para canais que citam sem o payload bruto. */
+  text?: string | null;
   /** Raw channel payload (Message.dataJson), when the channel needs it. */
   raw?: string | null;
 }
@@ -78,7 +80,7 @@ export interface GroupInfo {
 }
 
 export interface MessagingChannel {
-  readonly kind: "baileys";
+  readonly kind: "baileys" | "whatsmeow";
   readonly connectionId: number;
   /** Connected and authenticated. */
   isReady(): boolean;

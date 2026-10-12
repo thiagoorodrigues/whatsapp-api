@@ -47,6 +47,21 @@ const storeMedia = async (inbound: InboundMessage, ticket: Ticket) => {
  * Saves a received message (or one sent from the phone) in the ticket. An
  * edit updates the message it replaces.
  */
+// A history message only moves the conversation forward: its date becomes
+// the conversation's (the list is sorted by it) when it is the newest one,
+// and an older batch arriving later never overwrites a newer last message.
+const setLastMessage = async (ticket: Ticket, text: string, inbound: InboundMessage): Promise<void> => {
+  if (!inbound.history) {
+    await ticket.update({ lastMessage: text });
+    return;
+  }
+  const at = new Date(inbound.timestamp);
+  if (ticket.updatedAt && at.getTime() < new Date(ticket.updatedAt).getTime()) return;
+  await Ticket.update({ lastMessage: text, updatedAt: at } as any, { where: { id: ticket.id }, silent: true });
+  ticket.lastMessage = text;
+  ticket.updatedAt = at;
+};
+
 const SaveInboundMessageService = async (
   inbound: InboundMessage,
   ticket: Ticket,
@@ -80,7 +95,7 @@ const SaveInboundMessageService = async (
     const { media, path } = await storeMedia(inbound, ticket);
     const fileName = media?.fileName || (path ? path.split("/").pop() : "");
     const body = inbound.text || fileName;
-    await ticket.update({ lastMessage: body || fileName });
+    await setLastMessage(ticket, body || fileName, inbound);
     saved = await CreateMessageService({
       companyId: ticket.companyId,
       messageData: {
@@ -99,7 +114,7 @@ const SaveInboundMessageService = async (
       mediaType: inbound.channelType,
       isEdited: !!inbound.editOf
     };
-    await ticket.update({ lastMessage: inbound.text });
+    await setLastMessage(ticket, inbound.text, inbound);
     if (inbound.editOf) {
       await UpdateMessageService({ messageData, companyId: ticket.companyId, whatsappId: inbound.connectionId });
       saved = null;

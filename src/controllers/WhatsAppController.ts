@@ -1,8 +1,11 @@
 import { Request, Response } from "express";
+import { getImportProgress } from "../libs/historyImportProgress";
 import { getIO } from "../libs/socket";
 import { removeWbot } from "../libs/wbot";
 import { requestContext } from "../libs/requestContext";
 import { StartWhatsAppSession } from "../services/WbotServices/StartWhatsAppSession";
+import { isWhatsmeow } from "../config/whatsappEngine";
+import SessionService from "../services/WhatsmeowServices/SessionService";
 
 import CreateWhatsAppService from "../services/WhatsappService/CreateWhatsAppService";
 import DeleteWhatsAppService from "../services/WhatsappService/DeleteWhatsAppService";
@@ -30,6 +33,7 @@ interface WhatsappData {
   expiresTicket?: number;
   expiresInactiveMessage?: string;
   importMessages?: boolean;
+  closeImportedTickets?: boolean;
   showOnline?: boolean;
   color?: string;
   initialDate?: string;
@@ -59,6 +63,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     queueIds,
     token,
     importMessages = false,
+    closeImportedTickets,
     showOnline = false,
     color,
     initialDate = null,
@@ -84,6 +89,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     companyId,
     token: req.user.profile === "admin" ? token : undefined,
     importMessages,
+    closeImportedTickets,
     showOnline,
     color,
     initialDate,
@@ -97,7 +103,14 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   });
 
   // Fora do contexto da requisição: a sessão vive além dela.
-  requestContext.exit(() => StartWhatsAppSession(whatsapp, companyId));
+  if (isWhatsmeow()) {
+    // O consumer passa a ler wa:events:{id} antes do connect (para não perder o QR).
+    requestContext.exit(() =>
+      SessionService.add(whatsapp).catch(err => logger.error(`whatsmeow: conexão ${whatsapp.id} não iniciou: ${err}`))
+    );
+  } else {
+    requestContext.exit(() => StartWhatsAppSession(whatsapp, companyId));
+  }
 
   const io = getIO();
   io.to(companyRoom(companyId)).emit(`company-${companyId}-whatsapp`, {
@@ -171,7 +184,12 @@ export const remove = async (
   await ShowWhatsAppService(whatsappId, companyId);
 
   await DeleteWhatsAppService(whatsappId);
-  removeWbot(+whatsappId);
+  if (isWhatsmeow()) {
+    // Desparelha no gateway, para de ler o stream e esquece a conexão.
+    await SessionService.remove(+whatsappId);
+  } else {
+    removeWbot(+whatsappId);
+  }
 
   const io = getIO();
   io.to(companyRoom(companyId)).emit(`company-${companyId}-whatsapp`, {
@@ -181,3 +199,7 @@ export const remove = async (
 
   return res.status(200).json({ message: "Whatsapp deleted." });
 };
+
+// Progress of the history import (null when there is none in memory).
+export const importProgress = async (req: Request, res: Response): Promise<Response> =>
+  res.json(getImportProgress(Number(req.params.whatsappId), req.user.companyId));

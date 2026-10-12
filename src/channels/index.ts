@@ -3,15 +3,19 @@ import Ticket from "../models/Ticket";
 import GetDefaultWhatsApp from "../helpers/GetDefaultWhatsApp";
 import GetDefaultWhatsAppByUser from "../helpers/GetDefaultWhatsAppByUser";
 import BaileysChannel from "./baileys/BaileysChannel";
+import WhatsmeowChannel from "./whatsmeow/WhatsmeowChannel";
+import { isWhatsmeow } from "../config/whatsappEngine";
 import { ChatAddress, MessageRef, MessagingChannel } from "./types";
 
 export * from "./types";
 
 /**
  * Channel of a connection. Throws ERR_WAPP_NOT_INITIALIZED when the
- * connection has no live session.
+ * connection has no live session. O motor (WHATSAPP_ENGINE) escolhe entre o
+ * gateway whatsmeow e o Baileys (padrão).
  */
-export const getChannel = (connectionId: number): MessagingChannel => new BaileysChannel(connectionId);
+export const getChannel = (connectionId: number): MessagingChannel =>
+  isWhatsmeow() ? new WhatsmeowChannel(connectionId) : new BaileysChannel(connectionId);
 
 /** Channel of a ticket; a ticket without connection takes its user's default. */
 export const getTicketChannel = async (ticket: Ticket): Promise<MessagingChannel> => {
@@ -45,11 +49,13 @@ export const messageRef = (message: {
   remoteJid?: string | null;
   participant?: string | null;
   fromMe?: boolean;
+  body?: string | null;
   dataJson?: string | null;
 }): MessageRef => ({
   externalId: message.messagesWhatsappsId,
   chatJid: message.remoteJid,
   participant: message.participant,
   fromMe: message.fromMe,
+  text: message.body,
   raw: message.dataJson
 });

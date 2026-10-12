@@ -19,7 +19,10 @@ const UpdateMessageAckService = async (externalId: string, ack: number | null | 
       where: { messagesWhatsappsId: externalId, whatsappId },
       include: ["contact", { model: Message, as: "quotedMsg", include: ["contact"] }]
     });
-    if (!message) return;
+    // Status never goes back. Receipts arrive out of order: the "sender"
+    // receipt our own phone sends (status 2) can come after the contact's
+    // read receipt (4) and would turn the blue checks back into one.
+    if (!message || Number(message.ack) >= ack) return;
     await message.update({ ack });
 
     getIO()

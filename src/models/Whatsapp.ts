@@ -90,6 +90,12 @@ class Whatsapp extends Model<Whatsapp> {
   @Column
   importMessages: boolean;
 
+  // History import: file the imported conversations as closed (Resolvidos)
+  // or leave them waiting in the queue.
+  @Default(true)
+  @Column
+  closeImportedTickets: boolean;
+
   @Default(false)
   @Column
   showOnline: boolean;

@@ -9,15 +9,12 @@ import {
   WAMessageUpdate,
   WASocket
 } from "@whiskeysockets/baileys";
-import { wasSentByPlatform } from "../../channels/baileys/sentByPlatform";
+import { wasSentByPlatform } from "../../channels/sentByPlatform";
 import { filterMessages } from "../../channels/baileys/parse";
 import toInbound from "../../channels/baileys/toInbound";
-import { sleep } from "../../helpers/botUtils";
-import { SerialQueue, queueFor } from "../../helpers/serialQueue";
-import { toPhoneNumber, toUserLid } from "../../helpers/GetPhoneJid";
+import { queueFor } from "../../helpers/serialQueue";
 import { handlePresenceUpdate } from "../TicketServices/ContactTypingService";
 import { forgetGroup } from "../../libs/whatsappCache";
-import Contact from "../../models/Contact";
 import Message from "../../models/Message";
 import MarkReadOnDeviceService from "../MessageServices/MarkReadOnDeviceService";
 import Ticket from "../../models/Ticket";
@@ -29,14 +26,15 @@ import ProcessInboundMessage from "../InboundServices/ProcessInboundMessage";
 import ReactToMessageService from "../MessageServices/ReactToMessageService";
 import UpdateMessageAckService from "../MessageServices/UpdateMessageAckService";
 import ShowWhatsAppService from "../WhatsappService/ShowWhatsAppService";
+import { createHistoryImporter, importDay } from "./historyImport";
+import { publishImportProgress } from "../../libs/historyImportProgress";
 import FinishHistoryImportService from "../WhatsappService/FinishHistoryImportService";
+import ApplyLidMappingService from "../WhatsappContactServices/ApplyLidMappingService";
 import UpsertWhatsappContactsService, { SyncedContact } from "../WhatsappContactServices/UpsertWhatsappContactsService";
 
 // WhatsApp Web (Baileys) events of a connection. Messages are turned into the
 // channel-neutral InboundMessage (channels/baileys/toInbound) and handled by
 // services/InboundServices; nothing here knows about tickets or bots.
-
-const HISTORY_IMPORT_IDLE_MS = 10 * 60 * 1000;
 
 type Session = WASocket & {
   id?: number;
@@ -65,12 +63,6 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
       onBacklog: size => logger.warn(`messages queue (whatsapp ${wbot.id}) has ${size} pending`)
     });
 
-    // Importação de histórico tem fila própria: um lote pode levar minutos
-    // (2 s por mensagem) e não pode segurar as mensagens ao vivo.
-    const historyQueue = new SerialQueue(`history-${wbot.id}`, {
-      onError: err => logger.error(`history queue (whatsapp ${wbot.id}): ${err?.message || err}`),
-      taskTimeoutMs: 60 * 60 * 1000
-    });
 
     wbot.ev.on("messages.upsert", (messageUpsert: ImessageUpsert) => {
       const messages = messageUpsert.messages.filter(filterMessages);
@@ -107,17 +99,7 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
     // Baileys 7 reports every phone <-> LID pair it discovers; remember it on
     // the contact so sends go to the LID and LID-only messages (e.g. sent
     // from another linked device) land on the same contact.
-    wbot.ev.on("lid-mapping.update", async ({ pn, lid }) => {
-      try {
-        const number = toPhoneNumber(pn);
-        const userLid = toUserLid(lid);
-        if (!userLid || !number) return;
-        await Contact.update({ lid: userLid }, { where: { number, companyId } });
-        await saveSyncedContacts([{ id: `${number}@s.whatsapp.net`, lid: userLid }]);
-      } catch (err) {
-        logger.warn(`lid-mapping.update failed for ${lid}: ${err}`);
-      }
-    });
+    wbot.ev.on("lid-mapping.update", ({ pn, lid }) => ApplyLidMappingService({ whatsappId: wbot.id, companyId, lid, pn }));
 
     // Contacts WhatsApp sends (address book and profile names): kept per
     // connection to show names in group mentions and for "Importar contatos".
@@ -185,78 +167,33 @@ const wbotMessageListener = async (wbot: Session, companyId: number): Promise<vo
       }
     });
 
-    // The history arrives in chunks right after the QR is read, and WhatsApp
-    // does not say when the last one came. Ten minutes without a new chunk
-    // (counted after the last one is processed) means the import is over.
-    let importIdleTimer: NodeJS.Timeout | undefined;
-    const finishImportWhenIdle = () => {
-      clearTimeout(importIdleTimer);
-      importIdleTimer = setTimeout(() => {
-        FinishHistoryImportService(wbot.id!, companyId)
-          .catch(err => logger.error(`finish history import (whatsapp ${wbot.id}): ${err?.message || err}`));
-      }, HISTORY_IMPORT_IDLE_MS);
-    };
+    // O histórico chega em lotes logo após a leitura do QR Code. Os lotes vão
+    // para uma fila própria (um lote pode levar minutos e não pode segurar as
+    // mensagens ao vivo); a opção só é desligada com a fila vazia e ociosa.
+    const history = createHistoryImporter<WAMessage>({
+      load: async () => {
+        const conn = await ShowWhatsAppService(wbot.id!, companyId);
+        return {
+          importMessages: !!conn.importMessages,
+          initialDate: importDay(conn.initialDate),
+          finalDate: importDay(conn.finalDate)
+        };
+      },
+      exists: async id => (await Message.count({ where: { messagesWhatsappsId: id, whatsappId: wbot.id } })) > 0,
+      handle: message => handleMessage(message, wbot, companyId, true),
+      finish: () => FinishHistoryImportService(wbot.id!, companyId),
+      log: line => logger.info(`importação de histórico (whatsapp ${wbot.id}): ${line}`),
+      report: progress => publishImportProgress(wbot.id!, companyId, progress)
+    });
     wbot.ev.on("connection.update", ({ connection }) => {
-      if (connection === "close") clearTimeout(importIdleTimer);
+      if (connection === "close") history.cancel();
     });
 
-    const importHistory = async (contacts: unknown[], messages: WAMessage[]) => {
-      await saveSyncedContacts(contacts as SyncedContact[]);
-      logger.info("Chamado para serviço de importação de messages;");
-
-      const whatsapp = await ShowWhatsAppService(wbot.id!, companyId);
-
-      const dateInitial = whatsapp.initialDate;
-      const dateFinal = whatsapp.finalDate
-
-      if (whatsapp.importMessages) {
-        logger.info("Serviço de importação de messages iniciado;");
-
-        const initialDate = dateInitial ? new Date(`${dateInitial} 00:00:00`).getTime() : null;
-        const finalDate = dateFinal ? new Date(`${dateFinal} 23:59:59`).getTime() : null;
-
-        logger.info(`Data inicial de importacao -> ${initialDate}`);
-        logger.info(`Data final de importacao -> ${finalDate}`);
-
-        const messageList = messages.filter(filterMessages).map(msg => msg);
-        if (!messageList) return;
-
-        if (initialDate && finalDate) {
-          for (let message of messageList) {
-            const messageTimestamp = Number(message.messageTimestamp) * 1000; // Assuming messageTimestamp is in seconds
-            const messageExists = await Message.count({ where: { messagesWhatsappsId: message.key.id!, whatsappId: wbot.id } });
-
-            if (!messageExists && messageTimestamp > initialDate && messageTimestamp < finalDate) {
-              // logger.info(message.key.remoteJid);
-              // logger.info(timeConverter(Number(message.messageTimestamp)));
-              await handleMessage(message, wbot, companyId, true);
-              await sleep(2000); // 2 seconds sleep
-            }
-          }
-        } else if (initialDate && !finalDate) {
-          for (let message of messageList) {
-            const messageTimestamp = Number(message.messageTimestamp) * 1000; // Assuming messageTimestamp is in seconds
-            const messageExists = await Message.count({ where: { messagesWhatsappsId: message.key.id!, whatsappId: wbot.id } });
-
-            if (!messageExists && messageTimestamp > initialDate) {
-              // logger.info(message.key.remoteJid);
-              // logger.info(timeConverter(Number(message.messageTimestamp)));
-              await handleMessage(message, wbot, companyId, true);
-              await sleep(2000); // 2 seconds sleep
-            }
-          }
-        } else {
-          logger.info("Não há datas selecionadas.");
-        }
-
-        //logger.info("Serviço de importação de messages finalizado;");
-        finishImportWhenIdle();
-      }
-    };
-
-    wbot.ev.on("messaging-history.set", ({ contacts, messages }) => {
-      clearTimeout(importIdleTimer);
-      historyQueue.push(() => importHistory(contacts, messages));
+    wbot.ev.on("messaging-history.set", ({ contacts, messages, progress }) => {
+      history.onBatch(messages.filter(filterMessages), () => saveSyncedContacts(contacts as SyncedContact[]), progress);
+    });
+    wbot.ev.on("messaging-history.status", ({ status }) => {
+      if (status === "complete") history.receivedAll();
     });
 
   } catch (error) {

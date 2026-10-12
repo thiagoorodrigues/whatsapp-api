@@ -19,7 +19,7 @@ const SetTicketMessagesAsRead = async (ticket: Ticket): Promise<void> => {
       fromMe: false,
       read: false
     },
-    attributes: ["id", "messagesWhatsappsId", "remoteJid", "participant", "fromMe", "dataJson"],
+    attributes: ["id", "messagesWhatsappsId", "remoteJid", "participant", "fromMe"],
     order: [["createdAt", "DESC"]],
     limit: 100
   });

@@ -31,7 +31,7 @@ interface Request {
 /**
  * Saves a message the platform sent to a ticket's contact (media goes to
  * the company's folder on the server). Its echo from
- * WhatsApp is ignored (see channels/baileys/sentByPlatform), so this is
+ * WhatsApp is ignored (see channels/sentByPlatform), so this is
  * where it gets into the ticket, like the echo used to do.
  */
 const SaveSentMessageService = async ({ ticket, sent, body, media, quotedMsgId, forwarded, followUpEnrollmentId }: Request): Promise<Message> => {

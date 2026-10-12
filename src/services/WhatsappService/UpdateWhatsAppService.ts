@@ -27,6 +27,7 @@ interface WhatsappData {
   expiresTicket?: number;
   expiresInactiveMessage?: string;
   importMessages?: boolean;
+  closeImportedTickets?: boolean;
   showOnline?: boolean;
   color?: string;
   initialDate?: string;
@@ -65,6 +66,7 @@ const UpdateWhatsAppService = async ({ whatsappData, whatsappId, companyId }: Re
     queueIds = [],
     token,
     importMessages = false,
+    closeImportedTickets,
     showOnline,
     color,
     initialDate = null,
@@ -140,6 +142,8 @@ const UpdateWhatsAppService = async ({ whatsappData, whatsappId, companyId }: Re
     // Absent = keep (non-admins never send it); empty = no API access.
     ...(token !== undefined ? { token: token || null } : {}),
     importMessages,
+    // Absent = keep the current choice.
+    ...(closeImportedTickets !== undefined ? { closeImportedTickets: !!closeImportedTickets } : {}),
     showOnline,
     ...(color !== undefined ? { color: connectionColor(color) } : {}),
     initialDate,

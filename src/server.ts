@@ -2,7 +2,7 @@ import gracefulShutdown from "http-graceful-shutdown";
 import app from "./app";
 import { initIO } from "./libs/socket";
 import { logger } from "./utils/logger";
-import { StartAllWhatsAppsSessions } from "./services/WbotServices/StartAllWhatsAppsSessions";
+import { StartWhatsAppSessionsOnBoot } from "./services/WbotServices/StartAllWhatsAppsSessions";
 import Company from "./models/Company";
 import { startQueueProcess } from "./queues";
 import { TransferTicketQueue } from "./wbotTransferTicketQueue";
@@ -10,12 +10,21 @@ import cron from "node-cron";
 import { resumeInterruptedIndexing } from "./services/AiAgentServices/knowledge/KnowledgeService";
 import { flushLogs } from "./libs/systemLog";
 import PurgeSystemLogsService from "./services/SystemLogServices/PurgeSystemLogsService";
+import { isWhatsmeow, validateEngineConfig } from "./config/whatsappEngine";
+import SessionService from "./services/WhatsmeowServices/SessionService";
 import { purgeServerMetrics, recordServerMetrics } from "./services/ServerMonitorServices/metricsHistory";
 
 // Without these the code would sign tokens with a public default secret.
 const missing = ["JWT_SECRET", "JWT_REFRESH_SECRET"].filter(k => !process.env[k]);
 if (missing.length) {
   console.error(`Missing required environment variables: ${missing.join(", ")}`);
+  process.exit(1);
+}
+
+// Motor inválido ou gateway sem URL/token: melhor não subir do que falhar no primeiro envio.
+const engineError = validateEngineConfig();
+if (engineError) {
+  console.error(engineError);
   process.exit(1);
 }
 
@@ -32,14 +41,10 @@ process.on("uncaughtException", err => {
 
 const server = app.listen(process.env.PORT, async () => {
   const companies = await Company.findAll();
-  const allPromises: any[] = [];
 
-  companies.map(async c => {
-    const promise = StartAllWhatsAppsSessions(c.id);
-    allPromises.push(promise);
-  });
-
-  Promise.all(allPromises).then(() => {
+  // Baileys: conexões de cada empresa; whatsmeow: consumer + health +
+  // reconciliação com o gateway. As filas só depois.
+  StartWhatsAppSessionsOnBoot(companies.map(c => c.id)).then(() => {
     startQueueProcess();
   });
 
@@ -86,4 +91,12 @@ cron.schedule("45 3 * * *", async () => {
 });
 
 initIO(server);
-gracefulShutdown(server, { onShutdown: () => flushLogs() });
+gracefulShutdown(server, {
+  onShutdown: async () => {
+    // Motor whatsmeow: para de ler os streams (espera os handlers em andamento) e o health.
+    if (isWhatsmeow()) {
+      await SessionService.shutdown().catch(err => logger.error({ err }, "Desligamento do consumer whatsmeow falhou"));
+    }
+    await flushLogs();
+  }
+});

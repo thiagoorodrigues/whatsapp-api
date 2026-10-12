@@ -15,6 +15,7 @@ import { isEmpty, isNil, isArray } from "lodash";
 import CampaignSetting from "./models/CampaignSetting";
 import CampaignShipping from "./models/CampaignShipping";
 import { getChannel, numberAddress } from "./channels";
+import { campaignWindow } from "./helpers/campaignWindow";
 import { contentFromFile } from "./channels/media";
 import mime from "mime-types";
 import SaveCampaignMessageService, { campaignText } from "./services/CampaignService/SaveCampaignMessageService";
@@ -329,11 +330,12 @@ async function handleVerifyCampaigns(job) {
    * @todo
    * Implementar filtro de campanhas
    */
+  const { from, to } = campaignWindow();
   const campaigns: { id: number; scheduledAt: string }[] =
     await sequelize.query(
       `select id, "scheduledAt" from "Campaigns" c
-    where "scheduledAt" between now() and now() + '1 hour'::interval and status = 'PROGRAMADA'`,
-      { type: QueryTypes.SELECT }
+    where "scheduledAt" between :from and :to and status = 'PROGRAMADA'`,
+      { type: QueryTypes.SELECT, replacements: { from, to } }
     );
 
   if (campaigns.length > 0)
