@@ -15,7 +15,7 @@ jest.mock("../CompanyIntegrationService", () => ({
 }));
 
 // eslint-disable-next-line import/first
-import { bairros, cep, credenciados, cidades, estados, imagem } from "../PlamevRedeService";
+import { bairros, cep, credenciados, cidades, estados, imagem, imagemPlano, planos } from "../PlamevRedeService";
 
 beforeEach(() => {
   plamevGet.mockReset();
@@ -71,6 +71,21 @@ describe("PlamevRedeService", () => {
     expect(lista[0]).not.toHaveProperty("extra");
     expect(opts).toEqual({ imagemBase: "https://service.plamev-hm.com/" });
     await expect(imagem(8, { credenciados: [] })).rejects.toThrow("wrong company or provider");
+  });
+
+  it("requires the client state for plans and reads them with the company token", async () => {
+    await expect(planos(7, "")).rejects.toMatchObject({ message: "ERR_INTEGRATION_FILTER_REQUIRED" });
+    plamevGet.mockResolvedValue({ Coberturas: [{ Id: "c1", Nome: "SLIM", TiposCoberturasNome: "Slim", OrigemCheckout: "SITE", ExibeSite: "1" }] });
+    expect((await planos(7, "mg")).map(p => p.nome)).toEqual(["Slim"]);
+    expect(plamevGet.mock.calls[0][1]).toBe("Coberturas/BuscarCoberturasComPreco/");
+    expect(plamevGet.mock.calls[0][2]).toMatchObject({ EstadosId: "mg" });
+  });
+
+  it("draws a plan image only for the company with the integration", async () => {
+    const png = await imagemPlano(7, { plano: { id: "c1", nome: "Slim", precoCartao: 49.99 } });
+    expect(png.subarray(0, 4).toString("hex")).toBe("89504e47");
+    await expect(imagemPlano(8, { plano: { id: "c1" } })).rejects.toThrow("wrong company or provider");
+    await expect(imagemPlano(7, {})).rejects.toMatchObject({ message: "ERR_INTEGRATION_FILTER_REQUIRED" });
   });
 
   it("passes the filters to the credenciados search", async () => {

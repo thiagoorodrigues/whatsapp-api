@@ -38,6 +38,14 @@ export const plamevImagem = async (req: Request, res: Response): Promise<Respons
   return res.type("png").send(png);
 };
 
+export const plamevPlanos = async (req: Request, res: Response): Promise<Response> =>
+  res.json(await PlamevRede.planos(req.user.companyId, str(req.query.estadoId) || ""));
+
+export const plamevPlanoImagem = async (req: Request, res: Response): Promise<Response> => {
+  const png = await PlamevRede.imagemPlano(req.user.companyId, req.body || {});
+  return res.type("png").send(png);
+};
+
 export const plamevCredenciados = async (req: Request, res: Response): Promise<Response> =>
   res.json(
     await PlamevRede.credenciados(req.user.companyId, {

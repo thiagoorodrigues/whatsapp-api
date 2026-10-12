@@ -1,6 +1,8 @@
 import AppError from "../../errors/AppError";
 import { consultarCep } from "../../helpers/consultaCep";
 import { credenciadoDaTela, gerarImagemRede } from "./providers/plamev/redeImagem";
+import { listPlanos, Plano } from "./providers/plamev/planos";
+import { gerarImagemPlano, planoDaTela } from "./providers/plamev/planoImagem";
 import { withSavedToken } from "./CompanyIntegrationService";
 import { plamevGet } from "./providers/plamev/client";
 import { plamevApiUrl } from "./providers/plamev";
@@ -53,3 +55,13 @@ export const imagem = async (companyId: number, body: { credenciados?: unknown }
   const lista = (Array.isArray(body?.credenciados) ? body.credenciados : []).map(credenciadoDaTela);
   return run(companyId, () => gerarImagemRede(lista, { imagemBase: plamevApiUrl() }));
 };
+
+// Planos que o site vende no estado do cliente (o preço depende do estado).
+export const planos = async (companyId: number, estadoId: string): Promise<Plano[]> => {
+  if (!estadoId) throw new AppError("ERR_INTEGRATION_FILTER_REQUIRED", 400);
+  return run(companyId, get => listPlanos(get, estadoId));
+};
+
+// PNG de um plano, pelo token da empresa (só com a integração conectada).
+export const imagemPlano = async (companyId: number, body: { plano?: unknown }): Promise<Buffer> =>
+  run(companyId, async () => gerarImagemPlano(body?.plano ? planoDaTela(body.plano) : null));

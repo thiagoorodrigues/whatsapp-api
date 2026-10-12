@@ -21,9 +21,9 @@ const resolveFont = (file: string): string | null => {
   }
 };
 const FONTS = ["LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf"].map(resolveFont).filter((f): f is string => !!f);
-const FONT = "Liberation Sans";
+export const FONT = "Liberation Sans";
 
-const C = {
+export const C = {
   brand: "#0F6E43",
   brandSoft: "#E5F3EB",
   page: "#F3F6F4",
@@ -39,7 +39,7 @@ const C = {
   avatar: ["#2E7D6B", "#2F6F75", "#B4262E", "#8A5A00", "#6E45A8", "#0F7373"]
 };
 
-const ICON = {
+export const ICON = {
   place: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 010-5 2.5 2.5 0 010 5z",
   phone:
     "M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z",
@@ -48,11 +48,11 @@ const ICON = {
   star: "M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
 };
 
-const esc = (v: string): string =>
+export const esc = (v: string): string =>
   v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
 // Sem medir o texto: largura média por caractere da Liberation Sans.
-const wrap = (text: string, maxWidth: number, size: number, bold = false, maxLines = 2): string[] => {
+export const wrap = (text: string, maxWidth: number, size: number, bold = false, maxLines = 2): string[] => {
   const perLine = Math.max(8, Math.floor(maxWidth / (size * (bold ? 0.56 : 0.52))));
   const lines: string[] = [];
   let line = "";
@@ -104,7 +104,7 @@ interface Card {
   draw: (x: number, y: number, height: number) => string;
 }
 
-const icon = (path: string, x: number, y: number, size: number, color: string): string =>
+export const icon = (path: string, x: number, y: number, size: number, color: string): string =>
   `<path d="${path}" fill="${color}" transform="translate(${x} ${y}) scale(${size / 24})"/>`;
 
 // solo: a imagem é só este cartão (sem moldura nem borda).
@@ -289,6 +289,15 @@ export const credenciadoDaTela = (raw: any): Credenciado => ({
   logo: str(raw?.logo, 1000)
 });
 
+// SVG → PNG com a fonte acima (também usado pela imagem dos planos).
+export const svgParaPng = (svg: string): Buffer => {
+  const resvg = new Resvg(svg, {
+    font: { fontFiles: FONTS, loadSystemFonts: FONTS.length < 2, defaultFontFamily: FONT },
+    fitTo: { mode: "width", value: 1080 }
+  });
+  return resvg.render().asPng();
+};
+
 export const gerarImagemRede = async (
   credenciados: Credenciado[],
   { imagemBase, fetchFn = (globalThis as any).fetch }: { imagemBase: string; fetchFn?: FetchFn }
@@ -298,9 +307,5 @@ export const gerarImagemRede = async (
   const baixadas = await Promise.all(credenciados.map(c => baixarLogo(c.logo, imagemBase, fetchFn)));
   const logos = new Map(credenciados.map((c, i) => [c.id, baixadas[i]]));
   const { svg } = montarSvgRede(credenciados, { logos });
-  const resvg = new Resvg(svg, {
-    font: { fontFiles: FONTS, loadSystemFonts: FONTS.length < 2, defaultFontFamily: FONT },
-    fitTo: { mode: "width", value: 1080 }
-  });
-  return resvg.render().asPng();
+  return svgParaPng(svg);
 };
