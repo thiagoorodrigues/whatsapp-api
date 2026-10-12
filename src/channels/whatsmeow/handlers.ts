@@ -329,7 +329,11 @@ const defaultOnConnection = (connectionId: number, data: ConnectionData) => {
 
 const handleConnection = async (env: GatewayEnvelope<ConnectionData>, { connectionId, deps }: Context) => {
   const status = env.data?.status;
-  if (status === "disconnected" || status === "logged_out") importers.get(connectionId)?.cancel();
+  // Só o evento ao vivo cancela: um disconnected/logged_out atrasado (replay)
+  // não reflete o estado atual (mesma regra de idade do SessionService).
+  const ts = Number(env.ts);
+  const live = !(ts > 0 && Date.now() - ts > LIVE_ONLY_MAX_AGE_MS);
+  if (live && (status === "disconnected" || status === "logged_out")) importers.get(connectionId)?.cancel();
   await (deps.onConnection || defaultOnConnection)(connectionId, env.data, Number(env.ts));
 };
 

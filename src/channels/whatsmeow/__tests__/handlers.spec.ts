@@ -41,6 +41,7 @@ import { publishImportProgress } from "../../../libs/historyImportProgress";
 import { forgetGroup } from "../../../libs/whatsappCache";
 import { markSentByPlatform } from "../../sentByPlatform";
 import * as state from "../state";
+import * as historyImport from "../../../services/WbotServices/historyImport";
 import { handleEnvelope, historyIdle, resetHandlers, HandlerDeps } from "../handlers";
 /* eslint-enable import/first */
 
@@ -382,6 +383,34 @@ describe("handlers do gateway", () => {
       const last = reports[reports.length - 1];
       expect(last).toMatchObject({ status: "done", saved: 1, existing: 1, total: 2 });
       expect(FinishHistoryImportService).toHaveBeenCalledWith(CONN, COMPANY);
+    });
+
+    describe("cancelamento pelo evento connection", () => {
+      const fakeImporter = () => ({ onBatch: jest.fn(), receivedAll: jest.fn(), cancel: jest.fn(), idle: jest.fn() });
+      let importer: ReturnType<typeof fakeImporter>;
+      let spy: jest.SpyInstance;
+
+      beforeEach(async () => {
+        importer = fakeImporter();
+        spy = jest.spyOn(historyImport, "createHistoryImporter").mockReturnValue(importer as any);
+        await handleEnvelope(env("history", { messages: [messageData({ id: "A1" })], contacts: [], progress: 10 }), deps());
+      });
+
+      afterEach(() => spy.mockRestore());
+
+      it.each(["disconnected", "logged_out"])("%s ao vivo cancela a importação", async status => {
+        await handleEnvelope(env("connection", { status }), deps({ onConnection: jest.fn() }));
+        expect(importer.cancel).toHaveBeenCalled();
+      });
+
+      it.each(["disconnected", "logged_out"])("%s atrasado (replay) não cancela a importação", async status => {
+        const onConnection = jest.fn();
+        const old = Date.now() - 11 * 60 * 1000;
+        await handleEnvelope(env("connection", { status }, CONN, old), deps({ onConnection }));
+        expect(importer.cancel).not.toHaveBeenCalled();
+        // A camada de sessão continua recebendo (ela reconsulta o gateway).
+        expect(onConnection).toHaveBeenCalledWith(CONN, { status }, old);
+      });
     });
 
     it("um importador por conexão, reaproveitado entre lotes", async () => {
