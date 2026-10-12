@@ -1,4 +1,6 @@
+import AppError from "../../errors/AppError";
 import { lookupPhoneJidByLid } from "../../helpers/lidLookup";
+import { logger } from "../../utils/logger";
 import { isLidJid, toUserLid } from "../../helpers/GetPhoneJid";
 import { InboundKind, InboundMessage } from "../inbound";
 import { gatewayClient, GatewayClient } from "./client";
@@ -51,6 +53,8 @@ const KINDS: InboundKind[] = [
   "other"
 ];
 
+const TRANSIENT_MEDIA_ERRORS = new Set(["ERR_GATEWAY_UNAVAILABLE", "ERR_WAPP_NOT_INITIALIZED"]);
+
 /**
  * Envelope `message` do gateway -> InboundMessage. Devolve null para o que a
  * plataforma ignora (status do WhatsApp), como o toInbound do Baileys.
@@ -78,7 +82,21 @@ export const toInbound = async (
 
   const hasMedia = !!data.hasMedia;
   const rawMessage = data.raw?.message;
-  const loadMedia = () => loadIncoming(deps.client || gatewayClient(), connectionId, rawMessage);
+  // Só gateway fora/sessão fora do ar volta para o consumer tentar de novo;
+  // qualquer outra falha grava a mensagem sem o arquivo, como o Baileys.
+  const loadMedia = async () => {
+    try {
+      return await loadIncoming(deps.client || gatewayClient(), connectionId, rawMessage);
+    } catch (err) {
+      if (err instanceof AppError && TRANSIENT_MEDIA_ERRORS.has(err.message)) throw err;
+      logger.warn(
+        `whatsmeow: mídia da mensagem ${data.id} (conexão ${connectionId}) não baixada; gravando sem o arquivo: ${
+          (err as Error)?.message || err
+        }`
+      );
+      return null;
+    }
+  };
 
   return {
     connectionId,

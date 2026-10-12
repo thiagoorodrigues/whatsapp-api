@@ -1,4 +1,5 @@
 import { toInbound, GatewayMessageEnvelope } from "../toInbound";
+import AppError from "../../../errors/AppError";
 
 jest.mock("../../../config/whatsappEngine", () => ({
   gatewayConfig: () => ({ url: "x", token: "t", mediaRoot: "/nonexistent" })
@@ -164,6 +165,35 @@ describe("toInbound (gateway)", () => {
   it("kind desconhecido vira other e status@broadcast é ignorado", async () => {
     expect((await toInbound(envelope({ kind: "poll" }), 3, deps()))!.kind).toBe("other");
     expect(await toInbound(envelope({ chat: { jid: "status@broadcast", isGroup: false } }), 3, deps())).toBeNull();
+  });
+
+  describe("falha ao baixar a mídia", () => {
+    const mediaEnvelope = () =>
+      envelope({ kind: "image", channelType: "imageMessage", hasMedia: true, raw: { message: { imageMessage: {} } } });
+
+    it.each(["ERR_GATEWAY_UNAVAILABLE", "ERR_WAPP_NOT_INITIALIZED"])(
+      "erro transitório (%s) é relançado (o consumer tenta de novo)",
+      async code => {
+        const d = deps();
+        d.client.downloadMedia.mockRejectedValue(new AppError(code, 503));
+        const m = await toInbound(mediaEnvelope(), 3, d);
+        await expect(m!.loadMedia!()).rejects.toMatchObject({ message: code });
+      }
+    );
+
+    it("erro definitivo do gateway devolve null (mensagem gravada sem o arquivo, como o Baileys)", async () => {
+      const d = deps();
+      d.client.downloadMedia.mockRejectedValue(new AppError("ERR_GATEWAY_ERROR", 502));
+      const m = await toInbound(mediaEnvelope(), 3, d);
+      await expect(m!.loadMedia!()).resolves.toBeNull();
+    });
+
+    it("erro comum (arquivo ilegível, caminho ruim) devolve null", async () => {
+      const d = deps();
+      d.client.downloadMedia.mockRejectedValue(new Error("ENOENT"));
+      const m = await toInbound(mediaEnvelope(), 3, d);
+      await expect(m!.loadMedia!()).resolves.toBeNull();
+    });
   });
 
   it("mentions nulo vira lista vazia", async () => {
