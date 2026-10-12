@@ -5,9 +5,9 @@ import Whatsapp from "./models/Whatsapp";
 import { logger } from "./utils/logger";
 import moment from "moment";
 import Schedule from "./models/Schedule";
+import SendScheduledMessageService from "./services/ScheduleServices/SendScheduledMessageService";
 import Contact from "./models/Contact";
 import { Op, QueryTypes, Sequelize } from "sequelize";
-import GetDefaultWhatsApp from "./helpers/GetDefaultWhatsApp";
 import Campaign from "./models/Campaign";
 import ContactList from "./models/ContactList";
 import ContactListItem from "./models/ContactListItem";
@@ -27,7 +27,7 @@ import Company from "./models/Company";
 import Plan from "./models/Plan";
 import Ticket from "./models/Ticket";
 import { sendTimes } from "./services/CampaignService/campaignSchedule";
-import formatBody, { formatForCampaign } from "./helpers/Mustache";
+import { formatForCampaign } from "./helpers/Mustache";
 import { ClosedAllOpenTickets } from "./services/WbotServices/wbotClosedTickets";
 import { companyRoom, notificationRoom, statusRoom, ticketRoom } from "./libs/socketRooms";
 import { processDueFollowUps } from "./services/FollowUpServices/FollowUpMonitor";
@@ -283,30 +283,7 @@ async function handleSendScheduledMessage(job) {
   }
 
   try {
-    let defaultToUse = null;
-
-    if (!!scheduleRecord.whatsappsId) {
-      defaultToUse = await Whatsapp.findOne({
-        where: { id: scheduleRecord.whatsappsId, status: "CONNECTED" }
-      });
-    }
-
-    if (!defaultToUse) {
-      defaultToUse = await GetDefaultWhatsApp(schedule.companyId)
-    }
-
-    const whatsapp = defaultToUse;
-
-    let filePath = null;
-    if (schedule.mediaPath) {
-      filePath = path.resolve("public", schedule.mediaPath);
-    }
-
-    await SendMessage(whatsapp, {
-      number: schedule.contact.number,
-      body: formatBody(schedule.body, schedule.contact),
-      mediaPath: filePath
-    });
+    await SendScheduledMessageService(schedule.id);
 
     await scheduleRecord?.update({
       sentAt: moment().format("YYYY-MM-DD HH:mm"),
@@ -320,7 +297,7 @@ async function handleSendScheduledMessage(job) {
     await scheduleRecord?.update({
       status: "ERRO"
     });
-    logger.error("SendScheduledMessage -> SendMessage: error", e.message);
+    logger.error(`SendScheduledMessage -> agendamento ${schedule.id}: ${e?.message || e}`);
     throw e;
   }
 }
