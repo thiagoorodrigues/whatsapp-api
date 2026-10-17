@@ -123,12 +123,10 @@ const card = (c: Credenciado, width: number, compact: boolean, logo: string | nu
   const place = wrap(placeOf(c), textW - size - 8, size, false, 3);
   const horarios = (c.horarios.length ? c.horarios : ["Horário não informado"]).flatMap(h => wrap(h, textW - size - 8, size, false, 2));
   const badges = [c.horaMarcada && "Hora marcada", c.plantao24h && "Plantão 24h"].filter(Boolean) as string[];
-  const planos = c.coberturas.length ? wrap(`Planos: ${c.coberturas.join(", ")}`, textW, size - 3, false, 3) : [];
 
   let h = pad + name.length * Math.round(nameSize * 1.25) + 10;
   h += place.length * lineH + (c.telefone ? lineH : 0) + horarios.length * lineH;
   if (badges.length) h += 14 + (size + 14);
-  if (planos.length) h += 12 + planos.length * Math.round((size - 3) * 1.4);
   h = Math.max(h + pad, logoSize + pad * 2);
 
   const draw = (x: number, y: number, height: number): string => {
@@ -196,13 +194,6 @@ const card = (c: Credenciado, width: number, compact: boolean, logo: string | nu
         bx += bw + 10;
       });
       ty += size + 14;
-    }
-    if (planos.length) {
-      ty += 12;
-      planos.forEach(line => {
-        ty += Math.round((size - 3) * 1.4);
-        out.push(`<text x="${tx}" y="${ty - 4}" font-size="${size - 3}" fill="${C.muted}">${esc(line)}</text>`);
-      });
     }
     return out.join("");
   };

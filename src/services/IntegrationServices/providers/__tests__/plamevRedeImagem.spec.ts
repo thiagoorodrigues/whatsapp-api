@@ -32,6 +32,9 @@ describe("montarSvgRede", () => {
     expect(svg).toContain("Rua A, 1 – Centro, Betim/MG – CEP 32600-050");
     expect(svg).not.toContain("Rede credenciada");
     expect(svg).not.toContain("plamevpets");
+    // Os planos aceitos não vão para o cliente.
+    expect(svg).not.toContain("Planos");
+    expect(svg).not.toContain("Advance");
     // Sem logo: as iniciais.
     expect(svg).toContain(">CK<");
   });
