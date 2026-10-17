@@ -72,3 +72,14 @@ export const plamevCredenciados = async (req: Request, res: Response): Promise<R
       bairro: str(req.query.bairro)
     })
   );
+
+export const plamevProximidade = async (req: Request, res: Response): Promise<Response> =>
+  res.json(
+    await PlamevRede.proximidade(req.user.companyId, {
+      cidadeId: str(req.query.cidadeId),
+      bairro: str(req.query.bairro),
+      cidade: str(req.query.cidade),
+      uf: str(req.query.uf),
+      raio: Number(str(req.query.raio)) || undefined
+    })
+  );

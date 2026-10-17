@@ -52,16 +52,16 @@ export const MAX_CREDENCIADOS = 50;
 type Raw = Record<string, any>;
 
 // Plamev returns lists either as arrays or as objects keyed "1", "2", ...
-const asList = (data: unknown): Raw[] => {
+export const asList = (data: unknown): Raw[] => {
   if (Array.isArray(data)) return data;
   if (data && typeof data === "object") return Object.values(data as Raw);
   return [];
 };
 
-const text = (v: unknown): string | null => (typeof v === "string" && v.trim() !== "" ? v.trim() : null);
+export const text = (v: unknown): string | null => (typeof v === "string" && v.trim() !== "" ? v.trim() : null);
 const byName = <T extends { nome: string }>(a: T, b: T) => a.nome.localeCompare(b.nome, "pt-BR");
 
-const semAcento = (v: string): string =>
+export const semAcento = (v: string): string =>
   v
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -151,7 +151,7 @@ export const horariosLegiveis = (raw: unknown): string[] => {
 };
 
 // 8 dígitos: 3211-0000; 9 dígitos: 99811-5265.
-const formatPhone = (ddd: string | null, numero: string): string => {
+export const formatPhone = (ddd: string | null, numero: string): string => {
   const d = numero.replace(/\D/g, "");
   const local = d.length === 8 || d.length === 9 ? `${d.slice(0, -4)}-${d.slice(-4)}` : numero;
   return ddd ? `(${ddd}) ${local}` : local;
@@ -166,7 +166,7 @@ const logoUrl = (imagemBase: string | undefined, imagem: string | null): string 
   return `${base}bancoImagens/${encodeURI(imagem)}`;
 };
 
-const fromFiltros = (imagemBase?: string) => (i: Raw): Credenciado => {
+export const fromFiltros = (imagemBase?: string) => (i: Raw): Credenciado => {
   const c: Raw = i.Credenciados ?? {};
   const ind: Raw = i.Individuos ?? {};
   // Address comes as [] when the credenciado has none.

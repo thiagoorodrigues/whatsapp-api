@@ -22,6 +22,7 @@ integrationRoutes.get("/integrations/plamev/tabelas", isAuth, IntegrationControl
 integrationRoutes.post("/integrations/plamev/cotacao/simular", isAuth, IntegrationController.plamevSimular);
 integrationRoutes.post("/integrations/plamev/cotacao-imagem", isAuth, IntegrationController.plamevCotacaoImagem);
 integrationRoutes.get("/integrations/plamev/credenciados", isAuth, IntegrationController.plamevCredenciados);
+integrationRoutes.get("/integrations/plamev/proximidade", isAuth, IntegrationController.plamevProximidade);
 integrationRoutes.put("/integrations/:provider", isAuth, isAdmin, IntegrationController.update);
 integrationRoutes.post("/integrations/:provider/test", isAuth, isAdmin, IntegrationController.test);
 integrationRoutes.delete("/integrations/:provider", isAuth, isAdmin, IntegrationController.remove);
