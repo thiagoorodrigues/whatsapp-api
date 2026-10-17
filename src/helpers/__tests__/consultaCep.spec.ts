@@ -3,9 +3,11 @@ import { consultarCep } from "../consultaCep";
 const reply = (body: unknown, ok = true) => jest.fn(async () => ({ ok, status: ok ? 200 : 500, json: async () => body }));
 
 describe("consultarCep", () => {
-  it("returns city, state and neighborhood of a CEP", async () => {
-    const fetchFn = reply({ cep: "32600-000", localidade: "Betim", uf: "MG", bairro: "" });
-    expect(await consultarCep("32600-000", fetchFn)).toEqual({ cep: "32600000", cidade: "Betim", uf: "MG", bairro: null });
+  it("returns city, state, neighborhood and street of a CEP", async () => {
+    const fetchFn = reply({ cep: "32600-000", localidade: "Betim", uf: "MG", bairro: "", logradouro: "" });
+    expect(await consultarCep("32600-000", fetchFn)).toEqual({ cep: "32600000", cidade: "Betim", uf: "MG", bairro: null, logradouro: null });
+    const rua = reply({ localidade: "Belo Horizonte", uf: "MG", bairro: "Santa Efigênia", logradouro: "Rua Padre Marinho" });
+    expect(await consultarCep("30140040", rua)).toMatchObject({ bairro: "Santa Efigênia", logradouro: "Rua Padre Marinho" });
     expect((fetchFn.mock.calls[0] as any)[0]).toBe("https://viacep.com.br/ws/32600000/json/");
   });
 

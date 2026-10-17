@@ -5,11 +5,12 @@ export interface EnderecoCep {
   cidade: string;
   uf: string;
   bairro: string | null;
+  logradouro: string | null;
 }
 
 type FetchFn = (url: string, init?: Record<string, any>) => Promise<any>;
 
-// Cidade, UF e bairro de um CEP (ViaCEP, público e sem chave). null quando o
+// Cidade, UF, bairro e rua de um CEP (ViaCEP, público e sem chave). null quando o
 // CEP está incompleto ou não existe; ERR_CEP_UNAVAILABLE quando o serviço falha.
 export const consultarCep = async (
   cep: string,
@@ -31,6 +32,6 @@ export const consultarCep = async (
     clearTimeout(timer);
   }
   if (!data || data.erro || !data.localidade || !data.uf) return null;
-  const bairro = typeof data.bairro === "string" && data.bairro.trim() ? data.bairro.trim() : null;
-  return { cep: digits, cidade: String(data.localidade), uf: String(data.uf), bairro };
+  const texto = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
+  return { cep: digits, cidade: String(data.localidade), uf: String(data.uf), bairro: texto(data.bairro), logradouro: texto(data.logradouro) };
 };

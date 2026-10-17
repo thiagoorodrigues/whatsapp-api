@@ -34,17 +34,8 @@ import {
   PlamevGetter,
   RedeFiltros
 } from "./providers/plamev/rede";
-import {
-  buscarPorProximidade,
-  centroDoBairro,
-  credenciadosDaCidade,
-  CredenciadoProximo,
-  geocodificar,
-  Lembrar,
-  Origem,
-  RAIO_PADRAO_KM,
-  RAIOS_KM
-} from "./providers/plamev/proximidade";
+import { buscarPorProximidade, CredenciadoProximo, Lembrar, RAIO_PADRAO_KM, RAIOS_KM } from "./providers/plamev/proximidade";
+import { geocodificarEndereco, PontoGeocodificado } from "../../helpers/geocodificarEndereco";
 
 // The company's token never leaves the server: every call is made here.
 const run = <T>(companyId: number, fn: (get: PlamevGetter) => Promise<T>): Promise<T> =>
@@ -92,29 +83,38 @@ const lembrarNoRedis: Lembrar = async function lembrar<T>(chave: string, segundo
 };
 
 export interface PedidoProximidade {
-  cidadeId?: string;
-  // Valor do bairro como a Plamev filtra (o id da lista de bairros, ou o do CEP).
-  bairro?: string;
-  // Nome da cidade e UF: só para o texto do geocoder.
-  cidade?: string;
-  uf?: string;
+  // Endereço, bairro, cidade ou CEP, como o atendente digitou.
+  endereco?: string;
   raio?: number;
 }
 
 export interface RespostaProximidade {
-  origem: Origem | null;
+  // null: o mapa não achou o endereço.
+  origem: PontoGeocodificado | null;
   raio: number;
   ampliado: boolean;
+  maisProximas: boolean;
   credenciados: CredenciadoProximo[];
 }
 
-// Credenciados mais perto do bairro. O ponto de partida é o centro das clínicas do
-// bairro; sem nenhuma com endereço público, o geocoder da Plamev. Sem ponto
-// nenhum, devolve a lista do bairro (origem null), como a busca antiga.
+const TRINTA_DIAS = 30 * 24 * 60 * 60;
+
+// CEP vira "rua, bairro, cidade - UF" pelo ViaCEP antes de ir ao mapa: o
+// OpenStreetMap quase não conhece CEP. CEP inexistente segue como texto.
+const textoParaMapa = async (texto: string): Promise<string> => {
+  const digitos = texto.replace(/\D/g, "");
+  if (digitos.length !== 8 || !/^\s*\d{5}-?\d{3}\s*$/.test(texto)) return texto;
+  // ViaCEP fora do ar não pode parar a busca: o CEP segue como texto.
+  const end = await consultarCep(digitos).catch(() => null);
+  if (!end) return texto;
+  return [end.logradouro, end.bairro, `${end.cidade} - ${end.uf}`].filter(Boolean).join(", ");
+};
+
+// Credenciados mais perto de um endereço digitado. O ponto vem do OpenStreetMap
+// (30 dias de cache por texto); a Plamev mede a distância de cada credenciado.
 export const proximidade = async (companyId: number, pedido: PedidoProximidade): Promise<RespostaProximidade> => {
-  const cidadeId = (pedido.cidadeId || "").trim();
-  const bairro = (pedido.bairro || "").trim();
-  if (!cidadeId || !bairro) throw new AppError("ERR_INTEGRATION_FILTER_REQUIRED", 400);
+  const texto = (pedido.endereco || "").replace(/\s+/g, " ").trim();
+  if (texto.length < 3 || texto.length > 200) throw new AppError("ERR_INTEGRATION_FILTER_REQUIRED", 400);
   const raio = RAIOS_KM.includes(Number(pedido.raio)) ? Number(pedido.raio) : RAIO_PADRAO_KM;
   const imagemBase = plamevApiUrl();
 
@@ -123,19 +123,10 @@ export const proximidade = async (companyId: number, pedido: PedidoProximidade):
     const get: PlamevGetter = (path, query) => plamevGet(opcoes, path, query);
     const post: PlamevPoster = (path, body) => plamevPost(opcoes, path, body);
 
-    const daCidade = await credenciadosDaCidade(get, cidadeId, imagemBase, lembrarNoRedis);
-    const centro = centroDoBairro(daCidade, bairro);
-    const local = [pedido.cidade, pedido.uf].map(v => (v || "").trim()).filter(Boolean).join(" - ");
-    const origem: Origem | null = centro
-      ? { lat: centro.lat, lng: centro.lng, fonte: "credenciados", rotulo: bairro }
-      : await geocodificar(get, [bairro, local].filter(Boolean).join(", "), lembrarNoRedis);
+    const paraMapa = await textoParaMapa(texto);
+    const origem = await lembrarNoRedis(`geo:osm:${paraMapa.toLowerCase()}`, TRINTA_DIAS, () => geocodificarEndereco(paraMapa));
+    if (!origem) return { origem: null, raio, ampliado: false, maisProximas: false, credenciados: [] };
 
-    // O filtro de bairro fica com a Plamev: quem esconde o endereço vem sem bairro
-    // na lista, mas ela ainda sabe o bairro dele.
-    if (!origem) {
-      const doBairro = await buscarCredenciados(get, { cidadeId, bairro }, imagemBase);
-      return { origem: null, raio, ampliado: false, credenciados: doBairro.map(c => ({ ...c, distanciaKm: null })) };
-    }
     const resultado = await buscarPorProximidade(get, post, { origem, raio, imagemBase, lembrar: lembrarNoRedis });
     return { origem, ...resultado };
   });

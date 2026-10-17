@@ -7,6 +7,8 @@ jest.mock("../providers/plamev/redeImagem", () => ({
   gerarImagemRede: (...a: any[]) => gerarImagemRede(...a)
 }));
 jest.mock("../../../helpers/consultaCep", () => ({ consultarCep: (...a: any[]) => consultarCep(...a) }));
+const geocodificarEndereco = jest.fn();
+jest.mock("../../../helpers/geocodificarEndereco", () => ({ geocodificarEndereco: (...a: any[]) => geocodificarEndereco(...a) }));
 jest.mock("../providers/plamev/client", () => ({
   plamevGet: (...a: any[]) => plamevGet(...a),
   plamevPost: (...a: any[]) => plamevPost(...a)
@@ -27,8 +29,6 @@ jest.mock("../CompanyIntegrationService", () => ({
   }
 }));
 
-// eslint-disable-next-line import/first
-import { IntegrationError } from "../providers/types";
 // eslint-disable-next-line import/first
 import { bairros, cep, credenciados, cidades, estados, imagem, imagemPlano, planos, proximidade, simular } from "../PlamevRedeService";
 
@@ -128,59 +128,79 @@ describe("PlamevRedeService", () => {
 
   describe("proximidade", () => {
     const daCidade = [
-      { Credenciados: { Id: "a" }, Individuos: { NomeFantasia: "Clínica A" }, IndividuosEnderecos: { Bairro: "Santa Efigênia", Latitude: "-19.92", Longitude: "-43.92" } },
+      { Credenciados: { Id: "a" }, Individuos: { NomeFantasia: "Clínica A" }, IndividuosEnderecos: { Bairro: "Santa Efigênia" } },
       { Credenciados: { Id: "b" }, Individuos: { NomeFantasia: "Clínica B" }, IndividuosEnderecos: { Bairro: "Savassi" } },
-      { Credenciados: { Id: "c" }, Individuos: { NomeFantasia: "Clínica C" }, IndividuosEnderecos: { Bairro: "Prado", Latitude: "-19.93", Longitude: "-43.96" } }
+      { Credenciados: { Id: "c" }, Individuos: { NomeFantasia: "Clínica C" }, IndividuosEnderecos: { Bairro: "Prado" } }
     ];
     const pertos = [
       { Credenciados: { Id: "a", CidadesId: "bh" }, DistanciaLinhaReta: 0.2 },
       { Credenciados: { Id: "b", CidadesId: "bh" }, DistanciaLinhaReta: 1.1 },
       { Credenciados: { Id: "c", CidadesId: "bh" }, DistanciaLinhaReta: 3.2 }
     ];
+    const savassi = { lat: -19.937, lng: -43.935, rotulo: "Savassi, Belo Horizonte, MG", tipo: "neighbourhood" };
 
-    it("exige cidade e bairro", async () => {
-      await expect(proximidade(7, { cidadeId: "bh" })).rejects.toMatchObject({ message: "ERR_INTEGRATION_FILTER_REQUIRED" });
-      await expect(proximidade(7, { bairro: "Savassi" })).rejects.toMatchObject({ message: "ERR_INTEGRATION_FILTER_REQUIRED" });
+    beforeEach(() => {
+      geocodificarEndereco.mockReset();
+      consultarCep.mockReset();
     });
 
-    it("parte do centro das clínicas do bairro, sem geocoder, e guarda a lista da cidade em cache", async () => {
+    it("exige um endereço de 3 a 200 letras", async () => {
+      await expect(proximidade(7, {})).rejects.toMatchObject({ message: "ERR_INTEGRATION_FILTER_REQUIRED" });
+      await expect(proximidade(7, { endereco: " ab " })).rejects.toMatchObject({ message: "ERR_INTEGRATION_FILTER_REQUIRED" });
+      await expect(proximidade(7, { endereco: "x".repeat(201) })).rejects.toMatchObject({ message: "ERR_INTEGRATION_FILTER_REQUIRED" });
+    });
+
+    it("acha o endereço no mapa e mede a distância de cada credenciado pela Plamev", async () => {
+      geocodificarEndereco.mockResolvedValue(savassi);
       plamevGet.mockResolvedValue(daCidade);
       plamevPost.mockResolvedValue(pertos);
-      const r = await proximidade(7, { cidadeId: "bh", bairro: "santa efigênia", cidade: "Belo Horizonte", uf: "MG", raio: 5 });
-      expect(r.origem).toEqual({ lat: -19.92, lng: -43.92, fonte: "credenciados", rotulo: "santa efigênia" });
-      expect(r.credenciados.map(c => [c.id, c.distanciaKm])).toEqual([["a", 0.2], ["b", 1.1], ["c", 3.2]]);
-      expect(plamevPost).toHaveBeenCalledWith({ apiUrl: "https://service.plamev-hm.com/", token: "tok-777" }, "Credenciados/BuscaCredenciados", { Lat: -19.92, Lng: -43.92, Raio: 40 });
-      // A lista da cidade serviu ao centro e aos dados completos: uma ida só à Plamev.
-      expect(plamevGet).toHaveBeenCalledTimes(1);
-      expect(plamevGet.mock.calls.some(c => c[1] === "Cidades/ConsultarCoordenadasEndereco")).toBe(false);
+      const r = await proximidade(7, { endereco: "  Savassi,   Belo Horizonte ", raio: 5 });
+      expect(geocodificarEndereco).toHaveBeenCalledWith("Savassi, Belo Horizonte");
+      expect(r.origem).toEqual(savassi);
+      expect(r).toMatchObject({ raio: 5, ampliado: false, maisProximas: false });
+      expect(r.credenciados.map(c => [c.id, c.nome, c.distanciaKm])).toEqual([["a", "Clínica A", 0.2], ["b", "Clínica B", 1.1], ["c", "Clínica C", 3.2]]);
+      expect(plamevPost).toHaveBeenCalledWith({ apiUrl: "https://service.plamev-hm.com/", token: "tok-777" }, "Credenciados/BuscaCredenciados", { Lat: -19.937, Lng: -43.935, Raio: 40 });
+    });
+
+    it("guarda o ponto do mapa em cache: a segunda busca do mesmo texto não consulta o mapa", async () => {
+      geocodificarEndereco.mockResolvedValue(savassi);
+      plamevGet.mockResolvedValue(daCidade);
+      plamevPost.mockResolvedValue(pertos);
+      await proximidade(7, { endereco: "Savassi, Belo Horizonte" });
+      await proximidade(7, { endereco: "savassi, belo horizonte" });
+      expect(geocodificarEndereco).toHaveBeenCalledTimes(1);
+    });
+
+    it("CEP vira rua, bairro e cidade pelo ViaCEP antes de ir ao mapa", async () => {
+      consultarCep.mockResolvedValue({ cep: "30140040", cidade: "Belo Horizonte", uf: "MG", bairro: "Santa Efigênia", logradouro: "Rua Padre Marinho" });
+      geocodificarEndereco.mockResolvedValue(savassi);
+      plamevGet.mockResolvedValue(daCidade);
+      plamevPost.mockResolvedValue(pertos);
+      await proximidade(7, { endereco: "30140-040" });
+      expect(consultarCep).toHaveBeenCalledWith("30140040");
+      expect(geocodificarEndereco).toHaveBeenCalledWith("Rua Padre Marinho, Santa Efigênia, Belo Horizonte - MG");
+    });
+
+    it("ViaCEP fora do ar: o CEP vai ao mapa como texto", async () => {
+      consultarCep.mockRejectedValue(new Error("ERR_CEP_UNAVAILABLE"));
+      geocodificarEndereco.mockResolvedValue(savassi);
+      plamevGet.mockResolvedValue(daCidade);
+      plamevPost.mockResolvedValue(pertos);
+      await proximidade(7, { endereco: "30140-040" });
+      expect(geocodificarEndereco).toHaveBeenCalledWith("30140-040");
     });
 
     it("raio fora da lista vira o padrão", async () => {
+      geocodificarEndereco.mockResolvedValue(savassi);
       plamevGet.mockResolvedValue(daCidade);
       plamevPost.mockResolvedValue(pertos);
-      expect((await proximidade(7, { cidadeId: "bh", bairro: "Prado", raio: 7 })).raio).toBe(5);
+      expect((await proximidade(7, { endereco: "Prado, Belo Horizonte", raio: 7 })).raio).toBe(5);
     });
 
-    it("bairro sem clínica com endereço público: usa o geocoder da Plamev", async () => {
-      plamevGet.mockImplementation(async (_o: unknown, path: string) =>
-        path === "Cidades/ConsultarCoordenadasEndereco" ? { Lat: -19.938, Lng: -43.934, Rotulo: "Savassi, Belo Horizonte - MG, Brasil" } : daCidade
-      );
-      plamevPost.mockResolvedValue(pertos);
-      const r = await proximidade(7, { cidadeId: "bh", bairro: "Savassi", cidade: "Belo Horizonte", uf: "MG" });
-      expect(r.origem).toEqual({ lat: -19.938, lng: -43.934, fonte: "mapa", rotulo: "Savassi, Belo Horizonte - MG" });
-      expect(plamevGet).toHaveBeenCalledWith(expect.anything(), "Cidades/ConsultarCoordenadasEndereco", { Endereco: "Savassi, Belo Horizonte - MG" });
-    });
-
-    it("sem ponto nenhum, devolve as clínicas do bairro pelo filtro da Plamev, sem distância", async () => {
-      plamevGet.mockImplementation(async (_o: unknown, path: string, query?: Record<string, string>) => {
-        if (path === "Cidades/ConsultarCoordenadasEndereco") throw new IntegrationError("unreachable", "A Plamev respondeu com erro 405.");
-        // Endereço oculto: sem bairro no cadastro, mas a Plamev filtra por ele.
-        if (query?.Bairro === "Savassi") return [{ Credenciados: { Id: "oculto" }, Individuos: { NomeFantasia: "Dr. X" }, IndividuosEnderecos: [] }];
-        return daCidade;
-      });
-      const r = await proximidade(7, { cidadeId: "bh", bairro: "Savassi", cidade: "Belo Horizonte", uf: "MG" });
-      expect(r).toMatchObject({ origem: null, ampliado: false });
-      expect(r.credenciados.map(c => [c.id, c.distanciaKm])).toEqual([["oculto", null]]);
+    it("endereço que o mapa não acha: origem null, sem consultar a Plamev", async () => {
+      geocodificarEndereco.mockResolvedValue(null);
+      const r = await proximidade(7, { endereco: "Rua Que Não Existe, Lugar Nenhum" });
+      expect(r).toEqual({ origem: null, raio: 5, ampliado: false, maisProximas: false, credenciados: [] });
       expect(plamevPost).not.toHaveBeenCalled();
     });
   });

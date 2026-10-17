@@ -1,3 +1,4 @@
+import net from "net";
 import gracefulShutdown from "http-graceful-shutdown";
 import app from "./app";
 import { initIO } from "./libs/socket";
@@ -13,6 +14,12 @@ import PurgeSystemLogsService from "./services/SystemLogServices/PurgeSystemLogs
 import { isWhatsmeow, validateEngineConfig } from "./config/whatsappEngine";
 import SessionService from "./services/WhatsmeowServices/SessionService";
 import { purgeServerMetrics, recordServerMetrics } from "./services/ServerMonitorServices/metricsHistory";
+
+// O fetch do Node tenta IPv6 e IPv4 em paralelo com só 250 ms por tentativa. Numa
+// rede sem IPv6 e com IPv4 lento, nenhuma conecta (ViaCEP dava
+// UND_ERR_CONNECT_TIMEOUT com o curl respondendo em 1 s). 1 s por tentativa resolve
+// e não atrasa onde a rede está boa. (O @types/node do projeto ainda não tem a função.)
+(net as any).setDefaultAutoSelectFamilyAttemptTimeout?.(1000);
 
 // Without these the code would sign tokens with a public default secret.
 const missing = ["JWT_SECRET", "JWT_REFRESH_SECRET"].filter(k => !process.env[k]);

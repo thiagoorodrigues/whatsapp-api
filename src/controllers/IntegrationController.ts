@@ -76,10 +76,7 @@ export const plamevCredenciados = async (req: Request, res: Response): Promise<R
 export const plamevProximidade = async (req: Request, res: Response): Promise<Response> =>
   res.json(
     await PlamevRede.proximidade(req.user.companyId, {
-      cidadeId: str(req.query.cidadeId),
-      bairro: str(req.query.bairro),
-      cidade: str(req.query.cidade),
-      uf: str(req.query.uf),
+      endereco: str(req.query.endereco),
       raio: Number(str(req.query.raio)) || undefined
     })
   );
