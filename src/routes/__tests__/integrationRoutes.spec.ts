@@ -3,7 +3,7 @@ jest.mock("../../controllers/IntegrationController", () => ({
   plamevEstados: jest.fn(), plamevCidades: jest.fn(), plamevBairros: jest.fn(), plamevCep: jest.fn(),
   plamevImagem: jest.fn(), plamevPlanos: jest.fn(), plamevPlanoImagem: jest.fn(), plamevRacas: jest.fn(),
   plamevCampanhas: jest.fn(), plamevTabelas: jest.fn(), plamevSimular: jest.fn(), plamevCotacaoImagem: jest.fn(),
-  plamevCredenciados: jest.fn(), plamevProximidade: jest.fn()
+  plamevCredenciados: jest.fn(), plamevProximidade: jest.fn(), plamevLocais: jest.fn()
 }));
 // eslint-disable-next-line import/first
 import integrationRoutes from "../integrationRoutes";
@@ -34,7 +34,7 @@ describe("integrationRoutes", () => {
   it("every Plamev tool needs a logged user", () => {
     const p = byPath();
     const plamev = Object.keys(p).filter(k => k.includes("/integrations/plamev/"));
-    expect(plamev.length).toBe(14);
+    expect(plamev.length).toBe(15);
     plamev.forEach(k => expect(p[k][0]).toBe("isAuth"));
   });
   it("declares /catalog before /:provider", () => {

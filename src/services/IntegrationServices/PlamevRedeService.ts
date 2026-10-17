@@ -36,6 +36,7 @@ import {
 } from "./providers/plamev/rede";
 import { buscarPorProximidade, CredenciadoProximo, Lembrar, RAIO_PADRAO_KM, RAIOS_KM } from "./providers/plamev/proximidade";
 import { geocodificarEndereco, PontoGeocodificado } from "../../helpers/geocodificarEndereco";
+import { Localidade, sugerirLocalidades } from "../../helpers/localidades";
 
 // The company's token never leaves the server: every call is made here.
 const run = <T>(companyId: number, fn: (get: PlamevGetter) => Promise<T>): Promise<T> =>
@@ -85,8 +86,18 @@ const lembrarNoRedis: Lembrar = async function lembrar<T>(chave: string, segundo
 export interface PedidoProximidade {
   // Endereço, bairro, cidade ou CEP, como o atendente digitou.
   endereco?: string;
+  // Ponto de uma sugestão do autocomplete (IBGE): dispensa o mapa.
+  lat?: number;
+  lng?: number;
   raio?: number;
 }
+
+// Sugestões do campo de endereço: bairros, distritos e cidades do IBGE, já com o
+// ponto. Não passa pela Plamev nem pelo mapa.
+export const sugestoesDeLocal = (texto: string): Localidade[] => sugerirLocalidades((texto || "").slice(0, 100), 8);
+
+// Caixa larga em volta do Brasil: barra coordenada trocada ou fora do país.
+const noBrasil = (lat: number, lng: number) => lat > -34.5 && lat < 6 && lng > -74.5 && lng < -28;
 
 export interface RespostaProximidade {
   // null: o mapa não achou o endereço.
@@ -110,8 +121,9 @@ const textoParaMapa = async (texto: string): Promise<string> => {
   return [end.logradouro, end.bairro, `${end.cidade} - ${end.uf}`].filter(Boolean).join(", ");
 };
 
-// Credenciados mais perto de um endereço digitado. O ponto vem do OpenStreetMap
-// (30 dias de cache por texto); a Plamev mede a distância de cada credenciado.
+// Credenciados mais perto de um endereço. O ponto vem da sugestão escolhida (IBGE)
+// ou, para texto livre, do OpenStreetMap (30 dias de cache por texto); a Plamev
+// mede a distância de cada credenciado.
 export const proximidade = async (companyId: number, pedido: PedidoProximidade): Promise<RespostaProximidade> => {
   const texto = (pedido.endereco || "").replace(/\s+/g, " ").trim();
   if (texto.length < 3 || texto.length > 200) throw new AppError("ERR_INTEGRATION_FILTER_REQUIRED", 400);
@@ -123,8 +135,15 @@ export const proximidade = async (companyId: number, pedido: PedidoProximidade):
     const get: PlamevGetter = (path, query) => plamevGet(opcoes, path, query);
     const post: PlamevPoster = (path, body) => plamevPost(opcoes, path, body);
 
-    const paraMapa = await textoParaMapa(texto);
-    const origem = await lembrarNoRedis(`geo:osm:${paraMapa.toLowerCase()}`, TRINTA_DIAS, () => geocodificarEndereco(paraMapa));
+    const lat = Number(pedido.lat);
+    const lng = Number(pedido.lng);
+    let origem: PontoGeocodificado | null;
+    if (pedido.lat !== undefined && pedido.lng !== undefined && Number.isFinite(lat) && Number.isFinite(lng) && noBrasil(lat, lng)) {
+      origem = { lat, lng, rotulo: texto, tipo: "ibge" };
+    } else {
+      const paraMapa = await textoParaMapa(texto);
+      origem = await lembrarNoRedis(`geo:osm:${paraMapa.toLowerCase()}`, TRINTA_DIAS, () => geocodificarEndereco(paraMapa));
+    }
     if (!origem) return { origem: null, raio, ampliado: false, maisProximas: false, credenciados: [] };
 
     const resultado = await buscarPorProximidade(get, post, { origem, raio, imagemBase, lembrar: lembrarNoRedis });

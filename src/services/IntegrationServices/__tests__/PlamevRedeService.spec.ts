@@ -30,7 +30,7 @@ jest.mock("../CompanyIntegrationService", () => ({
 }));
 
 // eslint-disable-next-line import/first
-import { bairros, cep, credenciados, cidades, estados, imagem, imagemPlano, planos, proximidade, simular } from "../PlamevRedeService";
+import { bairros, cep, credenciados, cidades, estados, imagem, imagemPlano, planos, proximidade, simular, sugestoesDeLocal } from "../PlamevRedeService";
 
 beforeEach(() => {
   cache.clear();
@@ -197,11 +197,35 @@ describe("PlamevRedeService", () => {
       expect((await proximidade(7, { endereco: "Prado, Belo Horizonte", raio: 7 })).raio).toBe(5);
     });
 
+    it("sugestão escolhida (ponto do IBGE) dispensa o mapa", async () => {
+      plamevGet.mockResolvedValue(daCidade);
+      plamevPost.mockResolvedValue(pertos);
+      const r = await proximidade(7, { endereco: "Savassi, Belo Horizonte/MG", lat: -19.9359, lng: -43.93444 });
+      expect(geocodificarEndereco).not.toHaveBeenCalled();
+      expect(r.origem).toEqual({ lat: -19.9359, lng: -43.93444, rotulo: "Savassi, Belo Horizonte/MG", tipo: "ibge" });
+      expect(plamevPost).toHaveBeenCalledWith(expect.anything(), "Credenciados/BuscaCredenciados", { Lat: -19.9359, Lng: -43.93444, Raio: 40 });
+    });
+
+    it("coordenada fora do Brasil ou inválida é ignorada: vai ao mapa pelo texto", async () => {
+      geocodificarEndereco.mockResolvedValue(savassi);
+      plamevGet.mockResolvedValue(daCidade);
+      plamevPost.mockResolvedValue(pertos);
+      await proximidade(7, { endereco: "Savassi, Belo Horizonte", lat: -43.93, lng: -19.93 });
+      await proximidade(7, { endereco: "Savassi, Belo Horizonte", lat: NaN, lng: -43.9 });
+      expect(geocodificarEndereco).toHaveBeenCalledTimes(1);
+    });
+
     it("endereço que o mapa não acha: origem null, sem consultar a Plamev", async () => {
       geocodificarEndereco.mockResolvedValue(null);
       const r = await proximidade(7, { endereco: "Rua Que Não Existe, Lugar Nenhum" });
       expect(r).toEqual({ origem: null, raio: 5, ampliado: false, maisProximas: false, credenciados: [] });
       expect(plamevPost).not.toHaveBeenCalled();
     });
+  });
+
+  it("sugere lugares do IBGE sem passar pela Plamev", () => {
+    expect(sugestoesDeLocal("savassi")[0]).toMatchObject({ rotulo: "Savassi, Belo Horizonte/MG" });
+    expect(sugestoesDeLocal("")).toEqual([]);
+    expect(plamevGet).not.toHaveBeenCalled();
   });
 });

@@ -73,10 +73,17 @@ export const plamevCredenciados = async (req: Request, res: Response): Promise<R
     })
   );
 
-export const plamevProximidade = async (req: Request, res: Response): Promise<Response> =>
-  res.json(
+export const plamevProximidade = async (req: Request, res: Response): Promise<Response> => {
+  const numero = (v: unknown) => (str(v) ? Number(str(v)) : undefined);
+  return res.json(
     await PlamevRede.proximidade(req.user.companyId, {
       endereco: str(req.query.endereco),
-      raio: Number(str(req.query.raio)) || undefined
+      lat: numero(req.query.lat),
+      lng: numero(req.query.lng),
+      raio: numero(req.query.raio)
     })
   );
+};
+
+export const plamevLocais = async (req: Request, res: Response): Promise<Response> =>
+  res.json(PlamevRede.sugestoesDeLocal(str(req.query.q) || ""));
